@@ -1,0 +1,21 @@
+# data
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# models
+models/*.pkl
+models/*.joblib
+
+# python
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# env
+.env
+
+# editor
+.vscode/
