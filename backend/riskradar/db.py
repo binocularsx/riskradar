@@ -25,8 +25,9 @@ def pool() -> ConnectionPool:
     if _pool is None:
         _pool = ConnectionPool(
             settings().app_dsn,
-            min_size=1,
-            max_size=12,
+            min_size=2,
+            max_size=24,
+            timeout=10,
             kwargs={"row_factory": dict_row, "autocommit": False},
             open=True,
         )

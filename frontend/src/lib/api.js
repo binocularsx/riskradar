@@ -49,6 +49,12 @@ export const api = {
   logout: () => post('/v1/auth/logout'),
   me: () => get('/v1/auth/me'),
 
+  // the worklist — what to work next, with exposure, clock and recommendation
+  worklist: (params) => get(`/v1/worklist?${new URLSearchParams(params)}`),
+  nextCase: () => post('/v1/worklist/next'),
+  disposition: (id, data) => post(`/v1/cases/${id}/disposition`, data),
+  operations: () => get('/v1/metrics/operations'),
+
   // queue and cases
   cases: (params) => get(`/v1/cases?${new URLSearchParams(params)}`),
   caseDetail: (id) => get(`/v1/cases/${id}`),
@@ -92,6 +98,23 @@ export function when(value) {
   return new Date(value).toLocaleString('en-GB', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
+}
+
+/** Compact naira for dense tables: NGN 4.2m rather than NGN 4,231,900.00 */
+export function nairaShort(minor) {
+  if (minor === null || minor === undefined) return '—'
+  const n = Number(minor) / 100
+  if (n >= 1e9) return `₦${(n / 1e9).toFixed(1)}b`
+  if (n >= 1e6) return `₦${(n / 1e6).toFixed(1)}m`
+  if (n >= 1e3) return `₦${(n / 1e3).toFixed(0)}k`
+  return `₦${n.toFixed(0)}`
+}
+
+/** "18m left" / "42m over" — an SLA clock reads better as a duration. */
+export function clock(minutes) {
+  const m = Math.abs(Math.round(minutes))
+  const text = m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`
+  return minutes < 0 ? `${text} over` : `${text} left`
 }
 
 export function ago(value) {

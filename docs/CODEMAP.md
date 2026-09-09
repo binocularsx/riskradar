@@ -67,7 +67,7 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | FR-021 | Alerts correlate into cases by subject, in a window | `cases/correlation.py` → `attach` | D13a, D19 |
 | FR-022 | Analysts move cases through the state machine by role | `api/routers/cases.py`; permissions in `security/rbac.py` | D13b, D12b |
 | FR-023 | Every transition audited with actor and from/to state | `audit/chain.py` → `append`; called from every transition | D12c |
-| FR-024 | Case detail shows alerts, signals, attributions, baseline **and the full subject timeline** | `api/routers/cases.py` → `case_detail`; rendered by `frontend/src/pages/CaseDetail.jsx` | D24b |
+| FR-024 | Case detail shows alerts, signals, attributions, baseline **and the full subject timeline** | `api/routers/cases.py` → `case_detail`; rendered by `frontend/src/components/CaseView.jsx` and `Timeline.jsx` | D24b |
 
 ### Dashboard
 
@@ -76,7 +76,7 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | FR-030 | Alerts stream live | `api/routers/stream.py`; client in `frontend/src/lib/useStream.js` | D14 |
 | FR-031 | Reconnect replays the gap via `Last-Event-ID` | `stream.py` → `_event_source`, the replay block before `LISTEN` | D14 |
 | FR-032 | Transactions as aggregates + a searchable table, **not** a live feed | `api/routers/metrics.py`; `frontend/src/pages/Metrics.jsx`, `Transactions.jsx` | D14b |
-| FR-033 | Queue sortable by score, filterable | `api/routers/cases.py` → `list_cases`; `frontend/src/pages/Queue.jsx` | — |
+| FR-033 | Queue sortable by score, filterable | `api/routers/triage.py` → `worklist`; `frontend/src/pages/Triage.jsx`. **Ordering is by exposure, clock and severity, not by score** — see D43 | D43 |
 | FR-034 | Metrics folded into the aggregate charts | `frontend/src/pages/Metrics.jsx` | D25 |
 
 ### Administration
@@ -118,6 +118,7 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | `model/registry.py` | 218 | Loads the active model, refuses one trained on a different feature spec, and explains a prediction by ablation. |
 | **`worker/scoring.py`** | 548 | The scoring loop. The largest file, and the one that ties everything together. |
 | `cases/correlation.py` | 109 | Decides whether an alert joins an open case or starts a new one. |
+| **`cases/triage.py`** | 205 | Exposure, SLA clocks, the priority formula, and the recommended action. This is what turns a list of cases into a worklist somebody can actually work. |
 | `audit/chain.py` | 189 | Appends a hash-chained audit row, and can walk the chain to find tampering. |
 | `security/tokens.py` | 70 | One-way HMAC tokenisation. The reason no account number exists in the database. |
 | `security/passwords.py` | 77 | Argon2id hashing and TOTP verification. |
@@ -128,7 +129,8 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | `api/app.py` | 141 | Wires the routers together and turns a validation failure into a dead-letter row. |
 | `api/routers/ingest.py` | 237 | The front door. |
 | `api/routers/auth.py` | 133 | Login, logout, who-am-I. |
-| `api/routers/cases.py` | 492 | The queue, case detail, and every workflow action. |
+| `api/routers/cases.py` | 492 | Case detail and the individual workflow actions. |
+| **`api/routers/triage.py`** | 400 | The worklist, "hand me the next case", one-call disposition, and the operations view. The endpoints the redesigned console actually runs on. |
 | `api/routers/metrics.py` | 205 | The aggregate queries behind the charts. |
 | `api/routers/stream.py` | 170 | The live alert stream. |
 | `api/routers/admin.py` | 497 | Rules, thresholds, lists, models, users, audit. |
@@ -185,9 +187,11 @@ rather than folded back into `0001` so the record of *why* survives.
 | `lib/useStream.js` | 51 | Subscribes to the live alert stream and reconnects itself. |
 | `components/ui.jsx` | 135 | Risk badges, signal pills, attribution bars, and the policy trace renderer. |
 | `pages/Login.jsx` | 102 | Two-step sign-in with a second factor. |
-| `pages/Queue.jsx` | 176 | The work list. Cases, not alerts. |
-| `pages/CaseDetail.jsx` | 291 | The investigation screen. The most important screen in the product. |
-| `pages/Metrics.jsx` | 237 | Charts, and the alert-budget gauge. |
+| **`pages/Triage.jsx`** | 190 | The screen an analyst lives on: desk summary, worklist rail, and the case beside it so deciding never costs a page load. |
+| **`components/CaseView.jsx`** | 280 | The investigation panel. Leads with the recommendation, keeps the disposition buttons permanently in reach, and puts the evidence one click below. |
+| **`components/Timeline.jsx`** | 140 | The customer's transactions plotted against time. A burst and a fan-out have shapes; a table does not. |
+| **`pages/Operations.jsx`** | 220 | The Fraud Ops Lead's view — backlog, ageing, analyst load, outcome mix. The stakeholder screen. |
+| `pages/Metrics.jsx` | 237 | Volume, latency and model charts. |
 | `pages/Transactions.jsx` | 112 | Search. |
 | `pages/Admin.jsx` | 422 | Rules, thresholds, models, lists, audit — with a Verify chain button. |
 

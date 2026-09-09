@@ -46,11 +46,17 @@ class SimulationConfig:
     @classmethod
     def profile(cls, name: str) -> "SimulationConfig":
         if name == "demo":
-            # Deliberately fraud-rich (~2-4%, not the 0.3% operating point): a
-            # demo database needs cases in it. The honest figures come from the
-            # training and reference profiles, and the QA report says so.
-            return cls(n_customers=400, days=7, transactions_per_day=1_200,
-                       fraud_incidents_per_day=4)
+            # Models a mid-sized bank: 12,000 transactions a day, 1,500 active
+            # customers, three fraud incidents a day. Three incidents of 8-25
+            # events against 12,000 transactions is ~0.3% fraud — **the same
+            # rate as the reference operating point** (D23).
+            #
+            # The earlier demo profile ran 1,200 transactions a day, which meant
+            # a 120/day alert budget implied a 10% alert rate and the queue
+            # filled with thousands of cases. The volume, not the detection, was
+            # what made the demo unreadable.
+            return cls(n_customers=1_500, days=4, transactions_per_day=12_000,
+                       fraud_incidents_per_day=3)
         if name == "training":
             # ~5 incidents/day x ~12 events x 30 days against 600,000 legitimate
             # transactions lands near the 0.3% fraud rate of D23, while still
@@ -78,10 +84,23 @@ def _active_hour(rng: random.Random, customer: Customer, day: datetime) -> datet
 
 
 def generate(config: SimulationConfig) -> Iterator[Event]:
-    """Yield events in chronological order across the configured window."""
+    """Yield events in chronological order, ending at *now*.
+
+    The first version looped ``range(days)`` from ``now - days``, so the last day
+    it produced was **yesterday** — nothing ever landed in the recent hours. That
+    is invisible when you are writing a training corpus, where only the span
+    matters, and fatal when you are seeding a demo: the alerting window sat
+    entirely in the future relative to the data, and not a single alert was
+    raised.
+
+    Now the window runs up to the current moment, and events that would fall
+    after it are dropped rather than invented — a simulator that emits
+    transactions dated in the future would quietly corrupt every velocity
+    feature that looks backwards from ``occurred_at``.
+    """
     rng = random.Random(config.seed)
-    end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(days=config.days)
+    end = datetime.now(timezone.utc)
+    start = (end - timedelta(days=config.days)).replace(minute=0, second=0, microsecond=0)
 
     customers = build_population(rng, n_customers=config.n_customers, now=start)
 
@@ -94,7 +113,8 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
             pairs.append((customer, account))
             weights.append(account.daily_rate)
 
-    for day_index in range(config.days):
+    # days + 1 because the window now includes today, partially.
+    for day_index in range(config.days + 1):
         day = start + timedelta(days=day_index)
         events: list[Event] = []
 
@@ -102,6 +122,8 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
         for _ in range(config.transactions_per_day):
             customer, account = rng.choices(pairs, weights)[0]
             when = _active_hour(rng, customer, day)
+            if when > end:
+                continue  # today is only partly over; do not invent the future
             event = legitimate_event(rng, customer, account, when)
             account.last_activity_at = when
             events.append(event)
@@ -119,7 +141,14 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
                 victim = rng.choice(customers)
 
             begin = _active_hour(rng, victim, day)
-            events.extend(TYPOLOGIES[typology](rng, victim, begin))
+            if begin > end:
+                continue
+            # An incident runs for minutes or hours after it starts; anything
+            # that would spill past now is dropped for the same reason.
+            events.extend(
+                e for e in TYPOLOGIES[typology](rng, victim, begin)
+                if datetime.fromisoformat(e.payload["occurred_at"]) <= end
+            )
 
         events.sort(key=lambda e: e.payload["occurred_at"])
         yield from events

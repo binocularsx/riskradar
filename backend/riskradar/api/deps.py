@@ -80,6 +80,55 @@ def current_user(request: Request, conn: Any = Depends(get_conn)) -> dict[str, A
     }
 
 
+def current_user_short(request: Request) -> dict[str, Any]:
+    """Identify the caller **without** holding a pooled connection.
+
+    ``get_conn`` yields its connection for the whole lifetime of the response,
+    which is correct for ordinary request/response routes and catastrophic for a
+    streaming one: an open Server-Sent Events stream would pin a pooled
+    connection until the browser disconnected. A handful of dashboard tabs
+    reconnecting was enough to exhaust the pool and stall every other request in
+    the process — observed as ``PoolTimeout`` and a dead API.
+
+    So streaming routes authenticate through this instead. It borrows a
+    connection, resolves the session, and gives it straight back.
+    """
+    raw = request.cookies.get(settings().session_cookie)
+    if not raw:
+        raise HTTPException(status_code=401, detail="not authenticated")
+
+    with pool().connection() as conn:
+        session = sessions.resolve(conn, raw)
+
+    if not session:
+        raise HTTPException(status_code=401, detail="session expired or revoked")
+
+    role = session["role"]
+    if mfa_required(role) and not session["mfa_satisfied"]:
+        raise HTTPException(status_code=401, detail="multi-factor authentication required")
+
+    return {
+        "id": session["user_id"],
+        "email": session["email"],
+        "display_name": session["display_name"],
+        "role": role,
+        "mfa_satisfied": session["mfa_satisfied"],
+        "permissions": sorted(str(p) for p in permissions_for(role)),
+    }
+
+
+def requires_streaming(permission: Permission):
+    """Permission guard for long-lived responses. See ``current_user_short``."""
+
+    def guard(user: dict[str, Any] = Depends(current_user_short)) -> dict[str, Any]:
+        if str(permission) not in user["permissions"]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"role {user['role']} does not hold {permission}")
+        return user
+
+    return guard
+
+
 def requires(permission: Permission):
     """Dependency factory enforcing one permission.
 

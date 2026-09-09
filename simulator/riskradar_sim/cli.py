@@ -94,6 +94,11 @@ def cmd_history(args: argparse.Namespace) -> None:
 
         for event in generate(config):
             is_history = datetime.fromisoformat(event.payload["occurred_at"]) < cutoff
+            if is_history and args.only_tail:
+                # The caller already loaded history in an earlier pass and just
+                # wants the recent alerting window. Generating the earlier days
+                # and throwing them away costs minutes for nothing.
+                continue
             batches[is_history].append(event.payload)
             if len(batches[is_history]) >= args.batch_size:
                 flush(is_history)
@@ -225,6 +230,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--alerting-tail-hours", type=float, default=12.0,
         help="transactions newer than this are scored with alerting enabled",
+    )
+    p.add_argument(
+        "--only-tail", action="store_true",
+        help="skip the older history entirely; post only the alerting window",
     )
     p.set_defaults(func=cmd_history)
 

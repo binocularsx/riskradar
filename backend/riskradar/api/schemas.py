@@ -167,6 +167,22 @@ class OutcomeIn(Strict):
     note: Annotated[str | None, Field(max_length=4000)] = None
 
 
+class DispositionIn(Strict):
+    """One analyst verdict, recorded in a single call.
+
+    ``close`` is a request, not a command — the server only honours it if the
+    caller holds ``cases:close``. An analyst can ask; a lead's ask succeeds.
+    ``followed_recommendation`` is recorded so the desk can later measure how
+    often the system's advice matched what a human actually decided, which is
+    the only honest way to find out whether the advice is any good.
+    """
+
+    outcome: CaseOutcome
+    note: Annotated[str | None, Field(max_length=4000)] = None
+    close: bool = False
+    followed_recommendation: bool | None = None
+
+
 class EscalateIn(Strict):
     target: Literal["INFOSEC", "FRAUD_OPS"]
     note: Annotated[str | None, Field(max_length=4000)] = None

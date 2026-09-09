@@ -52,7 +52,7 @@ from fastapi.responses import StreamingResponse
 
 from ...config import settings
 from ...security.rbac import Permission
-from ..deps import requires
+from ..deps import requires_streaming
 
 router = APIRouter(prefix="/v1", tags=["stream"])
 
@@ -163,7 +163,7 @@ async def _event_source(request: Request, last_event_id: int) -> AsyncIterator[s
 @router.get("/stream")
 async def stream(
     request: Request,
-    user: dict = Depends(requires(Permission.CASES_READ)),
+    user: dict = Depends(requires_streaming(Permission.CASES_READ)),
 ) -> StreamingResponse:
     raw = request.headers.get("last-event-id") or request.query_params.get("last_event_id")
     try:
