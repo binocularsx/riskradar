@@ -77,6 +77,34 @@ export default function Timeline({ items }) {
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}
            role="img"
            aria-label={`Transaction timeline: ${items.length} transactions over ${spanLabel}, ${items.filter((i) => i.alerted).length} of them alerted.`}>
+        <defs>
+          {/* A gradient wash under the activity, so a dense stretch reads as
+              weight even before you count the dots. Taken from the reference
+              charts, where the fill under the line carries as much of the
+              signal as the line itself. */}
+          <linearGradient id="tlfill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--critical)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--critical)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* the envelope of alerted activity */}
+        {(() => {
+          const alerted = items.filter((t) => t.alerted)
+          if (alerted.length < 2) return null
+          const pts = alerted.map((t) => [
+            x(new Date(t.occurred_at).getTime()),
+            y(Math.max(Number(t.amount_minor) / 100, 1)),
+          ])
+          const d = [
+            `M ${pts[0][0]} ${H - PAD.b}`,
+            ...pts.map(([px, py]) => `L ${px} ${py}`),
+            `L ${pts[pts.length - 1][0]} ${H - PAD.b}`,
+            'Z',
+          ].join(' ')
+          return <path d={d} fill="url(#tlfill)" />
+        })()}
+
         {/* amount gridlines */}
         {ticks.map((value) => (
           <g key={value}>

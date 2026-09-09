@@ -57,33 +57,32 @@ export default function Operations() {
 
   return (
     <>
-      <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <h3>Open cases</h3>
-          <div style={{ fontSize: 30, fontWeight: 640, letterSpacing: '-.02em' }}>{totalCases}</div>
-          <div className="dim" style={{ fontSize: 12 }}>across all severities</div>
+      <div className="grid cols-4" style={{ marginBottom: 18 }}>
+        <div className="deskstat" style={{ minWidth: 0 }}>
+          <div className="badge">◎</div>
+          <div className="k">Open cases</div>
+          <div className="v">{totalCases}</div>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>across all severities</div>
         </div>
-        <div className="card">
-          <h3>Money at risk</h3>
-          <div style={{ fontSize: 30, fontWeight: 640, letterSpacing: '-.02em' }}>
-            {nairaShort(totalExposure)}
-          </div>
-          <div className="dim" style={{ fontSize: 12 }}>approved value on open cases</div>
+        <div className="deskstat money" style={{ minWidth: 0 }}>
+          <div className="badge">₦</div>
+          <div className="k">Money at risk</div>
+          <div className="v">{nairaShort(totalExposure)}</div>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>approved value, open cases</div>
         </div>
-        <div className="card">
-          <h3>False positive rate</h3>
-          <div style={{ fontSize: 30, fontWeight: 640, letterSpacing: '-.02em',
-                        color: fpRate > 0.85 ? 'var(--warn)' : 'var(--text)' }}>
-            {Math.round(fpRate * 100)}%
-          </div>
-          <div className="dim" style={{ fontSize: 12 }}>of {decided} decided cases</div>
+        <div className={`deskstat ${fpRate > 0.85 ? 'alarm' : ''}`} style={{ minWidth: 0 }}>
+          <div className="badge">%</div>
+          <div className="k">False positive rate</div>
+          <div className="v">{Math.round(fpRate * 100)}%</div>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>of {decided} decided cases</div>
         </div>
-        <div className="card">
-          <h3>Oldest work</h3>
-          <div style={{ fontSize: 30, fontWeight: 640, letterSpacing: '-.02em' }}>
+        <div className="deskstat" style={{ minWidth: 0 }}>
+          <div className="badge">◷</div>
+          <div className="k">Oldest work</div>
+          <div className="v" style={{ fontSize: 22 }}>
             {ageing.filter((a) => Number(a.cases) > 0).slice(-1)[0]?.bucket ?? '—'}
           </div>
-          <div className="dim" style={{ fontSize: 12 }}>the bucket still holding cases</div>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>bucket still holding cases</div>
         </div>
       </div>
 

@@ -85,27 +85,32 @@ export default function Triage({ user }) {
     <>
       <div className="deskbar">
         <div className="deskstat">
+          <div className="badge">◎</div>
           <div className="k">Open cases</div>
           <div className="v">{s?.open_cases ?? '—'}</div>
         </div>
         <div className="deskstat money">
+          <div className="badge">₦</div>
           <div className="k">Money at risk</div>
           <div className="v">{s ? nairaShort(s.total_exposure_minor) : '—'}</div>
         </div>
         <div className={`deskstat ${s?.breaching ? 'alarm' : ''}`}>
+          <div className="badge">!</div>
           <div className="k">Past due</div>
           <div className="v">{s?.breaching ?? '—'}</div>
         </div>
         <div className="deskstat">
+          <div className="badge">◇</div>
           <div className="k">Unassigned</div>
           <div className="v">{s?.unassigned ?? '—'}</div>
         </div>
         <div className="deskstat">
+          <div className="badge">✓</div>
           <div className="k">With me</div>
           <div className="v">{s?.mine ?? '—'}</div>
         </div>
         <div style={{ flex: 1 }} />
-        <div className="row" style={{ padding: '0 20px' }}>
+        <div className="row">
           <span className="live">
             <span className={`live-dot ${connected ? 'on' : 'off'}`} />
             {connected ? 'live' : 'reconnecting'}
@@ -119,11 +124,10 @@ export default function Triage({ user }) {
       <div className="workspace">
         <aside className="worklist">
           <div className="worklist-head">
-            <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+            <div className="segmented">
               {SCOPES.map((sc) => (
                 <button key={sc.key}
-                        className={scope === sc.key ? 'primary' : 'ghost'}
-                        style={{ padding: '4px 10px', fontSize: 12 }}
+                        className={scope === sc.key ? 'on' : ''}
                         onClick={() => setScope(sc.key)}>
                   {sc.label}
                 </button>
