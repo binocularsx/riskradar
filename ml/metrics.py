@@ -144,3 +144,149 @@ def summarise(
             "headline figure (D24a)."
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Metrics a fraud desk asks for that a textbook does not
+# ---------------------------------------------------------------------------
+
+
+def value_weighted_recall(
+    y_true: np.ndarray,
+    p: np.ndarray,
+    amount_minor: np.ndarray,
+    *,
+    budget_per_day: int,
+    days: float,
+) -> dict[str, float]:
+    """What fraction of the **money** at risk did we catch?
+
+    Transaction-count recall treats a NGN 900 airtime top-up and a NGN 4.2m
+    transfer as the same event. A fraud desk is judged on losses, not on counts,
+    so a model that catches many small frauds and misses the large ones can look
+    good on recall and be worthless in practice.
+
+    This is the number a Head of Fraud would actually ask for.
+    """
+    threshold = threshold_for_alert_budget(p, budget_per_day=budget_per_day, days=days)
+    flagged = p >= threshold
+    fraud = y_true == 1
+
+    total_value = float(np.sum(amount_minor[fraud]))
+    caught_value = float(np.sum(amount_minor[fraud & flagged]))
+
+    return {
+        "threshold": threshold,
+        "fraud_value_minor": int(total_value),
+        "caught_value_minor": int(caught_value),
+        "value_recall": round(caught_value / total_value, 4) if total_value else 0.0,
+        # Reported beside it deliberately: when count-recall is much higher than
+        # value-recall, the model is catching the cheap fraud and missing the
+        # expensive fraud, which is the failure mode that matters.
+        "count_recall": round(
+            float(np.sum(fraud & flagged)) / max(float(np.sum(fraud)), 1), 4
+        ),
+    }
+
+
+def time_to_detection(
+    y_true: np.ndarray,
+    p: np.ndarray,
+    incident_id: np.ndarray,
+    amount_minor: np.ndarray,
+    occurred_at: np.ndarray,
+    *,
+    budget_per_day: int,
+    days: float,
+) -> dict[str, float]:
+    """How far into an incident do we catch it — and how much was still ahead?
+
+    Catching a fan-out on its second transfer and catching it on its eleventh
+    are both "detected" and are not remotely the same outcome. The first
+    recovers most of the money; the second writes it off.
+
+    Two figures come out of this:
+
+    * **position** — which transaction of the incident first alerted (1 is best).
+    * **value still preventable** — the share of the incident's value that had
+      *not yet moved* at the moment of the first alert. This is the closest
+      honest proxy for loss avoided, and it is the number that justifies the
+      whole system economically.
+    """
+    threshold = threshold_for_alert_budget(p, budget_per_day=budget_per_day, days=days)
+    flagged = p >= threshold
+    fraud = y_true == 1
+
+    positions: list[int] = []
+    preventable: list[float] = []
+    minutes: list[float] = []
+    missed = 0
+
+    for incident in {i for i in incident_id[fraud] if i}:
+        rows = np.flatnonzero(fraud & (incident_id == incident))
+        if rows.size == 0:
+            continue
+        # Chronological, because "how far in" is a question about time.
+        rows = rows[np.argsort(occurred_at[rows])]
+
+        hit = np.flatnonzero(flagged[rows])
+        if hit.size == 0:
+            missed += 1
+            continue
+
+        first = int(hit[0])
+        positions.append(first + 1)
+
+        total = float(np.sum(amount_minor[rows]))
+        after = float(np.sum(amount_minor[rows[first:]]))
+        preventable.append(after / total if total else 0.0)
+
+        span = (occurred_at[rows[first]] - occurred_at[rows[0]])
+        minutes.append(getattr(span, "total_seconds", lambda: 0.0)() / 60.0)
+
+    if not positions:
+        return {"detected_incidents": 0, "missed_incidents": missed}
+
+    return {
+        "detected_incidents": len(positions),
+        "missed_incidents": missed,
+        "median_position": float(np.median(positions)),
+        "caught_on_first_transaction": round(
+            float(np.mean(np.array(positions) == 1)), 4
+        ),
+        "median_minutes_into_incident": round(float(np.median(minutes)), 1),
+        "median_value_still_preventable": round(float(np.median(preventable)), 4),
+        "mean_value_still_preventable": round(float(np.mean(preventable)), 4),
+    }
+
+
+def false_positive_rate_by_segment(
+    y_true: np.ndarray, p: np.ndarray, segment: np.ndarray,
+    *, budget_per_day: int, days: float,
+) -> list[dict]:
+    """Who bears the cost of being wrong?
+
+    A model that alerts disproportionately on USSD is alerting
+    disproportionately on the customers least able to absorb the friction — in
+    this market, the poorest ones. Reporting one global false-positive rate
+    hides that completely.
+
+    Not a fairness *guarantee*. It is the measurement that makes the question
+    answerable, which is the least a system touching people's money should do.
+    """
+    threshold = threshold_for_alert_budget(p, budget_per_day=budget_per_day, days=days)
+    flagged = p >= threshold
+    out = []
+    for value in sorted({str(s) for s in segment}):
+        mask = segment.astype(str) == value
+        legit = mask & (y_true == 0)
+        n_legit = int(np.sum(legit))
+        if not n_legit:
+            continue
+        out.append({
+            "segment": value,
+            "legitimate": n_legit,
+            "false_positives": int(np.sum(legit & flagged)),
+            "false_positive_rate": round(float(np.sum(legit & flagged)) / n_legit, 5),
+        })
+    return sorted(out, key=lambda r: -r["false_positive_rate"])

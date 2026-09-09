@@ -8,6 +8,7 @@ import Operations from './pages/Operations'
 import Metrics from './pages/Metrics'
 import Transactions from './pages/Transactions'
 import Admin from './pages/Admin'
+import Roles from './pages/Roles'
 
 /**
  * Navigation is built from the permissions the *server* returned, so the menu
@@ -23,6 +24,9 @@ function nav(permissions) {
     can('cases:read') && { to: '/transactions', label: 'Search', hint: 'find a transaction' },
     can('metrics:read') && { to: '/analytics', label: 'Analytics', hint: 'volume and model' },
     can('admin:rules') && { to: '/admin', label: 'Administration', hint: 'rules and thresholds' },
+    // Visible to every role on purpose: a control people cannot see is a
+    // control they will work around.
+    { to: '/roles', label: 'Who does what', hint: 'the four roles, and their limits' },
   ].filter(Boolean)
 }
 
@@ -95,6 +99,7 @@ export default function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/analytics" element={<Metrics />} />
             <Route path="/admin" element={<Admin user={user} />} />
+            <Route path="/roles" element={<Roles user={user} />} />
             <Route path="*" element={<Navigate to={landing} replace />} />
           </Routes>
         </div>

@@ -3,19 +3,20 @@ import { useCallback, useEffect, useState } from 'react'
 import { ago, api, clock, naira, nairaShort, when } from '../lib/api'
 import { Attributions, Banner, PolicyTrace, RiskBadge, SignalPill } from './ui'
 import Timeline from './Timeline'
+import Why, { VersusNormal } from './Why'
+import { CONSEQUENCES, NextSteps, OwnershipBanner, RoleCapability } from './Actions'
 
 /**
- * The investigation panel — everything needed to decide, on one screen.
+ * The investigation panel — everything needed to decide, on one screen, in the
+ * order an analyst actually thinks:
  *
- * The first version of this screen listed the evidence and made the analyst
- * work out what to do with it. This one leads with the recommendation, puts the
- * disposition controls permanently within reach, and keeps the evidence one
- * click below rather than three scrolls down.
+ *   whose is it        →  who owns it       →  how much is at risk
+ *   →  what should I do →  why did it fire  →  what does the activity look like
+ *   →  record the answer
  *
- * The order is the order an analyst actually thinks in:
- *
- *   who and how much  →  what should I do  →  what does the activity look like
- *   →  why did it fire  →  record the answer
+ * The first version showed the evidence and left the analyst to work out what
+ * to do with it. Everything added since is aimed at one complaint: *my actions
+ * are not clear and I cannot tell why the alert happened.*
  */
 
 const OUTCOMES = [
@@ -30,15 +31,14 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [flash, setFlash] = useState(null)
+  const [hovered, setHovered] = useState(null)
 
   const can = (p) => user.permissions.includes(p)
   const caseId = summary?.id
 
   useEffect(() => {
     let cancelled = false
-    setDetail(null)
-    setNote('')
-    setError(null)
+    setDetail(null); setNote(''); setError(null); setFlash(null)
     if (!caseId) return undefined
     api.caseDetail(caseId)
       .then((d) => !cancelled && setDetail(d))
@@ -48,32 +48,29 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
 
   const dispose = useCallback(async (outcome) => {
     if (!caseId || busy) return
-    setBusy(true)
-    setError(null)
+    setBusy(true); setError(null)
     try {
-      const followed = summary.recommendation?.disposition_hint === outcome
       const result = await api.disposition(caseId, {
         outcome,
         note: note.trim() || null,
         close: can('cases:close'),
-        followed_recommendation: followed,
+        followed_recommendation: summary.recommendation?.disposition_hint === outcome,
       })
-      setFlash(
-        result.closed
-          ? `Case #${caseId} closed as ${outcome.replace(/_/g, ' ').toLowerCase()}.`
-          : `Outcome recorded. ${result.steps.includes('left open — closing is a Fraud Ops Lead action')
-              ? 'A Fraud Ops Lead will close it.' : ''}`
-      )
+      setFlash(result.closed
+        ? `Case #${caseId} closed as ${outcome.replace(/_/g, ' ').toLowerCase()}.`
+        : `Outcome recorded. A Fraud Ops Lead will close it.`)
       onDisposed?.(result)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-    }
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
   }, [caseId, busy, note, summary, onDisposed, can])
 
-  // Keyboard disposition. A desk working forty cases a day should not be
-  // reaching for a mouse three times per case.
+  const take = useCallback(async () => {
+    setBusy(true)
+    try { await api.startReview(caseId); onDisposed?.({}) }
+    catch (e) { setError(e.message) } finally { setBusy(false) }
+  }, [caseId, onDisposed])
+
+  // Keyboard disposition. A desk working forty cases a day should not reach for
+  // a mouse three times per case.
   useEffect(() => {
     function onKey(e) {
       if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return
@@ -90,37 +87,44 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
     return (
       <div className="empty">
         <div className="big">Nothing selected</div>
-        Pick a case from the list, or press <kbd>Start reviewing</kbd> to be handed
-        the highest-priority one.
+        Press <strong>Start reviewing</strong> above and the system will hand you
+        the case that matters most right now.
       </div>
     )
   }
 
   const rec = summary.recommendation || {}
   const closed = summary.state === 'CLOSED'
+  const first = detail?.alerts?.[0]
+  const mine = summary.assignee_id === user.id
 
   return (
     <>
       {flash && <Banner kind="ok">{flash}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
 
-      {/* ---------------------------------------------- who and how much */}
+      {/* ------------------------------------------------- 1. who owns it */}
+      {!closed && (
+        <OwnershipBanner summary={summary} user={user} onTake={take} busy={busy} />
+      )}
+
+      {/* ------------------------------- 2. whose case, and how much money */}
       <div className="casehead">
         <div>
           <div className="who">{summary.customer_name || 'Unknown customer'}</div>
           <div className="sub">
             Case #{summary.id} · opened {ago(summary.opened_at)} ·{' '}
-            {summary.alert_count} alert{summary.alert_count === 1 ? '' : 's'} ·{' '}
+            {summary.alert_count} flagged transaction
+            {summary.alert_count === 1 ? '' : 's'} ·{' '}
             {summary.distinct_beneficiaries} destination
             {summary.distinct_beneficiaries === 1 ? '' : 's'}
-            {summary.assignee_name ? ` · with ${summary.assignee_name}` : ''}
           </div>
-          <div className="row wrap" style={{ marginTop: 9 }}>
+          <div className="row wrap" style={{ marginTop: 10 }}>
             <RiskBadge level={summary.risk_level} />
             <span className={`sla sla-${summary.sla_state}`}>
               {clock(summary.sla_remaining_minutes)}
             </span>
-            <span className="pill">{summary.state.replace(/_/g, ' ')}</span>
+            <span className="pill">{summary.state.replace(/_/g, ' ').toLowerCase()}</span>
             {summary.new_device && <span className="pill escalate">new device</span>}
             {summary.declined_count > 0 && (
               <span className="pill">{summary.declined_count} declined</span>
@@ -136,158 +140,171 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           <div className="v">{naira(summary.exposure_minor)}</div>
           <div className="n">
             {summary.attempted_minor > summary.exposure_minor
-              ? `${nairaShort(summary.attempted_minor)} attempted, rest declined`
-              : 'all of it went through'}
+              ? `${nairaShort(summary.attempted_minor)} attempted — the rest was declined`
+              : 'all of this went through'}
           </div>
         </div>
       </div>
 
-      {/* -------------------------------------------- what should I do */}
+      {/* --------------------------------------- 3. what should I do now */}
       <div className={`recommend ${rec.urgency || ''}`}>
         <div className="k">
-          Recommended {rec.urgency === 'now' ? '· act now' : rec.urgency === 'soon' ? '· soon' : '· routine'}
+          Recommended
+          {rec.urgency === 'now' ? ' · act now'
+            : rec.urgency === 'soon' ? ' · within the hour' : ' · routine'}
         </div>
         <div className="action">{rec.action}</div>
         <div className="because">{rec.because}</div>
       </div>
 
-      {/* ------------------------------------------------ what happened */}
+      <div className="grid cols-2" style={{ marginBottom: 14 }}>
+        <NextSteps recommendation={rec} />
+        <Why
+          alerts={detail?.alerts}
+          features={first?.features}
+          signals={first?.signals}
+          amountMinor={first?.amount_minor}
+          authResult={detail?.alerts?.length === 1 ? first?.auth_result : null}
+        />
+      </div>
+
+      {/* ------------------------------------ 4. what the activity looks like */}
       {detail?.timeline?.length > 0 && <Timeline items={detail.timeline} />}
 
-      {/* ------------------------------------------------- why it fired */}
       <div className="grid cols-2" style={{ marginTop: 14 }}>
+        <VersusNormal alerts={detail?.alerts} features={first?.features}
+                        amountMinor={first?.amount_minor} />
+
         <div className="card">
-          <h3>What tripped</h3>
-          {!detail && <p className="dim">Loading evidence…</p>}
-          {detail?.alerts?.map((a) => (
-            <div key={a.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--surface-2)' }}>
-              <div className="between">
-                <div className="row wrap">
-                  <RiskBadge level={a.risk_level} />
-                  <strong>{naira(a.amount_minor)}</strong>
-                  <span className="muted">{a.channel.replace(/_/g, ' ')}</span>
-                  {a.auth_result !== 'APPROVED' && (
-                    <span className="pill">{a.auth_result}</span>
-                  )}
-                </div>
-                <span className="mono dim" style={{ fontSize: 11 }}>{when(a.occurred_at)}</span>
-              </div>
-              <div className="row wrap" style={{ marginTop: 7 }}>
-                {(a.signals || []).length
-                  ? a.signals.map((s) => <SignalPill key={s.code} signal={s} />)
-                  : <span className="dim" style={{ fontSize: 12 }}>
-                      No rule fired — this is the model's own judgement.
-                    </span>}
-              </div>
-              <details style={{ marginTop: 8 }}>
-                <summary className="muted" style={{ fontSize: 12 }}>Why this decision</summary>
-                <div style={{ marginTop: 10 }}>
-                  <PolicyTrace trace={a.policy_trace} />
-                  <h3 style={{ marginTop: 14 }}>What moved the score</h3>
-                  {a.rule_only_mode
-                    ? <Banner kind="warn">Scored in rule-only mode — the model was unavailable.</Banner>
-                    : <Attributions attributions={a.attributions} limit={6} />}
-                  <div className="mono dim" style={{ fontSize: 10.5, marginTop: 12 }}>
-                    model {a.model_name ?? 'none'}:{a.model_version ?? '—'} · ruleset v{a.ruleset_version}
-                    {' '}· thresholds v{a.threshold_version} · features {a.feature_spec_version}
-                  </div>
-                </div>
-              </details>
-            </div>
-          ))}
-        </div>
-
-        <div>
-          <div className="card" style={{ marginBottom: 12 }}>
-            <h3>This customer normally</h3>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr><th>Account</th><th>Product</th><th className="num">30d txns</th><th className="num">30d value</th></tr>
-                </thead>
-                <tbody>
-                  {detail?.baseline?.map((b) => (
-                    <tr key={b.account_token}>
-                      <td className="mono dim">{b.account_token.slice(0, 12)}…</td>
-                      <td className="muted">{b.product_type}</td>
-                      <td className="num">{b.txn_30d}</td>
-                      <td className="num">{nairaShort(b.approved_value_30d_minor)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="dim" style={{ fontSize: 11, marginBottom: 0, marginTop: 8 }}>
-              One customer, {detail?.baseline?.length ?? '—'} account
-              {detail?.baseline?.length === 1 ? '' : 's'}. The case follows the
-              customer; the baselines are per account.
-            </p>
+          <h3>This customer's accounts</h3>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Account</th><th>Product</th><th className="num">30d count</th><th className="num">30d value</th></tr>
+              </thead>
+              <tbody>
+                {detail?.baseline?.map((b) => (
+                  <tr key={b.account_token}>
+                    <td className="mono dim">…{b.account_token.slice(-8)}</td>
+                    <td className="muted">{b.product_type.toLowerCase()}</td>
+                    <td className="num">{b.txn_30d}</td>
+                    <td className="num">{nairaShort(b.approved_value_30d_minor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <div className="card">
-            <h3>Notes and history</h3>
-            {detail?.notes?.map((n) => (
-              <div key={n.id} style={{ padding: '7px 0', borderBottom: '1px solid var(--surface-2)' }}>
-                <div className="dim" style={{ fontSize: 11 }}>{n.author} · {when(n.created_at)}</div>
-                <div style={{ fontSize: 13 }}>{n.body}</div>
-              </div>
-            ))}
-            {detail?.history?.map((h, i) => (
-              <div key={i} style={{ padding: '5px 0', fontSize: 12 }}>
-                <span className="mono dim">{when(h.occurred_at)}</span>{' '}
-                {h.action.replace(/_/g, ' ').toLowerCase()}{' '}
-                <span className="muted">by {h.actor}</span>
-              </div>
-            ))}
-            {!detail?.notes?.length && !detail?.history?.length && (
-              <p className="dim" style={{ fontSize: 12, marginBottom: 0 }}>Nothing recorded yet.</p>
-            )}
-          </div>
+          <p className="dim" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
+            One customer, {detail?.baseline?.length ?? '—'} account
+            {detail?.baseline?.length === 1 ? '' : 's'}. The case follows the
+            <strong> customer</strong>, so an attacker moving between their own
+            accounts stays one investigation rather than becoming three.
+          </p>
         </div>
       </div>
 
-      {/* -------------------------------------------- record the answer */}
+      {/* --------------------------------------------- 5. the detail, on demand */}
+      <div className="card" style={{ marginTop: 14 }}>
+        <h3>Every flagged transaction on this case</h3>
+        {!detail && <p className="dim">Loading…</p>}
+        {detail?.alerts?.map((a) => (
+          <div key={a.id} style={{ padding: '11px 0', borderBottom: '1px solid var(--bg-2)' }}>
+            <div className="between">
+              <div className="row wrap">
+                <RiskBadge level={a.risk_level} />
+                <strong>{naira(a.amount_minor)}</strong>
+                <span className="muted">{a.channel.replace(/_/g, ' ').toLowerCase()}</span>
+                {a.auth_result !== 'APPROVED' && <span className="pill">{a.auth_result.toLowerCase()}</span>}
+              </div>
+              <span className="mono dim" style={{ fontSize: 11 }}>{when(a.occurred_at)}</span>
+            </div>
+            <div className="row wrap" style={{ marginTop: 7 }}>
+              {(a.signals || []).length
+                ? a.signals.map((s) => <SignalPill key={s.code} signal={s} />)
+                : <span className="dim" style={{ fontSize: 12 }}>
+                    No written rule fired — this is the model's own judgement.
+                  </span>}
+            </div>
+            <details style={{ marginTop: 8 }}>
+              <summary className="muted" style={{ fontSize: 12 }}>
+                Show the full decision trail
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                <PolicyTrace trace={a.policy_trace} />
+                <h3 style={{ marginTop: 14 }}>What moved the score</h3>
+                {a.rule_only_mode
+                  ? <Banner kind="warn">Scored in rule-only mode — the model was unavailable.</Banner>
+                  : <Attributions attributions={a.attributions} limit={6} />}
+                <div className="mono dim" style={{ fontSize: 10.5, marginTop: 12 }}>
+                  model {a.model_name ?? 'none'}:{a.model_version ?? '—'} · ruleset v{a.ruleset_version}
+                  {' '}· thresholds v{a.threshold_version} · features {a.feature_spec_version}
+                </div>
+              </div>
+            </details>
+          </div>
+        ))}
+      </div>
+
+      {(detail?.notes?.length > 0 || detail?.history?.length > 0) && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <h3>Notes and history</h3>
+          {detail.notes.map((n) => (
+            <div key={n.id} style={{ padding: '7px 0', borderBottom: '1px solid var(--bg-2)' }}>
+              <div className="dim" style={{ fontSize: 11 }}>{n.author} · {when(n.created_at)}</div>
+              <div style={{ fontSize: 13 }}>{n.body}</div>
+            </div>
+          ))}
+          {detail.history.map((h, i) => (
+            <div key={i} style={{ padding: '5px 0', fontSize: 12 }}>
+              <span className="mono dim">{when(h.occurred_at)}</span>{' '}
+              {h.action.replace(/_/g, ' ').toLowerCase()}{' '}
+              <span className="muted">by {h.actor}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* --------------------------------------------- 6. record the answer */}
       {!closed && (
         <div className="disposition">
+          <RoleCapability user={user} />
           <div className="between wrap" style={{ gap: 14 }}>
             <div className="row wrap">
-              {can('cases:set_outcome') ? (
-                OUTCOMES.map((o) => (
-                  <button key={o.key} className={`big ${o.cls}`} disabled={busy}
-                          onClick={() => dispose(o.key)}>
-                    {o.label} <kbd>{o.hint}</kbd>
-                  </button>
-                ))
-              ) : (
+              {can('cases:set_outcome') ? OUTCOMES.map((o) => (
+                <button key={o.key} className={`big ${o.cls}`} disabled={busy || !mine}
+                        title={!mine ? 'Take the case first' : CONSEQUENCES[o.key]}
+                        onMouseEnter={() => setHovered(o.key)}
+                        onMouseLeave={() => setHovered(null)}
+                        onClick={() => dispose(o.key)}>
+                  {o.label} <kbd>{o.hint}</kbd>
+                </button>
+              )) : (
                 <span className="dim" style={{ fontSize: 12.5 }}>
                   Your role can investigate and escalate, but not set a fraud outcome.
                 </span>
               )}
               {can('cases:escalate') && (
-                <button disabled={busy}
-                        onClick={async () => {
-                          setBusy(true)
-                          try { await api.escalate(summary.id, 'INFOSEC', note.trim() || null); onDisposed?.({}) }
-                          catch (e) { setError(e.message) } finally { setBusy(false) }
-                        }}>
-                  Escalate to InfoSec
-                </button>
+                <button disabled={busy} onClick={async () => {
+                  setBusy(true)
+                  try { await api.escalate(summary.id, 'INFOSEC', note.trim() || null); onDisposed?.({}) }
+                  catch (e) { setError(e.message) } finally { setBusy(false) }
+                }}>Escalate to InfoSec</button>
               )}
-              <button className="ghost" onClick={() => onSkip?.()}>
-                Skip <kbd>n</kbd>
-              </button>
+              <button className="ghost" onClick={() => onSkip?.()}>Skip <kbd>n</kbd></button>
             </div>
-            {!can('cases:close') && can('cases:set_outcome') && (
-              <span className="dim" style={{ fontSize: 11.5 }}>
-                Recording an outcome leaves the case open for a Fraud Ops Lead to close.
-              </span>
-            )}
           </div>
-          <div style={{ marginTop: 10 }}>
-            <textarea placeholder="Investigation note (optional — saved with your decision)"
-                      value={note} onChange={(e) => setNote(e.target.value)}
-                      style={{ minHeight: 52 }} />
-          </div>
+
+          <p className="dim" style={{ fontSize: 12, margin: '10px 0 0', minHeight: 32 }}>
+            {hovered
+              ? CONSEQUENCES[hovered]
+              : mine
+                ? 'Hover a button to see exactly what it does. Your answer becomes training data for the next model.'
+                : 'Take the case above before recording an outcome.'}
+          </p>
+
+          <textarea style={{ marginTop: 8, minHeight: 52 }}
+                    placeholder="Investigation note (optional — saved with your decision)"
+                    value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
       )}
     </>

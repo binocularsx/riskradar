@@ -1,0 +1,67 @@
+{
+  "dataset": "PaySim (Lopez-Rojas), CC BY-SA 4.0",
+  "synthetic": true,
+  "rows": 1200000,
+  "fraud_rate_pct": 0.1265,
+  "measured_limitations": {
+    "sender_history": "mean 1.001 transactions per sender, max 3 \u2014 every sender-side behavioural feature is inert",
+    "destination_history": "mean 2.34 per destination, max 113 \u2014 destination-novelty features are exercised",
+    "no_declines": "auth_result is always APPROVED, so the two features added by D21 cannot fire",
+    "no_account_age": "no opening date, so account_age_days and dormancy report NEVER_SEEN throughout",
+    "no_incidents": "fraud is per-transaction; incident-level recall degenerates to transaction-level"
+  },
+  "therefore": "validates that the pipeline runs on foreign data and that threshold discipline holds at a realistic base rate. It cannot validate detection, and it cannot validate the behavioural features that are this system's actual claim.",
+  "features_used": 12,
+  "feature_source": "riskradar.features",
+  "test_rows": 300000,
+  "test_span_days": 3.79,
+  "test_base_rate_pct": 0.34,
+  "pr_auc": 0.1691,
+  "roc_auc": 0.8151,
+  "random_baseline_pr_auc": 0.0034,
+  "at_alert_budget": {
+    "threshold": 0.06760142991687403,
+    "alerts": 507,
+    "true_positives": 181,
+    "transaction_recall": 0.1775,
+    "precision": 0.357
+  },
+  "value_weighted": {
+    "threshold": 0.06760142991687403,
+    "fraud_value_minor": 138761535026,
+    "caught_value_minor": 90558423246,
+    "value_recall": 0.6526,
+    "count_recall": 0.1775
+  },
+  "reliability": [
+    {
+      "bin_low": 0.0,
+      "bin_high": 0.1,
+      "n": 299694,
+      "mean_predicted": 0.00052,
+      "observed_rate": 0.00295
+    },
+    {
+      "bin_low": 0.1,
+      "bin_high": 0.2,
+      "n": 153,
+      "mean_predicted": 0.16359,
+      "observed_rate": 0.26144
+    },
+    {
+      "bin_low": 0.2,
+      "bin_high": 0.3,
+      "n": 153,
+      "mean_predicted": 0.25218,
+      "observed_rate": 0.63399
+    }
+  ],
+  "inert_features": [
+    "failed_attempts_1h_account",
+    "decline_rate_24h_account",
+    "beneficiary_is_new_to_account",
+    "device_is_new_to_subject",
+    "account_age_days",
+    "days_since_account_activity"
+  ]
+}

@@ -27,7 +27,12 @@ const SCOPES = [
 ]
 
 export default function Triage({ user }) {
-  const [scope, setScope] = useState('all')
+  // An analyst's default view is their own work, not the whole bank's. "Am I
+  // handling everything or just my cases?" should be answered by what loads,
+  // not by reading a filter chip.
+  const [scope, setScope] = useState(
+    user.permissions.includes('cases:review') ? 'mine' : 'all'
+  )
   const [data, setData] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [error, setError] = useState(null)
@@ -133,9 +138,24 @@ export default function Triage({ user }) {
                 </button>
               ))}
             </div>
-            <div className="dim" style={{ fontSize: 11, marginTop: 8 }}>
-              {items.length} case{items.length === 1 ? '' : 's'}, worked highest exposure
-              and closest deadline first
+            <div className="dim" style={{ fontSize: 11.5, marginTop: 9, lineHeight: 1.45 }}>
+              {scope === 'mine' ? (
+                <>
+                  <strong style={{ color: 'var(--text-2)' }}>
+                    Your {items.length} case{items.length === 1 ? '' : 's'}.
+                  </strong>{' '}
+                  {s?.unassigned ?? 0} more are waiting in the shared pool —
+                  press <strong>Start reviewing</strong> to take the next one.
+                </>
+              ) : scope === 'unassigned' ? (
+                <>Nobody is working these yet. Taking one assigns it to you.</>
+              ) : scope === 'breaching' ? (
+                <>Past their target response time. Oldest and largest first.</>
+              ) : (
+                <>Every open case on the desk, whoever owns it.</>
+              )}
+              <br />
+              Ordered by severity, then money at risk, then how late it is.
             </div>
           </div>
 
