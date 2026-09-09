@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+node_modules/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+ml/artifacts/*.pkl
+ml/artifacts/*.joblib
+fixtures/*.dump
+logs/
+.local/
+
+# Generated corpora and feature caches. Reproducible from the simulator with a
+# fixed seed, and far too large for version control:
+#   python -m riskradar_sim corpus --profile training --out ml/data/corpus.jsonl
+ml/data/

@@ -1,0 +1,90 @@
+[
+  {
+    "run_at": "2026-09-09T09:28:34+00:00",
+    "mode": "sustained (NFR-001)",
+    "target_tps": 50,
+    "requested_seconds": 60,
+    "ingested": 3000,
+    "achieved_ingest_tps": 50.2,
+    "scored": 3000,
+    "transactions_lost": 0,
+    "dead_lettered": 0,
+    "drain_seconds": 1.2,
+    "scoring_throughput_tps": 49.2,
+    "end_to_end_latency_ms": {
+      "mean_ms": 387,
+      "p50_ms": 310,
+      "p95_ms": 878,
+      "p99_ms": 1581,
+      "max_ms": 1692
+    },
+    "nfr_001_p95_under_2s": true,
+    "nfr_002_zero_loss": true
+  },
+  {
+    "run_at": "2026-09-09T09:30:14+00:00",
+    "mode": "burst (NFR-002)",
+    "target_tps": 250,
+    "requested_seconds": 60,
+    "ingested": 15000,
+    "achieved_ingest_tps": 250.6,
+    "scored": 15000,
+    "transactions_lost": 0,
+    "dead_lettered": 0,
+    "drain_seconds": 239.3,
+    "scoring_throughput_tps": 50.1,
+    "end_to_end_latency_ms": {
+      "mean_ms": 115522,
+      "p50_ms": 114437,
+      "p95_ms": 224443,
+      "p99_ms": 236030,
+      "max_ms": 238825
+    },
+    "nfr_001_p95_under_2s": false,
+    "nfr_002_zero_loss": true
+  },
+  {
+    "run_at": "2026-09-09T09:40:16+00:00",
+    "mode": "burst (NFR-002)",
+    "target_tps": 250,
+    "requested_seconds": 60,
+    "ingested": 15000,
+    "achieved_ingest_tps": 250.9,
+    "scored": 15000,
+    "transactions_lost": 0,
+    "dead_lettered": 0,
+    "drain_seconds": 241.6,
+    "scoring_throughput_tps": 49.8,
+    "end_to_end_latency_ms": {
+      "mean_ms": 105122,
+      "p50_ms": 97006,
+      "p95_ms": 223792,
+      "p99_ms": 235312,
+      "max_ms": 278266
+    },
+    "nfr_001_p95_under_2s": null,
+    "nfr_002_zero_loss": true
+  },
+  {
+    "run_at": "2026-09-09T09:48:32+00:00",
+    "mode": "burst (NFR-002)",
+    "target_tps": 250,
+    "requested_seconds": 60,
+    "ingested": 15000,
+    "achieved_ingest_tps": 250.9,
+    "scored": 15000,
+    "transactions_lost": 0,
+    "dead_lettered": 0,
+    "drain_seconds": 171.3,
+    "scoring_throughput_tps": 64.9,
+    "end_to_end_latency_ms": {
+      "mean_ms": 78452,
+      "p50_ms": 73478,
+      "p95_ms": 160988,
+      "p99_ms": 169197,
+      "max_ms": 171796
+    },
+    "nfr_001_p95_under_2s": null,
+    "nfr_002_zero_loss": true
+  }
+]

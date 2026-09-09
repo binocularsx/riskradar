@@ -1,0 +1,95 @@
+"""Role-based access control with separation of duties (D12b).
+
+The load-bearing sentence from PRD §5: *the account that tunes detection cannot
+be the account that clears what detection misses.*
+
+So ADMIN holds no case permission at all — not even read. That is the strict
+reading of "explicitly cannot: review or decide any case", and it is the right
+one: an administrator who can retune a threshold *and* inspect the cases that
+threshold produced can quietly tune their own work out of view. They keep
+``metrics:read``, which is what threshold tuning against an alert budget (D11d)
+actually requires.
+
+INFOSEC_ANALYST can investigate and escalate but cannot set a commercial fraud
+outcome, because those outcomes are ML training labels (D13c) and the security
+view is a different question from "was this customer defrauded".
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class Permission(StrEnum):
+    CASES_READ = "cases:read"
+    CASES_REVIEW = "cases:review"          # move to UNDER_REVIEW, add notes
+    CASES_SET_OUTCOME = "cases:set_outcome"
+    CASES_CLOSE = "cases:close"
+    CASES_REASSIGN = "cases:reassign"
+    CASES_ESCALATE = "cases:escalate"
+    METRICS_READ = "metrics:read"
+    AUDIT_READ = "audit:read"
+    ADMIN_USERS = "admin:users"
+    ADMIN_RULES = "admin:rules"
+    ADMIN_THRESHOLDS = "admin:thresholds"
+    ADMIN_MODELS = "admin:models"
+    ADMIN_LISTS = "admin:lists"
+
+
+ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
+    "ANALYST": frozenset(
+        {
+            Permission.CASES_READ,
+            Permission.CASES_REVIEW,
+            Permission.CASES_SET_OUTCOME,
+            Permission.CASES_ESCALATE,
+        }
+    ),
+    "FRAUD_OPS_LEAD": frozenset(
+        {
+            Permission.CASES_READ,
+            Permission.CASES_REVIEW,
+            Permission.CASES_SET_OUTCOME,
+            Permission.CASES_ESCALATE,
+            Permission.CASES_CLOSE,
+            Permission.CASES_REASSIGN,
+            Permission.METRICS_READ,
+        }
+    ),
+    "INFOSEC_ANALYST": frozenset(
+        {
+            Permission.CASES_READ,
+            Permission.CASES_REVIEW,
+            Permission.CASES_ESCALATE,
+            Permission.METRICS_READ,
+        }
+    ),
+    "ADMIN": frozenset(
+        {
+            Permission.METRICS_READ,
+            Permission.AUDIT_READ,
+            Permission.ADMIN_USERS,
+            Permission.ADMIN_RULES,
+            Permission.ADMIN_THRESHOLDS,
+            Permission.ADMIN_MODELS,
+            Permission.ADMIN_LISTS,
+        }
+    ),
+    # Never logs in. Present so the audit actor can always be a real user row.
+    "SYSTEM": frozenset(),
+}
+
+# D12a: mandatory for these roles, default-on for ANALYST.
+MFA_REQUIRED_ROLES = frozenset({"FRAUD_OPS_LEAD", "ADMIN"})
+
+
+def permissions_for(role: str) -> frozenset[Permission]:
+    return ROLE_PERMISSIONS.get(role, frozenset())
+
+
+def has(role: str, permission: Permission) -> bool:
+    return permission in permissions_for(role)
+
+
+def mfa_required(role: str) -> bool:
+    return role in MFA_REQUIRED_ROLES

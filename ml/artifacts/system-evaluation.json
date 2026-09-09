@@ -1,0 +1,56 @@
+{
+  "alert_budget_per_day": 120,
+  "per_typology": {
+    "ACCOUNT_TAKEOVER": {
+      "model_only": {
+        "incidents": 45,
+        "incidents_caught": 33,
+        "incident_recall": 0.7333,
+        "alerts": 894
+      },
+      "model_plus_rules": {
+        "incidents": 45,
+        "incidents_caught": 36,
+        "incident_recall": 0.8,
+        "alerts": 664
+      }
+    },
+    "MULE_FANOUT": {
+      "model_only": {
+        "incidents": 48,
+        "incidents_caught": 25,
+        "incident_recall": 0.5208,
+        "alerts": 906
+      },
+      "model_plus_rules": {
+        "incidents": 48,
+        "incidents_caught": 48,
+        "incident_recall": 1.0,
+        "alerts": 960
+      }
+    },
+    "CARD_TESTING": {
+      "model_only": {
+        "incidents": 57,
+        "incidents_caught": 0,
+        "incident_recall": 0.0,
+        "alerts": 894
+      },
+      "model_plus_rules": {
+        "incidents": 57,
+        "incidents_caught": 54,
+        "incident_recall": 0.9474,
+        "alerts": 1491
+      }
+    }
+  },
+  "headline": {
+    "model_only_mean_incident_recall": 0.418,
+    "system_mean_incident_recall": 0.9158,
+    "statement": "Incident-level recall on a fraud typology never seen in training. The model alone misses card testing entirely; the deterministic rules layer catches it. This is the measured argument for keeping rules as a separate layer emitting named facts (D11) rather than folding them into the model or blending them into its score."
+  },
+  "limitations": [
+    "The card-testing rule gates on instrument == CARD; the offline evaluation approximates that gate from the decline signature, so this measures the architecture rather than replaying the live path exactly.",
+    "Rule list membership (sanctioned, known mule, allowlist) is empty offline, so the two OVERRIDE rules and one SUPPRESS rule contribute nothing here. In production they would."
+  ]
+}

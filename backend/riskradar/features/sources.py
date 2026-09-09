@@ -1,0 +1,168 @@
+"""The two data-access paths.
+
+This module is the *only* place training and serving differ. Everything below
+returns the identical ``HistoryBundle``, and :mod:`riskradar.features.compute`
+cannot tell which one produced it.
+
+If a feature ever needs data neither loader supplies, both get extended
+together, in this file, or the equality test fails — which is exactly the
+failure mode we want, loudly, at test time rather than silently in production.
+"""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from typing import Any
+
+from .spec import ACCOUNT_HISTORY_DAYS, BENEFICIARY_LOOKBACK_DAYS, SUBJECT_HISTORY_DAYS
+from .types import HistoryBundle, PriorTx, TxView
+
+_PRIOR_COLUMNS = "occurred_at, amount_minor, auth_result, beneficiary_token, device_token"
+
+
+# ---------------------------------------------------------------------------
+# Serving path: PostgreSQL
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_SQL = f"""
+    SELECT {_PRIOR_COLUMNS}
+      FROM transactions
+     WHERE account_token = %(account)s
+       AND occurred_at <  %(now)s
+       AND occurred_at >= %(from)s
+"""
+
+_SUBJECT_SQL = f"""
+    SELECT {_PRIOR_COLUMNS}
+      FROM transactions
+     WHERE subject_token = %(subject)s
+       AND occurred_at <  %(now)s
+       AND occurred_at >= %(from)s
+"""
+
+_BENEFICIARY_SQL = """
+    SELECT min(occurred_at) AS first_seen
+      FROM transactions
+     WHERE beneficiary_token = %(beneficiary)s
+       AND occurred_at < %(now)s
+"""
+
+
+def _row_to_prior(row: Any) -> PriorTx:
+    return PriorTx(
+        occurred_at=row["occurred_at"],
+        amount_minor=int(row["amount_minor"]),
+        auth_result=row["auth_result"],
+        beneficiary_token=row["beneficiary_token"],
+        device_token=row["device_token"],
+    )
+
+
+def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
+    """Assemble history from Postgres. Used by the scoring worker.
+
+    Three indexed range scans. Note there is no join to ``accounts``: account
+    context arrives stamped on the transaction (D22), so this cannot read a
+    mutable table even by accident.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            _ACCOUNT_SQL,
+            {
+                "account": tx.account_token,
+                "now": tx.occurred_at,
+                "from": tx.occurred_at - timedelta(days=ACCOUNT_HISTORY_DAYS),
+            },
+        )
+        account = [_row_to_prior(r) for r in cur.fetchall()]
+
+        cur.execute(
+            _SUBJECT_SQL,
+            {
+                "subject": tx.subject_token,
+                "now": tx.occurred_at,
+                "from": tx.occurred_at - timedelta(days=SUBJECT_HISTORY_DAYS),
+            },
+        )
+        subject = [_row_to_prior(r) for r in cur.fetchall()]
+
+        first_seen = None
+        if tx.beneficiary_token:
+            cur.execute(
+                _BENEFICIARY_SQL,
+                {"beneficiary": tx.beneficiary_token, "now": tx.occurred_at},
+            )
+            row = cur.fetchone()
+            first_seen = row["first_seen"] if row else None
+
+    return HistoryBundle(
+        account=account, subject=subject, beneficiary_first_seen_at=first_seen
+    )
+
+
+# ---------------------------------------------------------------------------
+# Training path: pandas
+# ---------------------------------------------------------------------------
+
+
+def load_history_frame(frame: Any, tx: TxView) -> HistoryBundle:
+    """Assemble history from a dataframe. Used by training and evaluation.
+
+    ``frame`` carries the same columns as ``transactions``. The windows come from
+    the same constants the SQL path uses, so a change to a lookback cannot apply
+    to one path and not the other.
+    """
+    occurred = frame["occurred_at"]
+    before = occurred < tx.occurred_at
+
+    account_mask = (
+        before
+        & (frame["account_token"] == tx.account_token)
+        & (occurred >= tx.occurred_at - timedelta(days=ACCOUNT_HISTORY_DAYS))
+    )
+    subject_mask = (
+        before
+        & (frame["subject_token"] == tx.subject_token)
+        & (occurred >= tx.occurred_at - timedelta(days=SUBJECT_HISTORY_DAYS))
+    )
+
+    def to_priors(mask: Any) -> list[PriorTx]:
+        sub = frame.loc[mask, list(_PRIOR_COLUMNS.replace(" ", "").split(","))]
+        return [
+            PriorTx(
+                occurred_at=rec[0],
+                amount_minor=int(rec[1]),
+                auth_result=rec[2],
+                beneficiary_token=rec[3] if _present(rec[3]) else None,
+                device_token=rec[4] if _present(rec[4]) else None,
+            )
+            for rec in sub.itertuples(index=False, name=None)
+        ]
+
+    first_seen = None
+    if tx.beneficiary_token:
+        ben_mask = before & (frame["beneficiary_token"] == tx.beneficiary_token)
+        if bool(ben_mask.any()):
+            first_seen = frame.loc[ben_mask, "occurred_at"].min()
+
+    _ = BENEFICIARY_LOOKBACK_DAYS  # documented window; first-seen is unbounded by design
+    return HistoryBundle(
+        account=to_priors(account_mask),
+        subject=to_priors(subject_mask),
+        beneficiary_first_seen_at=first_seen,
+    )
+
+
+def _present(value: Any) -> bool:
+    """None/NaN-safe truthiness.
+
+    pandas turns a SQL NULL into NaN, and ``NaN == NaN`` is False — which would
+    make ``beneficiary_is_new_to_account`` disagree between the two paths for
+    every cash withdrawal. Normalising here is what keeps the equality test green.
+    """
+    if value is None:
+        return False
+    try:
+        return not (isinstance(value, float) and value != value)
+    except TypeError:  # pragma: no cover - defensive
+        return True

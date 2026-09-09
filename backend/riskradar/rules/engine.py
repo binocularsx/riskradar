@@ -1,0 +1,262 @@
+"""The rules layer (D11, D11a).
+
+Rules emit **named signals as facts** — ``{code, severity, power, evidence{}}`` —
+and never points. A weighted blend of rule points and model probability is a type
+error: severity is ordinal, model output is cardinal, and adding them produces a
+number meaningful in neither system. It also destroys calibration, which is what
+lets you predict alert volume at a threshold, and alert volume is what decides
+whether analysts drown.
+
+So rules describe. The policy layer decides.
+
+Six rules (D25), two of each power:
+
+===========================  =========  ==============================================
+Code                         Power      Catches
+===========================  =========  ==============================================
+VELOCITY_BURST_1H            ESCALATE   ATO extraction, mule fan-out speed
+CARD_TESTING_PROBES          ESCALATE   Authorisation probing — decline-heavy by nature
+SANCTIONED_BENEFICIARY       OVERRIDE   Some things are not probabilistic
+KNOWN_MULE_BENEFICIARY       OVERRIDE   Destination confirmed fraudulent by an analyst
+PRE_REGISTERED_BENEFICIARY   SUPPRESS   The customer set this payee up on purpose
+ESTABLISHED_PAYEE_NORMAL     SUPPRESS   Long-standing payee, ordinary amount
+===========================  =========  ==============================================
+
+**Integrity (D10a).** Nothing in this module imports from the simulator or reads
+a generator parameter. Rules see the transaction, the computed features, and
+administered lists. That wall is the integrity control for the whole ML claim,
+and ``tests/test_generator_detector_wall.py`` enforces it mechanically.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from ..features.types import TxView
+
+
+@dataclass(frozen=True)
+class Signal:
+    """A fact about the transaction. Never a score."""
+
+    code: str
+    power: str  # ESCALATE | OVERRIDE | SUPPRESS
+    severity: str  # LOW | MEDIUM | HIGH | CRITICAL
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "power": self.power,
+            "severity": self.severity,
+            "evidence": self.evidence,
+        }
+
+
+@dataclass
+class RuleContext:
+    """Everything a rule may read.
+
+    Note the absence of a database handle. Membership is resolved once, before
+    evaluation, so a rule cannot issue a query per transaction and quietly turn
+    the rules layer into the latency bottleneck.
+    """
+
+    tx: TxView
+    features: dict[str, float]
+    sanctioned: bool = False
+    known_mule: bool = False
+    pre_registered: bool = False
+
+
+# A rule is a pure function from (context, params) to a Signal or None.
+RuleFn = Callable[[RuleContext, dict[str, Any]], "Signal | None"]
+
+_REGISTRY: dict[str, RuleFn] = {}
+
+
+def rule(code: str) -> Callable[[RuleFn], RuleFn]:
+    def decorate(fn: RuleFn) -> RuleFn:
+        _REGISTRY[code] = fn
+        return fn
+
+    return decorate
+
+
+# ---------------------------------------------------------------------------
+# ESCALATE — raise the band
+# ---------------------------------------------------------------------------
+
+
+@rule("VELOCITY_BURST_1H")
+def velocity_burst_1h(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """More transactions in an hour than this account ever normally makes.
+
+    Counts attempts, not successes: an attacker hitting a limit and retrying is
+    the same burst, and filtering to approvals would hide the loudest part of it.
+    """
+    threshold = int(params.get("min_count", 5))
+    count = int(ctx.features.get("txn_count_1h_account", 0))
+    if count < threshold:
+        return None
+    return Signal(
+        code="VELOCITY_BURST_1H",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"count": count, "threshold": threshold, "window": "1h"},
+    )
+
+
+@rule("CARD_TESTING_PROBES")
+def card_testing_probes(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """Decline-heavy, low-value card activity — the probing shape.
+
+    This rule only exists because the event model carries ``auth_result`` (D21).
+    Before that field, the pattern was literally unrepresentable: declines never
+    reach a ledger, and a run of tiny *approved* transactions is a different
+    thing wearing the same costume.
+    """
+    if ctx.tx.instrument != "CARD":
+        return None
+    min_rate = float(params.get("min_decline_rate_24h", 0.5))
+    min_failed = int(params.get("min_failed_1h", 3))
+
+    rate = float(ctx.features.get("decline_rate_24h_account", 0.0))
+    failed = int(ctx.features.get("failed_attempts_1h_account", 0))
+    if rate < min_rate or failed < min_failed:
+        return None
+    return Signal(
+        code="CARD_TESTING_PROBES",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={
+            "decline_rate_24h": round(rate, 4),
+            "failed_attempts_1h": failed,
+            "min_decline_rate_24h": min_rate,
+            "min_failed_1h": min_failed,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# OVERRIDE — deterministic veto. The model gets no vote.
+# ---------------------------------------------------------------------------
+
+
+@rule("SANCTIONED_BENEFICIARY")
+def sanctioned_beneficiary(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """A sanctions hit is not a probability, and no calibration argument applies."""
+    if not ctx.sanctioned:
+        return None
+    return Signal(
+        code="SANCTIONED_BENEFICIARY",
+        power="OVERRIDE",
+        severity="CRITICAL",
+        evidence={"list": "SANCTIONED", "beneficiary_token": ctx.tx.beneficiary_token},
+    )
+
+
+@rule("KNOWN_MULE_BENEFICIARY")
+def known_mule_beneficiary(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """A destination an analyst already confirmed as fraudulent (D13c).
+
+    This is the loop closing: case outcomes are training signal *and* immediate
+    operational control. The second transfer to a known mule should not have to
+    re-convince a model.
+    """
+    if not ctx.known_mule:
+        return None
+    return Signal(
+        code="KNOWN_MULE_BENEFICIARY",
+        power="OVERRIDE",
+        severity="CRITICAL",
+        evidence={"list": "KNOWN_MULE", "beneficiary_token": ctx.tx.beneficiary_token},
+    )
+
+
+# ---------------------------------------------------------------------------
+# SUPPRESS — the primary false-positive control (D11a). Built, never deferred.
+# ---------------------------------------------------------------------------
+
+
+@rule("PRE_REGISTERED_BENEFICIARY")
+def pre_registered_beneficiary(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """The customer deliberately set this payee up on this account.
+
+    Suppression runs *after* escalation in the policy layer precisely so this can
+    pull back a velocity flag: paying your own landlord six times in an hour is
+    unusual and not suspicious.
+    """
+    if not ctx.pre_registered:
+        return None
+    return Signal(
+        code="PRE_REGISTERED_BENEFICIARY",
+        power="SUPPRESS",
+        severity="LOW",
+        evidence={"list": "ALLOWLIST", "scope": "account"},
+    )
+
+
+@rule("ESTABLISHED_PAYEE_NORMAL")
+def established_payee_normal(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """A long-standing destination receiving an ordinary amount.
+
+    Both conditions are required. A familiar payee receiving ten times the usual
+    amount is exactly the shape of a compromised session reusing a real payee, so
+    familiarity alone must never suppress.
+    """
+    min_age = float(params.get("min_beneficiary_age_days", 60))
+    max_ratio = float(params.get("max_amount_ratio", 1.0))
+
+    if float(ctx.features.get("beneficiary_is_new_to_account", 1.0)) != 0.0:
+        return None
+    age = float(ctx.features.get("beneficiary_first_seen_days", 0.0))
+    ratio = float(ctx.features.get("amount_ratio_to_account_p95_30d", 99.0))
+    if age < min_age or ratio > max_ratio:
+        return None
+    return Signal(
+        code="ESTABLISHED_PAYEE_NORMAL",
+        power="SUPPRESS",
+        severity="LOW",
+        evidence={
+            "beneficiary_first_seen_days": round(age, 2),
+            "amount_ratio_to_account_p95_30d": round(ratio, 4),
+            "min_beneficiary_age_days": min_age,
+            "max_amount_ratio": max_ratio,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+
+ALL_RULE_CODES: tuple[str, ...] = (
+    "VELOCITY_BURST_1H",
+    "CARD_TESTING_PROBES",
+    "SANCTIONED_BENEFICIARY",
+    "KNOWN_MULE_BENEFICIARY",
+    "PRE_REGISTERED_BENEFICIARY",
+    "ESTABLISHED_PAYEE_NORMAL",
+)
+
+assert set(ALL_RULE_CODES) == set(_REGISTRY), "rule registry disagrees with the catalogue"
+
+
+def evaluate(ctx: RuleContext, configs: dict[str, dict[str, Any]]) -> list[Signal]:
+    """Run every enabled rule.
+
+    ``configs`` is the active ruleset's per-rule configuration, loaded from
+    ``rule_configs`` — so enabling, disabling and retuning is administration
+    (FR-040) and audited (FR-041), not a deploy.
+    """
+    signals: list[Signal] = []
+    for code in ALL_RULE_CODES:
+        config = configs.get(code)
+        if not config or not config.get("enabled", True):
+            continue
+        signal = _REGISTRY[code](ctx, config.get("params") or {})
+        if signal is not None:
+            signals.append(signal)
+    return signals
