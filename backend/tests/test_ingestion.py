@@ -26,7 +26,14 @@ def test_rejects_unknown_api_key(client, sample_transaction):
 
 
 def test_accepts_and_enqueues_in_one_transaction(client, api_headers, sample_transaction):
-    """FR-005: persisted and enqueued together, or not at all."""
+    """FR-005: persisted and enqueued together, or not at all.
+
+    The invariant is "this transaction was accepted **for scoring**" — which is
+    satisfied either by a queue row waiting, or by a decision already written.
+    Asserting only the queue row would race a running worker: on a machine where
+    the workers are up, they can claim and score it before this test looks.
+    That would be a race in the test, not in the system.
+    """
     payload = sample_transaction()
     r = client.post("/v1/transactions", json=payload, headers=api_headers)
     assert r.status_code == 202, r.text
@@ -34,13 +41,20 @@ def test_accepts_and_enqueues_in_one_transaction(client, api_headers, sample_tra
     assert body["status"] == "accepted"
     assert body["queued"] is True
 
+    tx_id = body["transaction_id"]
     with _db() as c:
-        row = c.execute(
-            "SELECT 1 FROM scoring_queue WHERE transaction_id = %s", (body["transaction_id"],)
+        queued = c.execute(
+            "SELECT 1 FROM scoring_queue WHERE transaction_id = %s", (tx_id,)
         ).fetchone()
-        assert row is not None, "transaction was persisted but never enqueued"
-        c.execute("DELETE FROM scoring_queue WHERE transaction_id = %s", (body["transaction_id"],))
-        c.execute("DELETE FROM transactions WHERE id = %s", (body["transaction_id"],))
+        scored = c.execute(
+            "SELECT 1 FROM decisions WHERE transaction_id = %s", (tx_id,)
+        ).fetchone()
+        assert queued or scored, (
+            "transaction was persisted but neither queued nor scored — the "
+            "enqueue did not happen in the same database transaction as the insert"
+        )
+        c.execute("DELETE FROM scoring_queue WHERE transaction_id = %s", (tx_id,))
+        c.execute("DELETE FROM transactions WHERE id = %s", (tx_id,))
         c.commit()
 
 

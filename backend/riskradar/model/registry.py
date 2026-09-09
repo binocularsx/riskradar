@@ -1,5 +1,21 @@
 """Model loading, promotion and local explanation.
 
+Plain English
+-------------
+Looks after the trained model file: loading it, checking it is the right one,
+and explaining what it did.
+
+The checking matters. Every model records which version of the feature list it
+was trained against, and this file refuses to load one that disagrees with the
+running code. A model quietly fed slightly different numbers than it learned
+from still produces confident answers — just wrong ones.
+
+The explaining is the ``attributions`` function. To work out how much a
+feature mattered for one particular transaction, it re-scores that transaction
+with that feature swapped for its typical value and measures how much the
+answer moved. Do that for all twelve features and you get the bars an analyst
+sees on the case screen.
+
 D15a — every artefact is versioned with a content hash, its metrics, the feature
 spec version it was trained against and a training-data snapshot id. The
 ``model_version_id`` on every decision points here, which is what makes a

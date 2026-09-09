@@ -1,5 +1,20 @@
 """Alert-to-case correlation (D13a).
 
+Plain English
+-------------
+Answers one question: *is this alert part of something we are already looking
+at?*
+
+When somebody's account is taken over, the attacker might make eight transfers.
+That produces eight alerts. Without this file, an analyst would see eight
+separate jobs in their queue, investigate the same incident eight times, and
+every count of "how many incidents today" would be wrong.
+
+So a new alert looks for an open case about the same **customer** in the last
+24 hours and joins it. Same customer, not same account — because somebody who
+has taken over an account will happily drain the savings account next, and
+those are one incident, not two.
+
 An account takeover producing reconnaissance, a device change and six rapid
 transfers generates eight alerts. Without correlation that is eight cases for one
 incident, investigated eight times, and every queue metric becomes fiction.

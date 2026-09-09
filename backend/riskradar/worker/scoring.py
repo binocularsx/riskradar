@@ -1,5 +1,21 @@
 """The scoring worker.
 
+Plain English
+-------------
+The engine room. This is the loop that actually scores transactions.
+
+It runs continuously and does the same five things forever: take some
+transactions off the queue, work out their features, ask the model and the
+rules what they think, write down the decision, and — only if the decision is
+serious enough — raise an alert and attach it to a case.
+
+Two details are worth knowing. It always writes the decision, even for the
+99% of transactions that turn out to be perfectly ordinary; that record is what
+makes it possible to explain a decision months later. And it takes work off the
+queue by *reserving* it for sixty seconds rather than holding a database lock,
+so several copies of this program can run side by side without tripping over
+each other.
+
 Claims queued transactions with ``SELECT ... FOR UPDATE SKIP LOCKED`` (D8a) and
 runs the three layers: features, model, rules, then policy.
 

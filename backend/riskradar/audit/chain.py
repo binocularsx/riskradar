@@ -1,5 +1,21 @@
 """Hash-chained audit log (D12c).
 
+Plain English
+-------------
+The permanent record of who did what.
+
+Every action — an analyst clearing a case, an admin changing a threshold, the
+system raising an alert — writes a row here. Rows are never edited or deleted.
+
+Each row also stores a fingerprint of the row before it, so the rows form a
+chain. If anyone ever went into the database and quietly altered a historical
+entry, its fingerprint would no longer match and the break would be found by
+running a query. The admin screen has a button that does exactly that.
+
+The stronger protection is not in this file at all: the database account this
+program uses has only been granted permission to *add* rows to this table. It
+physically cannot change or remove one. See ``migrations/0002_grants.sql``.
+
 Every row stores ``prev_hash`` and ``SHA256(prev_hash || canonical_payload)``.
 Tampering with any historical row breaks every hash after it, and the break is
 found by a query rather than by trusting that nobody edited the table.

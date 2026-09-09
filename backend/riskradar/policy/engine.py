@@ -1,5 +1,20 @@
 """The policy layer (D11, D11b).
 
+Plain English
+-------------
+This is the only file in the system that actually decides anything.
+
+It receives two things: a probability from the model ("I think there is a 28%
+chance this is fraud") and a list of flags from the rules ("this account made 7
+transfers in an hour"). It combines them into one verdict — LOW, MEDIUM, HIGH
+or CRITICAL, and a recommendation of ALLOW, MONITOR, REVIEW or HOLD.
+
+The order matters and is deliberate: start from what the model thinks, let
+rules push it up, let suppressions pull it back down, and let a veto rule
+overrule everything. Every one of those steps is written into a list that
+ships with the decision, so when an analyst asks "why is this HIGH?" the answer
+is read from data rather than guessed at.
+
 An explicit, readable, versioned function mapping ``(P(fraud), signals, context)``
 to a decision and a risk level. This is the third layer, and the only one that
 decides anything: the model estimates, the rules describe, the policy decides.

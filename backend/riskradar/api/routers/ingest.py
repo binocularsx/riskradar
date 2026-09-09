@@ -1,5 +1,19 @@
 """Ingestion — the front door (FR-001 to FR-007).
 
+Plain English
+-------------
+The front door. Every transaction the system ever sees comes through here.
+
+It does four jobs before anything else happens: check the caller is allowed in,
+check the transaction is properly formed (and if not, keep the broken one on
+file rather than quietly fixing it), scramble the account numbers, and save it
+together with a note telling the scoring engine there is work to do.
+
+That last part is one database operation, not two. If it were two, a crash in
+between would leave a transaction saved but never scored — and nobody would
+notice, because it would look exactly like a transaction that had been
+scored and found boring.
+
 One versioned, authenticated endpoint. The simulator is a pure external client of
 it (D8): it queues at the same door a bank would, which is what makes it
 deletable without touching the product, and what gets the door tested constantly

@@ -1,5 +1,20 @@
 """Event generation: ordinary life, and three criminal processes.
 
+Plain English
+-------------
+Invents transactions — both the ordinary ones and the criminal ones.
+
+The ordinary ones are the bulk: people buying airtime, paying rent, withdrawing
+cash, occasionally having a card declined. The criminal ones follow three
+stories, and each one is written as a *story* rather than as a set of warning
+signs.
+
+The account-takeover story, for instance, goes: someone gets in from a new
+phone, makes a few tiny test transfers, waits a couple of hours, then empties
+the account in a burst. What that story never does is say "make this look
+suspicious". If it did, the model would simply be learning the warning signs we
+had written down, and its accuracy would be a circular argument.
+
 D10 — the label is "emitted by a fraud process", never "crossed a threshold".
 Every fraud event here is produced by a state machine modelling how the crime
 actually unfolds. Detection sees only the shadow.

@@ -1,5 +1,21 @@
 """The rules layer (D11, D11a).
 
+Plain English
+-------------
+Six hand-written checks that a human can read and argue with.
+
+Each one looks at a transaction and either says nothing, or raises a named flag
+with its evidence attached — "VELOCITY_BURST_1H, because there were 7
+transactions in an hour and the limit is 4". They never produce a score or a
+number to be added up. They state facts.
+
+They come in three kinds. Two **escalate** (make it look worse), two
+**override** (a flat veto — a sanctioned destination is not a matter of
+probability), and two **suppress** (make it look better — the customer set this
+payee up themselves months ago). Suppression is the one that keeps analysts
+from drowning in false alarms, which is why it was built rather than
+postponed.
+
 Rules emit **named signals as facts** — ``{code, severity, power, evidence{}}`` —
 and never points. A weighted blend of rule points and model probability is a type
 error: severity is ordinal, model output is cardinal, and adding them produces a

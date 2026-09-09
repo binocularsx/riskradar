@@ -1,5 +1,19 @@
 """Server-Sent Events (FR-030, FR-031, D14).
 
+Plain English
+-------------
+Pushes new alerts to the dashboard the moment they happen, without the browser
+having to keep asking.
+
+It uses a web standard called Server-Sent Events, which has one property that
+mattered here: if the connection drops, the browser reconnects on its own and
+tells the server the last thing it received, so nothing is missed. Chat-style
+WebSockets do not do that, and bank networks tend to break them anyway.
+
+Only alerts are streamed. Transactions are not — there are thousands an hour,
+and a live wall of every payment is something nobody can actually read. Those
+are summarised on the metrics page instead.
+
 SSE rather than WebSockets. Traffic is overwhelmingly server-to-client — analyst
 actions are ordinary request/response REST — bank proxies routinely break the
 WebSocket upgrade, and WebSocket reconnection has no replay. SSE gives gap replay

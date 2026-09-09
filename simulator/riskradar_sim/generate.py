@@ -1,5 +1,17 @@
 """Corpus generation and live streaming.
 
+Plain English
+-------------
+Runs the invented population forward through a number of days and produces the
+transactions they make.
+
+Two modes matter. It can write everything to a file for training the model, and
+that file contains the answers — which transactions were fraudulent and which
+criminal story produced them. Or it can post transactions to the running system
+through exactly the same public door a real bank would use, in which case the
+answers are *not* sent, because the live system has nowhere to put them and is
+not supposed to know.
+
 The simulator is a **pure external client** (D8). It has no database handle, no
 import of the product's detection code, and it reaches Risk Radar only through
 ``POST /v1/transactions`` — the same door a bank would use. Deleting this

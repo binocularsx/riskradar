@@ -1,5 +1,20 @@
 """The two data-access paths.
 
+Plain English
+-------------
+The feature functions need a customer's transaction history. This file fetches
+it — twice, in two different ways.
+
+When the system is running live, history comes from the database. When somebody
+is training the model, it comes from a big table loaded in memory. Those are
+genuinely different jobs, so they are two functions here, and they are the
+*only* two places in the whole codebase where that difference exists.
+
+Both hand back the identical shape, so the feature functions cannot tell which
+one they were given. If they could, the two paths would slowly drift apart and
+the model would start seeing slightly different numbers in production than it
+learned from — a failure that is almost invisible until it is expensive.
+
 This module is the *only* place training and serving differ. Everything below
 returns the identical ``HistoryBundle``, and :mod:`riskradar.features.compute`
 cannot tell which one produced it.

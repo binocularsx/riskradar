@@ -1,5 +1,18 @@
 """Train, calibrate, evaluate and register the fraud model.
 
+Plain English
+-------------
+Trains the model, then grades it honestly.
+
+The training part is unremarkable: feed a few hundred thousand transactions and
+their known outcomes to a standard algorithm. The grading is where the care is.
+
+The model is deliberately trained on only two of the three kinds of fraud, and
+then tested on the third — one it has never seen. That number is much worse
+than the usual one and it is the number this project publishes, because the
+question that matters operationally is not "can it recognise fraud it has seen
+before" but "will it catch something new".
+
     python ml/train.py --corpus ml/data/corpus.jsonl --holdout ACCOUNT_TAKEOVER --promote
 
 Three commitments are enforced here rather than described:

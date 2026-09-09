@@ -1,5 +1,22 @@
 """The feature functions themselves.
 
+Plain English
+-------------
+This file answers one question, twelve times: *is this transaction unusual for
+this customer?*
+
+Each function takes the transaction being examined plus a list of that
+account's earlier transactions, and returns a single number. "How many
+transactions in the last hour?" "How big is this compared to their usual
+ceiling?" "Have they ever paid this person before?" Nothing here knows about
+fraud — these are just measurements. Deciding what the measurements mean is
+somebody else's job (``policy/engine.py``).
+
+The functions are deliberately dull and self-contained: no database, no
+network, no clock. That is what makes it possible to run exactly the same code
+during training and during live scoring, which is the single most important
+property in this system.
+
 Pure. No database handle, no dataframe, no clock. Everything they need arrives in
 ``TxView`` and ``HistoryBundle``, which is what makes the equality test in
 ``tests/test_train_serve_equality.py`` possible — and that test is the highest-

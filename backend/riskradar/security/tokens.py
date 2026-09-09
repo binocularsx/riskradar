@@ -1,5 +1,20 @@
 """One-way tokenisation at the ingestion boundary (D9c, D9d, D19).
 
+Plain English
+-------------
+Turns real account numbers into meaningless strings, permanently.
+
+The moment a transaction arrives, the customer's ID and account number are run
+through a one-way scramble, and only the scrambled version is ever saved. The
+same account number always produces the same scrambled string, which is what
+lets the system say "this is the fifth transfer from this account today"
+without ever knowing which account that is.
+
+There is no way back. No lookup table, no key kept in a safe. If Risk Radar's
+database were stolen tomorrow, there would be no account numbers in it. When a
+case has to be escalated to the bank, the scrambled string travels and the
+bank looks it up on their side.
+
 HMAC-SHA256 with a secret pepper. Deterministic, so behavioural baselines and
 future ring detection still work — they need *stable* identity, not *readable*
 identity. There is no mapping table and no key custody: Risk Radar cannot resolve

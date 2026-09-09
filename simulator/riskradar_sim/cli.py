@@ -230,7 +230,13 @@ def main(argv: list[str] | None = None) -> None:
 
     p = sub.add_parser("stream", help="live feed for the demo")
     p.add_argument("--rate", type=float, default=2.0, help="transactions per second")
-    p.add_argument("--incident-probability", type=float, default=0.02)
+    # Each "incident" emits 8-25 transactions, so this knob is not the fraud
+    # rate — it is far more sensitive than it looks. At 0.03 the live feed is
+    # roughly 27% fraud, which is absurd and makes the alert queue meaningless.
+    # 0.002 lands near 2%: still ~6x the real operating point of 0.3% (D23), but
+    # frequent enough that somebody watching a demo sees an incident every few
+    # minutes. The honest figures come from the training profile, never this one.
+    p.add_argument("--incident-probability", type=float, default=0.002)
     p.add_argument("--typology", default=None, choices=["ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING"])
     p.set_defaults(func=cmd_stream)
 

@@ -1,5 +1,18 @@
 """Role-based access control with separation of duties (D12b).
 
+Plain English
+-------------
+Who is allowed to do what.
+
+Four jobs exist: the analyst who investigates alerts, the fraud operations lead
+who can close cases, the information-security analyst who handles suspected
+account compromise, and the administrator who tunes the system.
+
+The important line is that the administrator — the one person who can change
+how sensitive the detection is — is not allowed to open a single case. Not even
+to look. Otherwise the same person could loosen a threshold and then review the
+cases that threshold failed to produce, and nobody would ever know.
+
 The load-bearing sentence from PRD §5: *the account that tunes detection cannot
 be the account that clears what detection misses.*
 

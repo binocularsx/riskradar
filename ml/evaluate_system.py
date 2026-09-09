@@ -1,5 +1,20 @@
 """System-level held-out evaluation: model **plus rules plus policy**.
 
+Plain English
+-------------
+Grades the whole system rather than just the model, and this turned out to be
+the most useful thing measured on the project.
+
+Tested on a kind of fraud it has never seen, the model on its own catches
+roughly 42% of incidents — and for card testing specifically, it catches none
+at all. Add the six hand-written rules and the policy layer on top, and the
+same test catches 92%, with card testing going from 0% to 95%.
+
+That gap is the argument for the whole design. A model can only recognise
+things that resemble what it was trained on. A written rule has no such limit.
+Which is why the two are kept as separate layers rather than blended into one
+number.
+
 ``evaluate.py`` measures the model alone, and its most useful finding is a
 failure: with card testing held out, the model catches **none** of it. That is
 not a footnote — it is the argument for the whole three-layer architecture (D11).
