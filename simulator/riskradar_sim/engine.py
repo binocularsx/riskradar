@@ -144,7 +144,7 @@ def legitimate_event(
 
     # Naira amounts with a realistic long tail: airtime and small POS dominate,
     # rent and salary sit far out on the right.
-    bucket = rng.choices(["micro", "small", "medium", "large"], [0.34, 0.40, 0.21, 0.05])[0]
+    bucket = rng.choices(["micro", "small", "medium", "large"], [0.30, 0.38, 0.24, 0.08])[0]
     naira = {
         "micro": lambda: rng.uniform(100, 3_000),
         "small": lambda: rng.uniform(3_000, 40_000),
@@ -157,7 +157,12 @@ def legitimate_event(
         # Mostly a payee they already use; occasionally somebody new, because
         # real people do pay new people and a model that treats novelty alone as
         # fraud would drown the queue.
-        if rng.random() < 0.82 and customer.known_beneficiaries:
+        # D57: this used to be a flat 82% for everybody, which made "first time
+        # paying this account" almost exclusively a fraud marker. How often a
+        # person pays somebody new is a fact about that person — a trader meets
+        # new suppliers constantly, a salaried person pays the same landlord for
+        # years — so it comes from the customer, not from a constant here.
+        if rng.random() > customer.new_payee_rate and customer.known_beneficiaries:
             beneficiary = rng.choice(customer.known_beneficiaries)
         else:
             beneficiary = f"BEN{uuid.uuid4().hex[:12].upper()}"
@@ -192,13 +197,64 @@ def legitimate_event(
     )
 
 
+def disbursement_burst(
+    rng: random.Random, customer: Customer, start: datetime
+) -> Iterator[Event]:
+    """A shop owner paying staff, or a trader settling suppliers. Not fraud.
+
+    This exists because of D57. Paying many different people inside an hour was
+    a behaviour only mule fan-out had, which made the count of destinations an
+    almost perfect fraud marker — 18.6% of normal traffic could be discarded on
+    that column alone without losing a single fraud case.
+
+    That was never true of real banking. Salary morning at a small business
+    looks exactly like this, and so does a trader clearing invoices on a Friday.
+    Adding it makes the detection problem harder and honest at the same time:
+    the count of destinations is now a *hint*, and the model has to use context
+    — whose account, at what hour, to accounts of what age — to tell the two
+    apart. Which is the actual job.
+    """
+    if not customer.payout_group:
+        return
+    account = customer.primary
+    device = rng.choice(customer.devices)
+    now = start
+
+    # Most of the payout group, in one sitting.
+    n = rng.randint(max(4, len(customer.payout_group) // 2), len(customer.payout_group))
+    for payee in rng.sample(customer.payout_group, n):
+        # Wages and invoices: recognisable sizes, and they overlap the range a
+        # fan-out uses, which is the point.
+        naira = rng.choices(
+            [rng.uniform(8_000, 45_000), rng.uniform(45_000, 180_000), rng.uniform(180_000, 600_000)],
+            [0.55, 0.35, 0.10],
+        )[0]
+        failed = rng.random() < 0.05
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int(naira * 100),
+                channel=rng.choices(["MOBILE_APP", "WEB"], [0.6, 0.4])[0],
+                instrument="ACCOUNT_TRANSFER",
+                rail=rng.choices(["NIP", "INTRABANK"], [0.8, 0.2])[0],
+                device=device,
+                beneficiary=payee,
+                region=customer.home_region,
+                auth_result="FAILED" if failed else "APPROVED",
+                decline_reason="TIMEOUT" if failed else None,
+            )
+        )
+        now += timedelta(seconds=rng.uniform(20, 150))
+
+
 # ---------------------------------------------------------------------------
 # Typology 1 — account takeover
 # ---------------------------------------------------------------------------
 
 
 def account_takeover(
-    rng: random.Random, customer: Customer, start: datetime
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None,
 ) -> Iterator[Event]:
     """Compromise -> new device -> reconnaissance -> pause -> extraction.
 
@@ -239,7 +295,14 @@ def account_takeover(
     now += timedelta(minutes=rng.uniform(25, 240))
 
     # 3. Extraction: escalating transfers to fresh destinations, across accounts.
-    mule_accounts = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(rng.randint(2, 5))]
+    # D57: not always brand-new. An attacker sends to whatever mule accounts the
+    # network has available, and some of those are recruited real customers.
+    mule_accounts = []
+    for _ in range(rng.randint(2, 5)):
+        if recruited_pool and rng.random() < 0.40:
+            mule_accounts.append(rng.choice(recruited_pool))
+        else:
+            mule_accounts.append(f"BEN{uuid.uuid4().hex[:12].upper()}")
     escalation = rng.uniform(1.15, 1.55)
     naira = rng.uniform(40_000, 180_000)
 
@@ -272,20 +335,71 @@ def account_takeover(
 # ---------------------------------------------------------------------------
 
 
-def mule_fanout(rng: random.Random, customer: Customer, start: datetime) -> Iterator[Event]:
-    """One account pushing funds to many fresh beneficiaries within minutes.
+def mule_fanout(
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None,
+) -> Iterator[Event]:
+    """One account pushing funds out to many destinations within minutes.
 
-    Amounts sit just under round numbers, which is a habit rather than a rule:
-    the generator never reads a threshold, it models a person trying not to look
-    round.
+    Rewritten for D57. The first version did three things the same way every
+    single time, and each one became a marker the model could read instead of
+    learning the behaviour:
+
+    * a **brand-new destination on every transfer** — so "first time paying this
+      account" alone discarded 77% of normal traffic without losing one fraud;
+    * amounts drawn from a narrow band starting near ₦47,000, which **74% of
+      normal traffic sat below**;
+    * always several destinations, when nothing legitimate ever did that.
+
+    Real mule networks are not that consistent. They recruit people who already
+    hold ordinary accounts and go on using them normally, so a destination is
+    often an account the bank has seen for years. They reuse an account when a
+    transfer bounces. And they deliberately split into small amounts, because
+    small amounts attract less attention — the very opposite of the tidy band
+    the first version used.
+
+    Every one of those is now a **tendency**, not a rule. The typology is still
+    perfectly recognisable to a human reading the timeline; it is simply no
+    longer separable on a single column.
     """
     incident = f"MULE-{uuid.uuid4().hex[:10]}"
     account = customer.primary
     device = rng.choice(customer.devices)
     now = start
+    pool = recruited_pool or []
 
-    for _ in range(rng.randint(6, 15)):
-        naira = rng.choice([49_500, 99_000, 148_500, 199_000, 245_000]) * rng.uniform(0.95, 1.05)
+    # Destinations. Some are freshly opened, some belong to recruited people
+    # whose accounts have ordinary history behind them.
+    n_destinations = rng.randint(4, 15)
+    destinations: list[str] = []
+    for _ in range(n_destinations):
+        if pool and rng.random() < 0.42:
+            destinations.append(rng.choice(pool))       # a recruited real account
+        else:
+            destinations.append(f"BEN{uuid.uuid4().hex[:12].upper()}")
+
+    # How this particular network behaves. Some split small to stay quiet,
+    # some move fewer, larger sums.
+    style = rng.choices(["split_small", "mixed", "chunky"], [0.38, 0.42, 0.20])[0]
+
+    for i in range(rng.randint(5, 16)):
+        if style == "split_small":
+            # Down to airtime money. A floor of ₦2,500 meant a quarter of all
+            # legitimate transfers sat below anything a fan-out ever did, which
+            # made the amount alone a usable filter. Real smurfing goes this low.
+            naira = rng.uniform(400, 45_000)
+        elif style == "chunky":
+            naira = rng.uniform(120_000, 900_000)
+        else:
+            naira = rng.choices(
+                [rng.uniform(3_000, 40_000), rng.uniform(40_000, 250_000), rng.uniform(250_000, 700_000)],
+                [0.42, 0.44, 0.14],
+            )[0]
+
+        # A bounced transfer gets retried to the same place — so destinations
+        # repeat, and "never paid this account before" stops being universal.
+        beneficiary = (destinations[i % len(destinations)] if rng.random() < 0.80
+                       else rng.choice(destinations))
         failed = rng.random() < 0.12
         yield Event(
             _base_payload(
@@ -295,14 +409,14 @@ def mule_fanout(rng: random.Random, customer: Customer, start: datetime) -> Iter
                 instrument="ACCOUNT_TRANSFER",
                 rail=rng.choices(["NIP", "INTRABANK"], [0.85, 0.15])[0],
                 device=device,
-                beneficiary=f"BEN{uuid.uuid4().hex[:12].upper()}",  # fresh every time
+                beneficiary=beneficiary,
                 region=customer.home_region,
                 auth_result="FAILED" if failed else "APPROVED",
                 decline_reason="TIMEOUT" if failed else None,
             ),
             is_fraud=True, typology="MULE_FANOUT", incident_id=incident,
         )
-        now += timedelta(seconds=rng.uniform(25, 220))
+        now += timedelta(seconds=rng.uniform(25, 260))
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +424,10 @@ def mule_fanout(rng: random.Random, customer: Customer, start: datetime) -> Iter
 # ---------------------------------------------------------------------------
 
 
-def card_testing(rng: random.Random, customer: Customer, start: datetime) -> Iterator[Event]:
+def card_testing(
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None,
+) -> Iterator[Event]:
     """Low-value authorisation probes, mostly declined, then the real charge.
 
     This typology exists at the **switch**, not the core (§9.1): a declined
@@ -347,7 +464,9 @@ def card_testing(rng: random.Random, customer: Customer, start: datetime) -> Ite
         yield Event(
             _base_payload(
                 customer, account, now,
-                amount_minor=int(rng.uniform(180_000, 900_000) * 100),
+                # Up to ₦2.4m: a ceiling of ₦900k meant any card payment above
+                # it was guaranteed legitimate, which is not a fact about fraud.
+                amount_minor=int(rng.uniform(180_000, 2_400_000) * 100),
                 channel="WEB",
                 instrument="CARD",
                 rail="CARD_SCHEME",

@@ -66,6 +66,22 @@ class Account:
         return self.daily_rate < 0.08
 
 
+# How people actually differ from one another (D57).
+#
+# The first version of this file had one kind of customer, who paid one person
+# at a time from a short list of regulars. That made every suspicious behaviour
+# the exclusive property of fraud: only fraud paid several people in an hour,
+# only fraud paid brand-new accounts. An audit later showed a single column
+# could discard 77% of normal traffic without losing one fraud case.
+#
+# Real populations are not like that. A shop owner pays fifteen staff on the
+# same morning. A trader settles suppliers all week. A family sends money to one
+# account after a funeral. Those people are why fraud detection is hard, and
+# leaving them out did not make the problem easier — it made it fake.
+ARCHETYPES = ["ordinary", "salary_earner", "small_business", "trader"]
+ARCHETYPE_WEIGHTS = [0.74, 0.12, 0.09, 0.05]
+
+
 @dataclass
 class Customer:
     customer_id: str
@@ -79,9 +95,36 @@ class Customer:
     # of a person rather than a rule we wrote down.
     active_hours: tuple[int, int] = (7, 22)
 
+    # What kind of life this person has. Drawn from the population before any
+    # fraud process is assigned, exactly like account age and dormancy (D20c) —
+    # a fraud process may *select* a trader, it may never *make* somebody one.
+    archetype: str = "ordinary"
+    # Staff or suppliers this person pays in a batch. Empty for most people.
+    payout_group: list[str] = field(default_factory=list)
+
     @property
     def primary(self) -> Account:
         return self.accounts[0]
+
+    @property
+    def does_batch_payouts(self) -> bool:
+        """Pays many people in one sitting, legitimately and routinely."""
+        return self.archetype in ("small_business", "trader")
+
+    @property
+    def new_payee_rate(self) -> float:
+        """How often this person pays somebody they have never paid before.
+
+        A trader meets new suppliers constantly; a salaried person mostly pays
+        the same landlord every month. Making this vary by person is what stops
+        "first time paying this account" from being a fraud marker.
+        """
+        return {
+            "ordinary": 0.26,
+            "salary_earner": 0.16,
+            "small_business": 0.34,
+            "trader": 0.48,
+        }[self.archetype]
 
 
 def build_population(
@@ -131,11 +174,31 @@ def build_population(
             )
 
         devices = [f"DEV{uuid.uuid4().hex[:12]}" for _ in range(rng.choices([1, 2, 3], [0.62, 0.30, 0.08])[0])]
-        payees = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(rng.randint(2, 7))]
+
+        archetype = rng.choices(ARCHETYPES, ARCHETYPE_WEIGHTS)[0]
+        # Traders and shop owners know far more payees than a salaried person.
+        n_payees = {
+            "ordinary": rng.randint(2, 7),
+            "salary_earner": rng.randint(2, 5),
+            "small_business": rng.randint(5, 12),
+            "trader": rng.randint(8, 20),
+        }[archetype]
+        payees = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(n_payees)]
+
+        # Staff and suppliers paid in a batch. This is the legitimate source of
+        # "many different people within the hour" — the behaviour that used to
+        # belong to mule fan-out alone.
+        payout_group: list[str] = []
+        if archetype == "small_business":
+            payout_group = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(rng.randint(5, 16))]
+        elif archetype == "trader":
+            payout_group = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(rng.randint(8, 25))]
 
         start = rng.randint(5, 9)
         customers.append(
             Customer(
+                archetype=archetype,
+                payout_group=payout_group,
                 customer_id=cid,
                 display_name=name,
                 accounts=accounts,

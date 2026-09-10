@@ -3,50 +3,50 @@
   "per_typology": {
     "ACCOUNT_TAKEOVER": {
       "model_only": {
-        "incidents": 45,
-        "incidents_caught": 33,
-        "incident_recall": 0.7333,
-        "alerts": 894
+        "incidents": 47,
+        "incidents_caught": 29,
+        "incident_recall": 0.617,
+        "alerts": 918
       },
       "model_plus_rules": {
-        "incidents": 45,
-        "incidents_caught": 36,
-        "incident_recall": 0.8,
-        "alerts": 664
+        "incidents": 47,
+        "incidents_caught": 30,
+        "incident_recall": 0.6383,
+        "alerts": 1632
       }
     },
     "MULE_FANOUT": {
       "model_only": {
-        "incidents": 48,
-        "incidents_caught": 25,
-        "incident_recall": 0.5208,
-        "alerts": 906
+        "incidents": 57,
+        "incidents_caught": 28,
+        "incident_recall": 0.4912,
+        "alerts": 913
       },
       "model_plus_rules": {
-        "incidents": 48,
-        "incidents_caught": 48,
-        "incident_recall": 1.0,
-        "alerts": 960
+        "incidents": 57,
+        "incidents_caught": 51,
+        "incident_recall": 0.8947,
+        "alerts": 2100
       }
     },
     "CARD_TESTING": {
       "model_only": {
-        "incidents": 57,
+        "incidents": 49,
         "incidents_caught": 0,
         "incident_recall": 0.0,
-        "alerts": 894
+        "alerts": 933
       },
       "model_plus_rules": {
-        "incidents": 57,
-        "incidents_caught": 54,
-        "incident_recall": 0.9474,
-        "alerts": 1491
+        "incidents": 49,
+        "incidents_caught": 48,
+        "incident_recall": 0.9796,
+        "alerts": 2138
       }
     }
   },
   "headline": {
-    "model_only_mean_incident_recall": 0.418,
-    "system_mean_incident_recall": 0.9158,
+    "model_only_mean_incident_recall": 0.3694,
+    "system_mean_incident_recall": 0.8375,
     "statement": "Incident-level recall on a fraud typology never seen in training. The model alone misses card testing entirely; the deterministic rules layer catches it. This is the measured argument for keeping rules as a separate layer emitting named facts (D11) rather than folding them into the model or blending them into its score."
   },
   "limitations": [

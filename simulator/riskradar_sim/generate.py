@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from .engine import TYPOLOGIES, Event, legitimate_event
+from .engine import TYPOLOGIES, Event, disbursement_burst, legitimate_event
 from .population import Customer, build_population
 
 
@@ -113,6 +113,17 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
             pairs.append((customer, account))
             weights.append(account.daily_rate)
 
+    # D57: accounts a mule network could plausibly have recruited — ordinary
+    # people's real payees, which therefore carry ordinary history. Drawing some
+    # fraud destinations from here is what stops "the bank has never seen this
+    # account before" from being a perfect fraud marker.
+    recruited_pool: list[str] = []
+    for customer in customers:
+        if customer.known_beneficiaries and rng.random() < 0.35:
+            recruited_pool.append(rng.choice(customer.known_beneficiaries))
+
+    batch_payers = [c for c in customers if c.does_batch_payouts]
+
     # days + 1 because the window now includes today, partially.
     for day_index in range(config.days + 1):
         day = start + timedelta(days=day_index)
@@ -127,6 +138,21 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
             event = legitimate_event(rng, customer, account, when)
             account.last_activity_at = when
             events.append(event)
+
+        # --- legitimate batch payouts ---------------------------------------
+        # Salary morning at a shop, a trader clearing invoices. Ordinary life
+        # that happens to look like a fan-out (D57). Weekdays only, and heavier
+        # at month end when wages actually go out.
+        if batch_payers and day.weekday() < 5:
+            share = 0.16 if day.day >= 25 or day.day <= 3 else 0.05
+            for payer in rng.sample(batch_payers, max(1, int(len(batch_payers) * share))):
+                when = _active_hour(rng, payer, day)
+                if when > end:
+                    continue
+                events.extend(
+                    e for e in disbursement_burst(rng, payer, when)
+                    if datetime.fromisoformat(e.payload["occurred_at"]) <= end
+                )
 
         # --- criminal processes ---------------------------------------------
         for _ in range(config.fraud_incidents_per_day):
@@ -146,7 +172,7 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
             # An incident runs for minutes or hours after it starts; anything
             # that would spill past now is dropped for the same reason.
             events.extend(
-                e for e in TYPOLOGIES[typology](rng, victim, begin)
+                e for e in TYPOLOGIES[typology](rng, victim, begin, recruited_pool)
                 if datetime.fromisoformat(e.payload["occurred_at"]) <= end
             )
 
