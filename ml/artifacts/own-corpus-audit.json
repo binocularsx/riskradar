@@ -1,0 +1,359 @@
+{
+  "overall": [
+    {
+      "feature": "amount_log10",
+      "auc": 0.4324,
+      "free_exclusion": 0.0204,
+      "verdict": "useful"
+    },
+    {
+      "feature": "account_age_days",
+      "auc": 0.4911,
+      "free_exclusion": 0.0027,
+      "verdict": "weak"
+    },
+    {
+      "feature": "beneficiary_first_seen_days",
+      "auc": 0.6923,
+      "free_exclusion": 0.0001,
+      "verdict": "useful"
+    },
+    {
+      "feature": "amount_ratio_to_account_p95_30d",
+      "auc": 0.524,
+      "free_exclusion": 0.0,
+      "verdict": "weak"
+    },
+    {
+      "feature": "txn_count_1h_account",
+      "auc": 0.8756,
+      "free_exclusion": 0.0,
+      "verdict": "very strong"
+    },
+    {
+      "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+      "auc": 0.619,
+      "free_exclusion": 0.0,
+      "verdict": "useful"
+    },
+    {
+      "feature": "failed_attempts_1h_account",
+      "auc": 0.8013,
+      "free_exclusion": 0.0,
+      "verdict": "very strong"
+    },
+    {
+      "feature": "decline_rate_24h_account",
+      "auc": 0.7748,
+      "free_exclusion": 0.0,
+      "verdict": "very strong"
+    },
+    {
+      "feature": "distinct_beneficiaries_1h_account",
+      "auc": 0.4838,
+      "free_exclusion": 0.0,
+      "verdict": "weak"
+    },
+    {
+      "feature": "beneficiary_is_new_to_account",
+      "auc": 0.5907,
+      "free_exclusion": 0.0,
+      "verdict": "useful"
+    },
+    {
+      "feature": "device_is_new_to_subject",
+      "auc": 0.5087,
+      "free_exclusion": 0.0,
+      "verdict": "weak"
+    },
+    {
+      "feature": "days_since_account_activity",
+      "auc": 0.6256,
+      "free_exclusion": 0.0,
+      "verdict": "useful"
+    }
+  ],
+  "per_typology": {
+    "ACCOUNT_TAKEOVER": [
+      {
+        "feature": "distinct_beneficiaries_1h_account",
+        "auc": 0.7236,
+        "free_exclusion": 0.1865,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "amount_log10",
+        "auc": 0.613,
+        "free_exclusion": 0.0204,
+        "verdict": "useful"
+      },
+      {
+        "feature": "account_age_days",
+        "auc": 0.5474,
+        "free_exclusion": 0.0045,
+        "verdict": "weak"
+      },
+      {
+        "feature": "beneficiary_first_seen_days",
+        "auc": 0.3743,
+        "free_exclusion": 0.0001,
+        "verdict": "useful"
+      },
+      {
+        "feature": "amount_ratio_to_account_p95_30d",
+        "auc": 0.698,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "txn_count_1h_account",
+        "auc": 0.6839,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+        "auc": 0.6881,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "failed_attempts_1h_account",
+        "auc": 0.6239,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "decline_rate_24h_account",
+        "auc": 0.6539,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "beneficiary_is_new_to_account",
+        "auc": 0.6893,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "device_is_new_to_subject",
+        "auc": 0.5473,
+        "free_exclusion": 0.0,
+        "verdict": "weak"
+      },
+      {
+        "feature": "days_since_account_activity",
+        "auc": 0.793,
+        "free_exclusion": 0.0,
+        "verdict": "very strong"
+      }
+    ],
+    "CARD_TESTING": [
+      {
+        "feature": "beneficiary_first_seen_days",
+        "auc": 0.7908,
+        "free_exclusion": 0.5817,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "beneficiary_is_new_to_account",
+        "auc": 0.3861,
+        "free_exclusion": 0.2278,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "account_age_days",
+        "auc": 0.4542,
+        "free_exclusion": 0.0609,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "distinct_beneficiaries_1h_account",
+        "auc": 0.124,
+        "free_exclusion": 0.0475,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "amount_log10",
+        "auc": 0.1278,
+        "free_exclusion": 0.036,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "device_is_new_to_subject",
+        "auc": 0.4963,
+        "free_exclusion": 0.0073,
+        "verdict": "weak"
+      },
+      {
+        "feature": "amount_ratio_to_account_p95_30d",
+        "auc": 0.2822,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "txn_count_1h_account",
+        "auc": 0.9428,
+        "free_exclusion": 0.0,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+        "auc": 0.499,
+        "free_exclusion": 0.0,
+        "verdict": "weak"
+      },
+      {
+        "feature": "failed_attempts_1h_account",
+        "auc": 0.9557,
+        "free_exclusion": 0.0,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "decline_rate_24h_account",
+        "auc": 0.9319,
+        "free_exclusion": 0.0,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "days_since_account_activity",
+        "auc": 0.6031,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      }
+    ],
+    "MULE_FANOUT": [
+      {
+        "feature": "beneficiary_is_new_to_account",
+        "auc": 0.8861,
+        "free_exclusion": 0.7722,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "amount_log10",
+        "auc": 0.8419,
+        "free_exclusion": 0.7468,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "beneficiary_first_seen_days",
+        "auc": 0.7908,
+        "free_exclusion": 0.5817,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "distinct_beneficiaries_1h_account",
+        "auc": 0.9439,
+        "free_exclusion": 0.1865,
+        "verdict": "GENERATOR SWITCH"
+      },
+      {
+        "feature": "account_age_days",
+        "auc": 0.5102,
+        "free_exclusion": 0.0258,
+        "verdict": "weak"
+      },
+      {
+        "feature": "amount_ratio_to_account_p95_30d",
+        "auc": 0.8217,
+        "free_exclusion": 0.0003,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+        "auc": 0.782,
+        "free_exclusion": 0.0003,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "txn_count_1h_account",
+        "auc": 0.9204,
+        "free_exclusion": 0.0,
+        "verdict": "very strong"
+      },
+      {
+        "feature": "failed_attempts_1h_account",
+        "auc": 0.67,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "decline_rate_24h_account",
+        "auc": 0.5884,
+        "free_exclusion": 0.0,
+        "verdict": "useful"
+      },
+      {
+        "feature": "device_is_new_to_subject",
+        "auc": 0.4974,
+        "free_exclusion": 0.0,
+        "verdict": "weak"
+      },
+      {
+        "feature": "days_since_account_activity",
+        "auc": 0.5188,
+        "free_exclusion": 0.0,
+        "verdict": "weak"
+      }
+    ]
+  },
+  "switches_found": [
+    {
+      "scope": "ACCOUNT_TAKEOVER",
+      "feature": "distinct_beneficiaries_1h_account",
+      "auc": 0.7236,
+      "free_exclusion": 0.1865,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "CARD_TESTING",
+      "feature": "beneficiary_first_seen_days",
+      "auc": 0.7908,
+      "free_exclusion": 0.5817,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "CARD_TESTING",
+      "feature": "beneficiary_is_new_to_account",
+      "auc": 0.3861,
+      "free_exclusion": 0.2278,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "CARD_TESTING",
+      "feature": "account_age_days",
+      "auc": 0.4542,
+      "free_exclusion": 0.0609,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "MULE_FANOUT",
+      "feature": "beneficiary_is_new_to_account",
+      "auc": 0.8861,
+      "free_exclusion": 0.7722,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "MULE_FANOUT",
+      "feature": "amount_log10",
+      "auc": 0.8419,
+      "free_exclusion": 0.7468,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "MULE_FANOUT",
+      "feature": "beneficiary_first_seen_days",
+      "auc": 0.7908,
+      "free_exclusion": 0.5817,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "scope": "MULE_FANOUT",
+      "feature": "distinct_beneficiaries_1h_account",
+      "auc": 0.9439,
+      "free_exclusion": 0.1865,
+      "verdict": "GENERATOR SWITCH"
+    }
+  ],
+  "passed": false
+}
