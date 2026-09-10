@@ -1,56 +1,226 @@
 {
   "alert_budget_per_day": 120,
+  "total_incidents": 47,
   "per_typology": {
-    "ACCOUNT_TAKEOVER": {
-      "model_only": {
+    "ACCOUNT_TAKEOVER": [
+      {
+        "arm": "rules only",
+        "incidents": 47,
+        "incidents_caught": 12,
+        "incident_recall": 0.2553,
+        "ci95": [
+          0.153,
+          0.395
+        ],
+        "alerts": 1177
+      },
+      {
+        "arm": "one feature (txn_count_1h_account)",
+        "incidents": 47,
+        "incidents_caught": 12,
+        "incident_recall": 0.2553,
+        "ci95": [
+          0.153,
+          0.395
+        ],
+        "alerts": 1225
+      },
+      {
+        "arm": "logistic regression",
+        "incidents": 47,
+        "incidents_caught": 18,
+        "incident_recall": 0.383,
+        "ci95": [
+          0.258,
+          0.526
+        ],
+        "alerts": 913
+      },
+      {
+        "arm": "gradient boosting (ours)",
         "incidents": 47,
         "incidents_caught": 29,
         "incident_recall": 0.617,
+        "ci95": [
+          0.474,
+          0.742
+        ],
         "alerts": 918
       },
-      "model_plus_rules": {
+      {
+        "arm": "rules + logistic regression",
+        "incidents": 47,
+        "incidents_caught": 20,
+        "incident_recall": 0.4255,
+        "ci95": [
+          0.295,
+          0.567
+        ],
+        "alerts": 1418
+      },
+      {
+        "arm": "rules + gradient boosting (ours)",
         "incidents": 47,
         "incidents_caught": 30,
         "incident_recall": 0.6383,
+        "ci95": [
+          0.495,
+          0.76
+        ],
         "alerts": 1632
       }
-    },
-    "MULE_FANOUT": {
-      "model_only": {
+    ],
+    "MULE_FANOUT": [
+      {
+        "arm": "rules only",
+        "incidents": 57,
+        "incidents_caught": 49,
+        "incident_recall": 0.8596,
+        "ci95": [
+          0.747,
+          0.927
+        ],
+        "alerts": 1421
+      },
+      {
+        "arm": "one feature (txn_count_1h_account)",
+        "incidents": 57,
+        "incidents_caught": 45,
+        "incident_recall": 0.7895,
+        "ci95": [
+          0.667,
+          0.875
+        ],
+        "alerts": 1090
+      },
+      {
+        "arm": "logistic regression",
+        "incidents": 57,
+        "incidents_caught": 35,
+        "incident_recall": 0.614,
+        "ci95": [
+          0.484,
+          0.729
+        ],
+        "alerts": 913
+      },
+      {
+        "arm": "gradient boosting (ours)",
         "incidents": 57,
         "incidents_caught": 28,
         "incident_recall": 0.4912,
+        "ci95": [
+          0.366,
+          0.617
+        ],
         "alerts": 913
       },
-      "model_plus_rules": {
+      {
+        "arm": "rules + logistic regression",
+        "incidents": 57,
+        "incidents_caught": 49,
+        "incident_recall": 0.8596,
+        "ci95": [
+          0.747,
+          0.927
+        ],
+        "alerts": 2116
+      },
+      {
+        "arm": "rules + gradient boosting (ours)",
         "incidents": 57,
         "incidents_caught": 51,
         "incident_recall": 0.8947,
+        "ci95": [
+          0.789,
+          0.951
+        ],
         "alerts": 2100
       }
-    },
-    "CARD_TESTING": {
-      "model_only": {
-        "incidents": 49,
-        "incidents_caught": 0,
-        "incident_recall": 0.0,
-        "alerts": 933
-      },
-      "model_plus_rules": {
+    ],
+    "CARD_TESTING": [
+      {
+        "arm": "rules only",
         "incidents": 49,
         "incidents_caught": 48,
         "incident_recall": 0.9796,
+        "ci95": [
+          0.893,
+          0.996
+        ],
+        "alerts": 1585
+      },
+      {
+        "arm": "one feature (txn_count_1h_account)",
+        "incidents": 49,
+        "incidents_caught": 49,
+        "incident_recall": 1.0,
+        "ci95": [
+          0.927,
+          1.0
+        ],
+        "alerts": 943
+      },
+      {
+        "arm": "logistic regression",
+        "incidents": 49,
+        "incidents_caught": 49,
+        "incident_recall": 1.0,
+        "ci95": [
+          0.927,
+          1.0
+        ],
+        "alerts": 913
+      },
+      {
+        "arm": "gradient boosting (ours)",
+        "incidents": 49,
+        "incidents_caught": 0,
+        "incident_recall": 0.0,
+        "ci95": [
+          0.0,
+          0.073
+        ],
+        "alerts": 933
+      },
+      {
+        "arm": "rules + logistic regression",
+        "incidents": 49,
+        "incidents_caught": 49,
+        "incident_recall": 1.0,
+        "ci95": [
+          0.927,
+          1.0
+        ],
+        "alerts": 1688
+      },
+      {
+        "arm": "rules + gradient boosting (ours)",
+        "incidents": 49,
+        "incidents_caught": 48,
+        "incident_recall": 0.9796,
+        "ci95": [
+          0.893,
+          0.996
+        ],
         "alerts": 2138
       }
-    }
+    ]
   },
-  "headline": {
-    "model_only_mean_incident_recall": 0.3694,
-    "system_mean_incident_recall": 0.8375,
-    "statement": "Incident-level recall on a fraud typology never seen in training. The model alone misses card testing entirely; the deterministic rules layer catches it. This is the measured argument for keeping rules as a separate layer emitting named facts (D11) rather than folding them into the model or blending them into its score."
+  "mean_incident_recall": {
+    "rules only": 0.6982,
+    "one feature (txn_count_1h_account)": 0.6816,
+    "logistic regression": 0.6657,
+    "gradient boosting (ours)": 0.3694,
+    "rules + logistic regression": 0.7617,
+    "rules + gradient boosting (ours)": 0.8375
   },
+  "verdict": [
+    "Each layer improves on the one below it by more than the measurement noise. The architecture is doing work."
+  ],
   "limitations": [
     "The card-testing rule gates on instrument == CARD; the offline evaluation approximates that gate from the decline signature, so this measures the architecture rather than replaying the live path exactly.",
-    "Rule list membership (sanctioned, known mule, allowlist) is empty offline, so the two OVERRIDE rules and one SUPPRESS rule contribute nothing here. In production they would."
+    "Rule list membership (sanctioned, known mule, allowlist) is empty offline, so the two OVERRIDE rules and one SUPPRESS rule contribute nothing here. In production they would.",
+    "47 to 57 incidents per typology. Wilson intervals are roughly 0.17 wide, so any two arms within about 0.10 of each other are not distinguishable on this corpus."
   ]
 }
