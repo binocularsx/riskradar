@@ -43,13 +43,13 @@
       {
         "arm": "gradient boosting (ours)",
         "incidents": 202,
-        "incidents_caught": 170,
-        "incident_recall": 0.8416,
+        "incidents_caught": 158,
+        "incident_recall": 0.7822,
         "ci95": [
-          0.785,
-          0.885
+          0.72,
+          0.834
         ],
-        "alerts": 5586
+        "alerts": 3618
       },
       {
         "arm": "rules + logistic regression",
@@ -65,13 +65,13 @@
       {
         "arm": "rules + gradient boosting (ours)",
         "incidents": 202,
-        "incidents_caught": 171,
-        "incident_recall": 0.8465,
+        "incidents_caught": 161,
+        "incident_recall": 0.797,
         "ci95": [
-          0.79,
-          0.89
+          0.736,
+          0.847
         ],
-        "alerts": 6774
+        "alerts": 5550
       }
     ],
     "MULE_FANOUT": [
@@ -111,13 +111,13 @@
       {
         "arm": "gradient boosting (ours)",
         "incidents": 208,
-        "incidents_caught": 91,
-        "incident_recall": 0.4375,
+        "incidents_caught": 89,
+        "incident_recall": 0.4279,
         "ci95": [
-          0.372,
-          0.505
+          0.363,
+          0.496
         ],
-        "alerts": 4290
+        "alerts": 3618
       },
       {
         "arm": "rules + logistic regression",
@@ -133,13 +133,13 @@
       {
         "arm": "rules + gradient boosting (ours)",
         "incidents": 208,
-        "incidents_caught": 197,
-        "incident_recall": 0.9471,
+        "incidents_caught": 196,
+        "incident_recall": 0.9423,
         "ci95": [
-          0.908,
-          0.97
+          0.902,
+          0.967
         ],
-        "alerts": 7297
+        "alerts": 6863
       }
     ],
     "CARD_TESTING": [
@@ -185,7 +185,7 @@
           0.008,
           0.052
         ],
-        "alerts": 4396
+        "alerts": 3618
       },
       {
         "arm": "rules + logistic regression",
@@ -207,7 +207,7 @@
           0.941,
           0.989
         ],
-        "alerts": 8803
+        "alerts": 8107
       }
     ]
   },
@@ -215,13 +215,13 @@
     "rules only": 0.7215,
     "one feature (txn_count_1h_account)": 0.6771,
     "logistic regression": 0.6571,
-    "gradient boosting (ours)": 0.4332,
+    "gradient boosting (ours)": 0.4102,
     "rules + logistic regression": 0.7713,
-    "rules + gradient boosting (ours)": 0.9226
+    "rules + gradient boosting (ours)": 0.9045
   },
   "verdict": [
     "The model earns its place, but on 1 of 3 typologies only: ACCOUNT_TAKEOVER. Everywhere else the rules alone match the full system inside the measurement error, so the architecture is justified by one typology rather than by all three.",
-    "Our model ALONE (0.433) scores below a single raw feature (0.677) and below the rules alone (0.722). The model is only useful in combination; it must never be described as the system's engine."
+    "Our model ALONE (0.410) scores below a single raw feature (0.677) and below the rules alone (0.722). The model is only useful in combination; it must never be described as the system's engine."
   ],
   "limitations": [
     "The card-testing rule gates on instrument == CARD; the offline evaluation approximates that gate from the decline signature, so this measures the architecture rather than replaying the live path exactly.",

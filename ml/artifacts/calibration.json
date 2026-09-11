@@ -55,7 +55,7 @@
           ]
         }
       ],
-      "fit_seconds": 120.0
+      "fit_seconds": 155.5
     },
     "B  unweighted + isotonic, 3-fold CV": {
       "threshold": 0.03609,
@@ -111,7 +111,7 @@
           ]
         }
       ],
-      "fit_seconds": 167.6
+      "fit_seconds": 202.2
     },
     "C  balanced + isotonic on a later slice": {
       "threshold": 0.03034,
@@ -167,7 +167,7 @@
           ]
         }
       ],
-      "fit_seconds": 49.1
+      "fit_seconds": 63.7
     },
     "D  unweighted + isotonic on a later slice": {
       "threshold": 0.04462,
@@ -223,7 +223,7 @@
           ]
         }
       ],
-      "fit_seconds": 44.9
+      "fit_seconds": 57.2
     },
     "E  balanced + Platt on a later slice": {
       "threshold": 0.0445,
@@ -279,63 +279,63 @@
           ]
         }
       ],
-      "fit_seconds": 48.6
+      "fit_seconds": 60.7
     },
     "F  SHIPPED: TimeSplitCalibratedBooster": {
       "threshold": 0.04462,
-      "alerts": 3645,
-      "expected_frauds_in_alerts": 1250.4,
-      "actual_frauds_in_alerts": 1360,
+      "alerts": 3616,
+      "expected_frauds_in_alerts": 1249.1,
+      "actual_frauds_in_alerts": 1359,
       "confidence_ratio": 0.919,
-      "ece_alerting_region": 0.0301,
+      "ece_alerting_region": 0.0319,
       "reliability_alerting_region": [
         {
-          "n": 729,
-          "stated": 0.0451,
-          "observed": 0.0453,
+          "n": 724,
+          "stated": 0.0452,
+          "observed": 0.0414,
           "observed_ci95": [
-            0.032,
-            0.063
+            0.029,
+            0.059
           ]
         },
         {
-          "n": 729,
-          "stated": 0.0541,
-          "observed": 0.0809,
+          "n": 723,
+          "stated": 0.0553,
+          "observed": 0.0858,
           "observed_ci95": [
-            0.063,
-            0.103
+            0.067,
+            0.108
           ]
         },
         {
-          "n": 729,
-          "stated": 0.1531,
-          "observed": 0.1701,
+          "n": 723,
+          "stated": 0.1553,
+          "observed": 0.1757,
           "observed_ci95": [
-            0.145,
-            0.199
+            0.15,
+            0.205
           ]
         },
         {
-          "n": 729,
-          "stated": 0.4664,
-          "observed": 0.572,
+          "n": 723,
+          "stated": 0.4752,
+          "observed": 0.5781,
           "observed_ci95": [
-            0.536,
-            0.607
+            0.542,
+            0.614
           ]
         },
         {
-          "n": 729,
-          "stated": 0.9965,
-          "observed": 0.9973,
+          "n": 723,
+          "stated": 0.9967,
+          "observed": 0.9986,
           "observed_ci95": [
-            0.99,
-            0.999
+            0.992,
+            1.0
           ]
         }
       ],
-      "fit_seconds": 45.8
+      "fit_seconds": 59.3
     }
   }
 }

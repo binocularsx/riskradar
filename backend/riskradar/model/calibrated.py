@@ -97,5 +97,22 @@ class TimeSplitCalibratedBooster:
 
     def predict_proba(self, X) -> np.ndarray:
         raw = self.booster_.predict_proba(np.asarray(X))[:, 1]
-        p = np.clip(self.calibrator_.predict(raw), 0.0, 1.0)
+        p = self.calibrator_.predict(raw)
+
+        # Break ties inside each calibrated band using the booster's own score.
+        #
+        # Isotonic calibration outputs a step function, so thousands of payments
+        # can land on exactly the same probability. The alert budget sets a
+        # threshold and flags everything at or above it, so a tie sitting on the
+        # threshold flags the whole tied group. Measured: the model alone raised
+        # 5,586 alerts against a budget of about 3,620 (D60d), so the budget
+        # was simply not being honoured.
+        #
+        # The nudge is a billionth of the raw score. The gap between neighbouring
+        # calibrated bands is several orders of magnitude larger, so this can
+        # never move a payment across a band, and it changes no stated
+        # probability in any way an analyst could see. It only decides the order
+        # *within* a band, using the booster's finer ranking, which is what the
+        # threshold needs.
+        p = np.clip(p + 1e-9 * raw, 0.0, 1.0)
         return np.column_stack([1.0 - p, p])
