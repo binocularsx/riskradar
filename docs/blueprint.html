@@ -363,7 +363,7 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
             <tr><td>Card-testing rule: how often it is right</td><td class="v">≥ 0.95</td><td class="v">0.998</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Card testing caught, new variant, rules alone</td><td class="v">≥ 0.90</td><td class="v">192 of 194 · 0.99</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Payment-burst rule: share of daily budget</td><td class="v">≤ 60%</td><td class="v">~28% (5+ in an hour, to a destination new to the bank)</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>New mule fan-out caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.41</td><td><span class="chip part">trade-off</span></td></tr>
+            <tr><td>New mule fan-out caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.87 (was 0.41)</td><td><span class="chip met">met</span></td></tr>
             <tr><td>"Familiar payee" rule firing where there is no payee</td><td class="v">never</td><td class="v">never (was 84% of its firings)</td><td><span class="chip met">fixed</span></td></tr>
             <tr><td>Every rule measured on its own</td><td class="v">all six</td><td class="v">three</td><td><span class="chip part">partly</span></td></tr>
           </tbody>
@@ -396,7 +396,7 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
         <div class="tablewrap"><table>
           <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.77 (rules alone: 0.04)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.78 (rules alone: 0.20)</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Honesty of its probability (stated ÷ actual)</td><td class="v">≥ 0.90</td><td class="v">0.92</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Calibration error where alerts are raised</td><td class="v">≤ 0.04</td><td class="v">0.032</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Same numbers in training and live</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
@@ -464,11 +464,11 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
           <tbody>
             <tr><td>Time from payment to decision (95% of the time)</td><td class="v">under 2 s</td><td class="v">0.88 s</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Payments lost in a 5× burst</td><td class="v">0</td><td class="v">0</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Alerts per day, whole system</td><td class="v">≤ 120</td><td class="v">154 in the latest demo day</td><td><span class="chip not">over</span></td></tr>
+            <tr><td>Alerts per day, whole system</td><td class="v">≤ 120</td><td class="v">82 in the latest demo day</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Record edits possible</td><td class="v">none</td><td class="v">none · tamper-evident</td><td><span class="chip met">met</span></td></tr>
           </tbody>
         </table></div>
-        <div class="note"><p><strong>The one red number.</strong> The budget is set from four days of history, and the next day ran 28% over. Either the setting is too loose for a single day's swing, or one rule spikes on some days. It needs a week of data to tell which, and it is the next thing to look at.</p></div>
+        <div class="note"><p><strong>What the over-budget day turned out to be.</strong> An earlier demo day ran 28% over the budget. The cause was the demo builder, not the system: its live day was generated as a different bank with no history, and was counted on top of a day already loaded. With that fixed, the rebuilt demo day raised 82 alerts and caught both real incidents in it. One caveat stays open: the demo bank remembers only about three days, so the payment-burst rule fires more there than it would in a real bank with years of history.</p></div>
       </div>
     </div>
   </section>
@@ -504,10 +504,11 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
     <h2>The number that sums it up</h2>
     <p>
       Shown a kind of fraud hidden from its training, with the team held to 120
-      alerts a day, the whole system catches <strong>about eight incidents in
-      ten</strong> (0.81): account takeover 0.78, mule fan-out 0.65, card testing
-      0.99. The model is what catches account takeover; the rules are what catch
-      card testing; mule fan-out needs both.
+      alerts a day, the whole system catches <strong>about nine incidents in
+      ten</strong> (0.89): account takeover 0.78, mule fan-out 0.91, card testing
+      0.99. The model is what catches account takeover; the rules catch card
+      testing and most mule fan-out, now that the payment-burst rule looks at
+      where the money is going, not only how fast.
     </p>
     <p>
       We can claim the method is sound and measured. We cannot yet claim it
