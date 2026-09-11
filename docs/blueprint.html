@@ -124,6 +124,15 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
          font-size: 13.5px; font-family: "Libre Franklin", system-ui, sans-serif; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 640px) { body { font-size: 16px; } .wrap { padding: 34px 18px 80px; } .part { grid-template-columns: 1fr; } }
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .figframe, .tablewrap { overflow: visible !important; }
+  figure svg { min-width: 0 !important; width: 100% !important; }
+  figure, .card, .scope, .note, tr { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+}
 </style>
 
 <div class="wrap">
