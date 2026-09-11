@@ -1,0 +1,559 @@
+<title>What We Are Building</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --paper:      #f6f4f0;
+  --surface:    #fffefc;
+  --surface-2:  #eceae4;
+  --line:       #d8d4cb;
+  --line-2:     #b6b0a3;
+  --ink:        #1a1a18;
+  --ink-2:      #4e4c46;
+  --ink-3:      #7d7a71;
+  --accent:     #2c4a7c;
+  --accent-2:   #47699f;
+  --accent-bg:  #e4eaf4;
+  --yes:        #2f6244;
+  --yes-bg:     #e2eee7;
+  --no:         #8d3a34;
+  --no-bg:      #f6e5e3;
+  --measure:    64ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14140f; --surface: #1c1c17; --surface-2: #26261f;
+    --line: #33332b; --line-2: #4c4c40;
+    --ink: #f0eee7; --ink-2: #b3b0a6; --ink-3: #857f74;
+    --accent: #7fa8e0; --accent-2: #a3c2ec; --accent-bg: #1a2536;
+    --yes: #6bb98b; --yes-bg: #16281d;
+    --no: #dd8078; --no-bg: #2e1a18;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14140f; --surface: #1c1c17; --surface-2: #26261f;
+  --line: #33332b; --line-2: #4c4c40;
+  --ink: #f0eee7; --ink-2: #b3b0a6; --ink-3: #857f74;
+  --accent: #7fa8e0; --accent-2: #a3c2ec; --accent-bg: #1a2536;
+  --yes: #6bb98b; --yes-bg: #16281d;
+  --no: #dd8078; --no-bg: #2e1a18;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 17.5px; line-height: 1.66; -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 780px; margin: 0 auto; padding: 56px 32px 120px; }
+
+h1 {
+  font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 700;
+  font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.08; letter-spacing: -.025em;
+  margin: 0 0 16px; text-wrap: balance;
+}
+h2 {
+  font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 650;
+  font-size: 1.32rem; line-height: 1.25; letter-spacing: -.012em;
+  margin: 0 0 14px; text-wrap: balance;
+}
+h3 {
+  font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 650;
+  font-size: 1.02rem; margin: 30px 0 8px; text-wrap: balance;
+}
+p { margin: 0 0 18px; max-width: var(--measure); }
+strong { font-weight: 600; }
+
+.standfirst {
+  font-size: 1.22rem; line-height: 1.52; color: var(--ink-2);
+  max-width: 58ch; margin: 0 0 8px;
+}
+
+section { padding: 40px 0; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: none; }
+
+.num {
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .16em;
+  color: var(--accent); margin-bottom: 12px; text-transform: uppercase;
+}
+
+.mono, code { font-family: "IBM Plex Mono", monospace; font-size: .84em; }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px;
+             background: var(--surface); margin: 22px 0; }
+table { width: 100%; border-collapse: collapse;
+        font-family: "Libre Franklin", system-ui, sans-serif; font-size: 14.5px; }
+th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+     letter-spacing: .13em; text-transform: uppercase; color: var(--ink-3);
+     font-weight: 500; padding: 12px 16px; border-bottom: 1px solid var(--line);
+     background: var(--surface-2); white-space: nowrap; }
+td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top;
+     line-height: 1.5; }
+tbody tr:last-child td { border-bottom: none; }
+
+.callout {
+  border-left: 3px solid var(--accent); background: var(--surface);
+  padding: 18px 22px; margin: 24px 0; border-radius: 0 4px 4px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .tag {
+  font-family: "IBM Plex Mono", monospace; font-size: 9.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 7px;
+}
+.callout.warn { border-left-color: var(--no); }
+.callout.warn .tag { color: var(--no); }
+
+ul, ol { margin: 0 0 18px; padding-left: 24px; max-width: var(--measure); }
+li { margin-bottom: 9px; }
+
+.does { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 22px 0; }
+.does > div { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 18px 20px; }
+.does h4 { font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 650;
+           font-size: 15px; margin: 0 0 8px; }
+.does p { font-size: 15px; margin: 0; color: var(--ink-2); }
+.does .mark { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em;
+              text-transform: uppercase; display: inline-block; padding: 2px 8px;
+              border-radius: 999px; margin-bottom: 10px; }
+.does .mark.y { color: var(--yes); background: var(--yes-bg); border: 1px solid var(--yes); }
+.does .mark.n { color: var(--no); background: var(--no-bg); border: 1px solid var(--no); }
+
+dl.glossary { margin: 22px 0; }
+dl.glossary dt { font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 650;
+                 font-size: 15.5px; margin-top: 16px; }
+dl.glossary dd { margin: 3px 0 0; color: var(--ink-2); font-size: 16.5px; max-width: var(--measure); }
+
+footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
+         color: var(--ink-3); font-size: 14px;
+         font-family: "Libre Franklin", system-ui, sans-serif; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media (max-width: 640px) { body { font-size: 16.5px; } .wrap { padding: 36px 20px 80px; } }
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .tablewrap, .figframe { overflow: visible !important; }
+  svg { max-width: 100% !important; min-width: 0 !important; }
+  figure, table, tr, .callout, .card, ul li { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+}
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="num">Risk Radar · scope and requirements · 10 September 2026</div>
+    <h1>What We Are Building</h1>
+    <p class="standfirst">
+      A plain-language description of the whole project: what it is, who uses it,
+      what it will and will not do, and how we will know whether it worked.
+    </p>
+    <p style="font-size:15.5px; color:var(--ink-3); max-width:58ch;">
+      Written without abbreviations or technical shorthand on purpose. If any
+      sentence here needs a computing degree to read, that is a fault in this
+      document, not in the reader. Every term is explained the first time it
+      appears, and there is a glossary at the end.
+    </p>
+  </header>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">01</div>
+    <h2>The project in one paragraph</h2>
+    <p>
+      When someone moves money — sends a transfer, taps a card, uses a banking
+      app — a bank has a few seconds to decide whether that looks like the real
+      customer or somebody who has stolen their details. <strong>Risk Radar
+      watches that stream of payments, works out which ones look wrong, and puts
+      the suspicious ones in front of a human being to investigate.</strong> It
+      does not stop payments. It advises a person, and that person decides.
+    </p>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">02</div>
+    <h2>Who uses it</h2>
+    <p>Four kinds of people, with deliberately different powers.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Person</th><th>What they do all day</th><th>What they cannot do</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Fraud analyst</strong></td>
+            <td>Works through suspicious payments one at a time. Reads the evidence, calls the customer where needed, and records what turned out to be true.</td>
+            <td>Cannot close a case. Somebody else signs it off.</td>
+          </tr>
+          <tr>
+            <td><strong>Fraud operations lead</strong></td>
+            <td>Runs the team. Signs off the analysts' work and watches whether the team is keeping up.</td>
+            <td>Cannot change how the detection works.</td>
+          </tr>
+          <tr>
+            <td><strong>Information security analyst</strong></td>
+            <td>Handles cases where somebody's account appears to have been broken into, rather than cases about money lost.</td>
+            <td>Cannot declare something to be fraud. That decision belongs to the fraud team.</td>
+          </tr>
+          <tr>
+            <td><strong>Administrator</strong></td>
+            <td>Adjusts the settings — which warning signs are switched on, how sensitive the system is, which version of the detection is running.</td>
+            <td><strong>Cannot open, read or decide any case at all.</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="tag">Why the administrator is locked out</span>
+      <p>
+        Somebody who can make the system less sensitive, and then look at the
+        cases it failed to raise, could quietly hide their own mistakes. So they
+        get one power or the other, never both. The system refuses them by name,
+        not by hiding a button.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">03</div>
+    <h2>What it does</h2>
+
+    <div class="does">
+      <div>
+        <span class="mark y">it does</span>
+        <h4>Reads every payment as it happens</h4>
+        <p>Accepts payments from the bank's systems, checks they are well formed, and stores them.</p>
+      </div>
+      <div>
+        <span class="mark y">it does</span>
+        <h4>Measures twelve things about each one</h4>
+        <p>Not "is this a big payment" but "is this big <em>for this customer</em>" — compared against their own history.</p>
+      </div>
+      <div>
+        <span class="mark y">it does</span>
+        <h4>Produces a probability</h4>
+        <p>A trained model gives a number between zero and one. A separate set of written rules gives named warnings. A third piece combines them into a verdict.</p>
+      </div>
+      <div>
+        <span class="mark y">it does</span>
+        <h4>Groups related payments into one case</h4>
+        <p>Eleven suspicious transfers from one customer in ten minutes is one incident, not eleven separate jobs.</p>
+      </div>
+      <div>
+        <span class="mark y">it does</span>
+        <h4>Tells the analyst what to do</h4>
+        <p>A recommended action in one sentence, with the evidence behind it — and one keystroke to record the answer.</p>
+      </div>
+      <div>
+        <span class="mark y">it does</span>
+        <h4>Writes down everything, permanently</h4>
+        <p>Every decision, every setting change, every human action — in a record that cannot be edited or deleted afterwards.</p>
+      </div>
+    </div>
+
+    <h3>And what it deliberately does not do</h3>
+
+    <div class="does">
+      <div>
+        <span class="mark n">it does not</span>
+        <h4>Block or reverse any payment</h4>
+        <p>It advises. A human acts. Building it to act automatically is a much larger responsibility and we are not taking it on.</p>
+      </div>
+      <div>
+        <span class="mark n">it does not</span>
+        <h4>Connect to a real bank</h4>
+        <p>No bank has agreed to work with us. Everything runs on our own infrastructure with invented data.</p>
+      </div>
+      <div>
+        <span class="mark n">it does not</span>
+        <h4>Store anyone's real account number</h4>
+        <p>Identifiers are scrambled one-way before anything is saved. Nothing stored can be turned back into a real account.</p>
+      </div>
+      <div>
+        <span class="mark n">it does not</span>
+        <h4>Claim to detect real fraud yet</h4>
+        <p>We can show the method is sound. We cannot show it works on real criminals, because we have never seen any. Section 7 is honest about this.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">04</div>
+    <h2>The three kinds of fraud we detect</h2>
+    <p>
+      We model three, chosen because they are structurally different from one
+      another — which matters for testing, as section 6 explains.
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Name</th><th>What actually happens</th><th>What it looks like in the data</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Account takeover</strong></td>
+            <td>A thief gets hold of someone's login details, signs in as them, and empties the account.</td>
+            <td>A device nobody has seen before, a few small test payments, a pause, then a rush of transfers out.</td>
+          </tr>
+          <tr>
+            <td><strong>Mule fan-out</strong></td>
+            <td>Money is pushed out fast to many different accounts, to scatter it before anyone can freeze it.</td>
+            <td>One account paying several different destinations within minutes.</td>
+          </tr>
+          <tr>
+            <td><strong>Card testing</strong></td>
+            <td>A thief with a stolen card makes many tiny payments to find out whether it still works, then one large one.</td>
+            <td>A run of small payments, most of them refused, followed by a big one that goes through.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">05</div>
+    <h2>Where the data comes from</h2>
+    <p>
+      This is the part most likely to be challenged, so it is stated plainly.
+      <strong>We wrote a program that invents the payments we train on.</strong>
+      It creates fake customers with habits — when they are awake, how much they
+      usually send, who they usually pay — and then has some of them robbed.
+    </p>
+    <p>
+      We did look for real data. There is no publicly available set of real
+      Nigerian bank transactions with fraud marked on them. We checked three
+      candidates and rejected all three, and the reasons are in the companion
+      document. The published research says the same thing: authentic Nigerian
+      fraud data is not available to researchers.
+    </p>
+    <p>
+      What we can do — and have done — is make our invented data match every real
+      published statistic we can find. Nigeria's interbank settlement body
+      publishes annual fraud figures. Our invented fraud rate is
+      <strong>0.288%</strong> against their reported <strong>0.30%</strong>.
+    </p>
+
+    <div class="callout warn">
+      <span class="tag">The trap we fell into, and fixed</span>
+      <p>
+        A program that invents fraud can accidentally make it too tidy. Ours did.
+        At one point a single measurement could throw away <strong>77% of all
+        normal payments without losing a single fraudulent one</strong> — because
+        our invented fraud always paid brand-new accounts and our invented normal
+        customers almost never did.
+      </p>
+      <p>
+        That is not detection, it is a giveaway. We now run an automatic check
+        for it on every rebuild, and the fix was to make our <em>normal</em>
+        customers more realistic rather than making the fraud messier. Real
+        people do pay new accounts, do pay fifteen people on salary morning, and
+        do occasionally move large sums. Those people are exactly why fraud is
+        hard to spot, and leaving them out had made the problem fake.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">06</div>
+    <h2>How we know whether it works</h2>
+
+    <h3>We test it on a crime it has never seen</h3>
+    <p>
+      The usual way to test is to hide some of your data, train on the rest, then
+      check against what you hid. That answers <em>"can it recognise more of what
+      it has already seen"</em>. That is not the question that matters. Criminals
+      change tactics, so next month's fraud is not in this month's data.
+    </p>
+    <p>
+      So we hide an entire <em>kind</em> of crime. Train on mule fan-out and card
+      testing, then test on account takeover — a pattern the system has never
+      encountered. Then rotate, and do it again for each.
+    </p>
+
+    <h3>The current, honest results</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Crime hidden from training</th><th>Trained model alone</th><th>Model plus written rules</th></tr></thead>
+        <tbody>
+          <tr><td>Account takeover</td><td>0.77</td><td>0.78</td></tr>
+          <tr><td>Mule fan-out</td><td>0.44</td><td>0.91</td></tr>
+          <tr><td>Card testing</td><td><strong>0.00</strong></td><td>0.99</td></tr>
+          <tr style="background:var(--surface-2)"><td><strong>Average</strong></td><td><strong>0.40</strong></td><td><strong>0.89</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Read that as: <em>of every ten fraud incidents of a type it had never seen,
+      the trained model on its own caught about four; the full system caught
+      about nine.</em> These figures are measured with the system held to the
+      team's real capacity of 120 alerts a day, on about 200 incidents of each
+      kind.
+    </p>
+    <p>
+      <strong>The zero is the most useful number here.</strong> Shown card
+      testing, a pattern completely absent from its training, the model caught
+      none of 194. That is exactly what this kind of model does with something
+      new, and it is the reason we keep a set of plainly written rules alongside
+      it rather than relying on the model alone. The rules caught 192 of 194 —
+      up from 185 once we fixed a bug that had been letting a "familiar payee"
+      rule lower the risk on card payments, which have no payee at all.
+    </p>
+    <p>
+      The two halves divide the work cleanly. <strong>The model is what catches
+      account takeover</strong> — the rules alone catch almost none of it.
+      <strong>The rules are what catch card testing,</strong> and most mule
+      fan-out: on their own they catch 0.87 of it, and the model adds the rest.
+    </p>
+    <h3>Two trade-offs we chose, stated openly</h3>
+    <ul>
+      <li><strong>The workload is capped, and the burst rule had to earn its place.</strong> The rule that watches for many payments in one hour was set to fire at five. With realistic customers — shop owners paying staff, traders paying suppliers — it alone raised half as many alerts again as the whole team can handle. Raising it to ten kept the queue workable but cut mule fan-out caught to about six in ten. So we changed what it looks at: it now fires on five or more payments in an hour <em>to a destination the bank first saw within the last day</em>. Traders pay people the bank has known for months, so the rule stays quiet for them; a mule network pays brand-new accounts. Against a fan-out pattern it has never seen, the system now catches about nine in ten, inside the same workload.</li>
+      <li><strong>The probability is honest.</strong> We fixed the model so that a stated 0.30 really means about three in ten. That changed how many frauds we catch not at all; it changed whether the team's workload can be predicted from the settings. It can now.</li>
+    </ul>
+
+    <h3>Two numbers we refuse to publish</h3>
+    <ul>
+      <li><strong>Accuracy.</strong> Roughly three payments in a thousand are fraud. A system that answers "not fraud" to everything is 99.7% accurate and completely useless. A measure that rewards doing nothing is worse than no measure.</li>
+      <li><strong>Any figure that reached 100%.</strong> We had one — the system caught every mule fan-out. The check described in section 5 showed the rule was matching something our own program did every time, by construction. It has been withdrawn. Measured honestly, on a pattern hidden from training and with the workload capped, it now reads 0.91.</li>
+    </ul>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">07</div>
+    <h2>What we are entitled to claim</h2>
+    <div class="callout">
+      <span class="tag">Say exactly this, and nothing more</span>
+      <p style="font-size:18px;">
+        We cannot claim this system detects fraud. We can claim four things and
+        prove each one: the method avoids the traps that make most fraud-detection
+        results meaningless; the software is correct from end to end and runs on
+        data we did not create; combining a trained model with written rules
+        measurably beats the model alone on crimes it has never seen; and we have
+        a written plan for what would turn our claim into a real one.
+      </p>
+    </div>
+    <p>
+      That is a stronger position than a big number we cannot defend, and it is
+      the one an examiner who knows the field will respect.
+    </p>
+
+    <h3>What would settle it properly</h3>
+    <ol>
+      <li><strong>Test on real fraud labels.</strong> One public set exists with genuine outcomes, and it is behind an account check that a person has to complete.</li>
+      <li><strong>Check our invented normal against published statistics.</strong> Partly done; more to do.</li>
+      <li><strong>Run it alongside a real bank's system for a month or two, alerting nobody.</strong> This is the only thing that truly answers the question, and it needs a bank.</li>
+    </ol>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">08</div>
+    <h2>In scope, out of scope</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Area</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr><td>Receiving payments, checking them, storing them</td><td>In. Built and working.</td></tr>
+          <tr><td>The twelve measurements, the trained model, the written rules, the verdict</td><td>In. Built and working.</td></tr>
+          <tr><td>Grouping alerts into cases and the investigation workflow</td><td>In. Built and working.</td></tr>
+          <tr><td>The screen analysts work on</td><td>In. Built and working.</td></tr>
+          <tr><td>Sign-in, the four roles, the permanent record</td><td>In. Built and working.</td></tr>
+          <tr><td>Settings screens for the administrator</td><td>In. Built and working.</td></tr>
+          <tr><td>Making our invented customers realistic and checking for giveaways</td><td><strong>In. In progress — highest priority.</strong></td></tr>
+          <tr><td>Testing each written rule individually against the data</td><td><strong>In. Not yet started.</strong></td></tr>
+          <tr><td>Nigerian geography in the invented data</td><td><strong>In. Not yet started.</strong></td></tr>
+          <tr><td>Blocking or reversing payments</td><td>Out. Advisory only, permanently.</td></tr>
+          <tr><td>Connecting to a bank's real systems</td><td>Out. Separate project.</td></tr>
+          <tr><td>Detecting networks of linked criminals</td><td>Out. Later version.</td></tr>
+          <tr><td>Testing a new model on live traffic before switching to it</td><td>Out. Designed, not built.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">09</div>
+    <h2>Who does what</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Name</th><th>Owns</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Kanyinsola</strong></td><td>Plan, documentation, test cases, final presentation.</td></tr>
+          <tr><td><strong>Ire</strong></td><td>Making the invented data realistic; testing each rule against the data; Nigerian geography. See the companion document — this is a change from the original split and the reasons are set out there.</td></tr>
+          <tr><td><strong>Chidera</strong></td><td>The service that receives and scores payments, the database, the permanent record, sign-in and roles.</td></tr>
+          <tr><td><strong>Paul</strong></td><td>The screens the analysts and the team lead use.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <span class="tag">One decision still outstanding</span>
+      <p>
+        The work on sign-in, roles and the permanent record grew beyond what was
+        planned. Something else has to come out to pay for it. That trade has
+        been flagged three times and still has not been made. <strong>It needs
+        deciding this week.</strong>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <section>
+    <div class="num">10</div>
+    <h2>Glossary</h2>
+    <dl class="glossary">
+      <dt>Alert</dt>
+      <dd>One payment the system thinks is worth a human look.</dd>
+
+      <dt>Case</dt>
+      <dd>A folder holding all the alerts about one customer from one incident. The unit of work an analyst actually handles.</dd>
+
+      <dt>Model</dt>
+      <dd>A program that has learned patterns from examples, rather than following instructions somebody wrote. Ours outputs a probability.</dd>
+
+      <dt>Rule</dt>
+      <dd>An instruction somebody did write, in plain terms — for example, "this destination is on the sanctions list". Rules cannot be surprised, and cannot spot anything nobody thought of.</dd>
+
+      <dt>Probability</dt>
+      <dd>A number between zero and one. Ours is adjusted so it means what it says: 0.30 means roughly three in ten payments like this turn out to be fraud.</dd>
+
+      <dt>Recall</dt>
+      <dd>The share of real fraud that was caught. Nine out of ten incidents caught is a recall of 0.90.</dd>
+
+      <dt>Precision</dt>
+      <dd>The share of raised alerts that turned out to be real fraud. Low precision means analysts waste time.</dd>
+
+      <dt>Alert budget</dt>
+      <dd>How many alerts the team can actually review in a day. Three analysts reviewing forty each is 120. We set the system's sensitivity backwards from this number, rather than picking a threshold that sounds strict.</dd>
+
+      <dt>The simulator</dt>
+      <dd>Our program that invents fake customers and fake payments, including fake fraud.</dd>
+
+      <dt>Held-out crime</dt>
+      <dd>A kind of fraud deliberately removed from training so the system can be tested on something genuinely new to it.</dd>
+
+      <dt>Giveaway</dt>
+      <dd>A value our own program sets the same way every time it writes a fraud, which the model can then spot instead of learning real behaviour. Called a "generator switch" in the technical notes.</dd>
+    </dl>
+
+    <footer>
+      Risk Radar · scope and requirements · superseded documents:
+      the original implementation plan and the earlier requirements document.
+      Where they disagree with this one, this one is correct.
+      Companion: <em>What We Learned From Testing Both Approaches</em>.
+    </footer>
+  </section>
+
+</div>
