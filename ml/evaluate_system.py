@@ -76,7 +76,7 @@ BASELINE_FEATURE = "txn_count_1h_account"
 # The seeded ruleset (scripts/seed.py). Read here rather than invented, so the
 # evaluation measures the rules that actually ship.
 RULE_CONFIGS = {
-    "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5}},
+    "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 10}},  # D62
     "CARD_TESTING_PROBES": {
         "enabled": True,
         "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3},
@@ -288,8 +288,8 @@ def main() -> None:
             "The model earns its place, but on "
             f"{len(model_wins)} of {len(results)} typologies only: {', '.join(model_wins)}. "
             "Everywhere else the rules alone match the full system inside the "
-            "measurement error, so the architecture is justified by one typology "
-            "rather than by all three."
+            "measurement error, so the architecture is justified by those "
+            f"{len(model_wins)} rather than by all {len(results)}."
         )
     else:
         verdict.append(

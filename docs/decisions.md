@@ -289,3 +289,26 @@ Corpus lengthened to 120 days: 2,454,813 rows, **604 incidents** (was 153), frau
 | 61 | Ties broken inside calibrated bands | `predict_proba` adds 1e-9 x the raw booster score to the isotonic output. Band gaps are orders of magnitude larger, so no payment crosses a band and no stated probability changes visibly; it only orders payments *within* a band. Model-alone alerts are now **exactly 3,618 on every typology** — on budget — against 5,586 before. Calibration unchanged: ratio 0.919, alert-range error 0.032. | LOCKED |
 | 61a | **The honest headline is 0.904; the 0.923 is withdrawn** | With the budget honoured, full-system mean incident recall is **0.904** (account takeover 0.797 [0.74, 0.85], mule fan-out 0.942, card testing 0.974). The 0.923 reported earlier was inflated by alert overshoot. Against the pre-fix model's on-budget 0.916 the difference is inside the intervals: **the calibration fix cost no measurable detection and gained none.** Its value is an honest probability, not more catches. | LOCKED |
 | 61b | Still open: the whole system exceeds the budget | Thresholds are solved so the **model** raises 120 alerts a day; the rules then escalate more on top, so the full system raised 5,550 / 6,863 / 8,107 alerts per held-out test — **1.5x to 2.2x the budget**. Predates today's change. The budget must be solved for the system's total output, or the operations view promises analysts a workload the system does not deliver. **Mechanism fixed in `derive_thresholds.py`; rule retune pending the budget grid.** | IN PROGRESS |
+
+
+## Velocity rule retuned to fit the budget (2026-09-11)
+
+`ml/budget_grid.py` · results in `ml/artifacts/budget-grid.json`
+
+| # | Decision | Answer | Status |
+|---|---|---|---|
+| 62 | `VELOCITY_BURST_1H` min_count **5 → 10** | At 5, the rule alone raised **175-188 alerts a day, 146% of the whole 120/day budget**, at precision 0.16. It became noisy because the realistic population (D57) includes shop owners and traders who legitimately pay many people in an hour. At 10 it spends 67/day and leaves the model 53. | LOCKED |
+| 62a | Why not switch it off, which scored best | On an in-distribution test (model trained on the oldest 75%, all typologies seen) "off" scored 0.994 mean incident recall and 10 scored 0.969 — inside each other's intervals at ~50 incidents per typology. But that test only covers fraud the model already knows. The held-out evaluation (D59) showed the model catches 44% of a mule fan-out it has never seen and the rules 92%. The velocity rule is the safety net for *new* variants: at 10 the rule alone still catches **42%** of unseen fan-outs (87 of 208); at 15 only 9%; off, none. Chosen by the team as the balance between known-fraud recall and protection against novelty. | LOCKED |
+| 62b | The card-testing rule is untouched | 17 alerts a day at precision **0.998** — the cheapest detection in the system. Never the thing to cut. | LOCKED |
+
+
+## Held-out figures after the retune (2026-09-11)
+
+`ml/evaluate_system.py` with `VELOCITY_BURST_1H` at 10, calibrated model, alert budget honoured.
+
+| # | Decision | Answer | Status |
+|---|---|---|---|
+| 63 | **The honest held-out headline is 0.795** | Full-system mean incident recall on a fraud type hidden from training: account takeover 0.792 [0.73, 0.84], mule fan-out **0.639** [0.57, 0.70], card testing 0.954 [0.91, 0.97]. The 0.904 at min_count 5 is withdrawn: it was bought with a rule that alone spent 146% of the budget. | LOCKED |
+| 63a | **The measured cost of D62** | Hidden-from-training mule fan-out falls from 0.947 to **0.639** at system level; rules-alone from 0.923 to 0.409. This is the safety-net trade described in D62a, now measured end to end rather than estimated from the rule alone. On fraud types the model *has* seen, recall is 0.969 (budget grid). The team chose known-fraud recall and a workable queue over maximum protection against novel fan-out; if that priority changes, min_count 8 is the next setting to test. | LOCKED |
+| 63b | Alert volume now close to budget | Full-system alerts per held-out test: 3,733 / 3,909 / 5,498 against ~3,620. Account takeover and mule are within 8%; card testing still 1.5x, because the high-precision card rule (0.998) spends its alerts on top — the one overrun worth keeping. | LOCKED |
+| 63c | With a second model type, the model now earns its place on two typologies | Rules + gradient boosting beats rules alone with non-overlapping intervals on account takeover and mule fan-out. Model alone (0.410) still scores below a single raw feature (0.677): never the engine, always the complement. | LOCKED |

@@ -47,7 +47,7 @@ SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
 # including suppression — the primary false-positive control, which had to be
 # built rather than deferred.
 RULES = [
-    ("VELOCITY_BURST_1H", "ESCALATE", "HIGH", {"min_count": 5}),
+    ("VELOCITY_BURST_1H", "ESCALATE", "HIGH", {"min_count": 10}),  # D62: 5 alone raised 146% of the budget
     (
         "CARD_TESTING_PROBES",
         "ESCALATE",
