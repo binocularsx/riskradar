@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chidera's Deliverables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #ffffff; --surface-2: #eef2f7;
+  --line: #d0d8e2; --line-2: #a9b6c6;
+  --ink: #141a22; --ink-2: #4a5566; --ink-3: #7a8697;
+  --accent: #25548f; --accent-bg: #e6eef8;
+  --met: #2c6b47; --met-bg: #e0efe6;
+  --part: #8a6516; --part-bg: #f5ecd8;
+  --not: #9a3a33; --not-bg: #f6e3e1;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+       font-family: "Source Serif 4", Georgia, serif; font-size: 11pt; line-height: 1.5; }
+.wrap { max-width: 780px; margin: 0 auto; padding: 36px 28px 60px; }
+h1, h2, h3, th, .kicker, .chip, table { font-family: "Libre Franklin", system-ui, sans-serif; }
+h1 { font-size: 26pt; line-height: 1.08; letter-spacing: -.02em; margin: 0 0 8px; font-weight: 700; }
+h2 { font-size: 14pt; margin: 26px 0 8px; font-weight: 650; letter-spacing: -.01em; break-after: avoid; }
+h3 { font-size: 11pt; margin: 16px 0 6px; font-weight: 650; break-after: avoid; }
+p { margin: 0 0 10px; }
+.kicker { font-family: "IBM Plex Mono", monospace; font-size: 8pt; letter-spacing: .16em;
+          text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.lede { font-size: 12.5pt; color: var(--ink-2); }
+.mono { font-family: "IBM Plex Mono", monospace; font-size: .86em; }
+.box { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 3px;
+       padding: 12px 16px; margin: 14px 0; background: var(--accent-bg); break-inside: avoid; }
+.box p:last-child { margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 6px 0 4px; }
+th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 7.5pt; letter-spacing: .12em;
+     text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding: 6px 8px;
+     border-bottom: 1px solid var(--line-2); background: var(--surface-2); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.4; }
+tr { break-inside: avoid; }
+td.v { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 7pt; letter-spacing: .08em;
+        text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.met { color: var(--met); background: var(--met-bg); border-color: var(--met); }
+.part { color: var(--part); background: var(--part-bg); border-color: var(--part); }
+.not { color: var(--not); background: var(--not-bg); border-color: var(--not); }
+.task { border: 1px solid var(--line); border-radius: 3px; padding: 12px 16px; margin: 10px 0; break-inside: avoid; }
+.task h3 { margin-top: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.task h3 .n { font-family: "IBM Plex Mono", monospace; color: var(--accent); font-size: 9pt; }
+.task dl { display: grid; grid-template-columns: 110px 1fr; gap: 3px 12px; margin: 6px 0 0; font-size: 10pt; }
+.task dt { font-family: "Libre Franklin", sans-serif; font-weight: 600; color: var(--ink-2); font-size: 9pt; }
+.task dd { margin: 0; }
+ul { margin: 4px 0 10px; padding-left: 20px; } li { margin-bottom: 3px; }
+footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px; font-size: 8.5pt; color: var(--ink-3);
+         font-family: "Libre Franklin", sans-serif; }
+@media print {
+  @page { size: A4; margin: 14mm 13mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wrap { padding: 0; max-width: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Risk Radar · work deliverables · backend and database · 11 September 2026</div>
+  <h1>Chidera's Deliverables</h1>
+  <p class="lede">What Chidera owns, what is finished, what is still to do, and the number
+  that says each item is done. The endpoints Paul's dashboard depends on are in the
+  companion document, <em>Dashboard API Contract</em>.</p>
+
+  <div class="box">
+    <p><strong>Chidera owns everything between a payment arriving and a person seeing it:</strong>
+    the intake service, the scoring queue and workers, the live measurements, the rules
+    and policy code, the case system and response clocks, the recommendation engine,
+    sign-in and roles, the permanent record, the database, and the API the dashboard
+    reads. Ire supplies the data and the trained model; Paul builds the screens on top of
+    this API. Chidera's job is that every payment is scored once, fast, reproducibly,
+    and that the screens can only do what each role is allowed to do.</p>
+  </div>
+
+  <h2>Where things stand</h2>
+  <table>
+    <thead><tr><th>Area</th><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Speed</td><td>Payment to decision, 95% of the time (NFR-001)</td><td class="v">under 2 s</td><td class="v">0.88 s</td><td><span class="chip met">pass</span></td></tr>
+      <tr><td>Load</td><td>Payments lost in a five-times burst (NFR-002)</td><td class="v">0</td><td class="v">0</td><td><span class="chip met">pass</span></td></tr>
+      <tr><td>Workload</td><td>Alerts per day, whole system</td><td class="v">≤ 120</td><td class="v">82 (latest demo day)</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Record</td><td>Entries that can be edited or deleted</td><td class="v">none</td><td class="v">none · hash-chained, checkable</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Measurements</td><td>Same twelve numbers live as in training</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Roles</td><td>Administrator can open a case</td><td class="v">never</td><td class="v">never (refused by the server)</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Sign-in</td><td>Two-step sign-in for lead and administrator</td><td class="v">mandatory</td><td class="v">mandatory</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Advice</td><td>Every case has an action, steps and a reason</td><td class="v">100%</td><td class="v">100%</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Advice</td><td>How often analysts follow the advice</td><td class="v">reported weekly</td><td class="v">recorded, not reported</td><td><span class="chip not">not yet</span></td></tr>
+      <tr><td>Advice</td><td>Bank's own procedure loaded</td><td class="v">yes</td><td class="v">our playbook, replaceable</td><td><span class="chip part">partly</span></td></tr>
+      <tr><td>Dashboard</td><td>Endpoints the full dashboard needs</td><td class="v">all</td><td class="v">five gaps listed</td><td><span class="chip part">partly</span></td></tr>
+      <tr><td>Quality</td><td>Automated tests, against a real database</td><td class="v">all pass</td><td class="v">91 pass</td><td><span class="chip met">met</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Finished — Chidera presents these at the defence</h2>
+  <ul>
+    <li><strong>Intake.</strong> Single and batch payment endpoints; a repeated reference is recognised as a duplicate, not a second payment. Identities are one-way hashed on arrival and never stored readable (D9c, D19a).</li>
+    <li><strong>Queue and workers.</strong> A database-backed queue with leases, so no payment is handed to two workers; a test proves it. Three workers keep up with a five-times burst without losing a payment.</li>
+    <li><strong>Scoring.</strong> Measurements are computed once, then go to the rules and the model at the same time; the policy step alone combines their answers (see the Blueprint diagram). Every decision stores the versions that produced it, so it can be reproduced months later.</li>
+    <li><strong>Rules and policy.</strong> Six rules of three powers (raise, override, lower). The payment-burst rule now looks at where money is going (D67). The whole-system alert budget spends rule alerts first and gives the model what is left.</li>
+    <li><strong>Case system.</strong> Alerts about one customer group into one case within 24 hours; response clocks per severity; a worklist ordered by severity, money and lateness; "take the next case" assigns it so two analysts never work the same one.</li>
+    <li><strong>Recommendation engine.</strong> One action, numbered steps and a reason for every case, from a written playbook; the analyst's choice of whether they followed it is saved with every outcome.</li>
+    <li><strong>Sign-in, roles and the record.</strong> Four roles, server-side sessions in a cookie scripts cannot read, two-step sign-in, and a permanent record where every entry is chained to the last; a check endpoint proves nothing was altered.</li>
+    <li><strong>Live alerts.</strong> A stream that replays anything missed after a dropped connection, so the dashboard never loses an alert.</li>
+    <li><strong>Demo builder.</strong> Rebuilds a believable desk in about ten minutes; outcomes follow the simulator's truth (D66a) and the live day continues the same bank (D68).</li>
+  </ul>
+
+  <h2>Still to do</h2>
+
+  <div class="task">
+    <h3><span class="n">1</span> Close the five API gaps the full dashboard needs <span class="chip part">agreed with Paul</span></h3>
+    <dl>
+      <dt>Why</dt><dd>The shareable Risk Radar Desk design has views the current API cannot fully feed. Each gap, with its proposed endpoint, is in the <em>Dashboard API Contract</em>.</dd>
+      <dt>What</dt><dd>Advice-followed rate on the operations metrics; the model's evaluation figures for the administrator; an "escalated to" filter for information security; dormancy on worklist items; "turned into alerts" counts per rule.</dd>
+      <dt>Done when</dt><dd>Each field exists, has a test, and Paul confirms the screen reads it with no workaround.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">2</span> Report how often analysts follow the advice <span class="chip not">not yet</span></h3>
+    <dl>
+      <dt>Why</dt><dd>It is the only honest check on whether the recommendation engine is any good. The answer is already saved with every outcome; nothing reads it back.</dd>
+      <dt>What</dt><dd>Add to <span class="mono">GET /v1/metrics/operations</span>: share of decided cases where the advice was followed, overall and per recommended action.</dd>
+      <dt>Done when</dt><dd>The ops-lead view shows the rate for the last seven days, and the Blueprint's "not yet" becomes a number.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">3</span> Put the team's alert-budget choice live <span class="chip part">waiting on the team</span></h3>
+    <dl>
+      <dt>Why</dt><dd>A smaller budget cuts false alarms sharply now that the burst rule is precise: about 75 a day at 120 alerts, 33 at 75, 20 at 60, at some cost to never-seen account takeover (D67c).</dd>
+      <dt>What</dt><dd>Once chosen: set the budget, run <span class="mono">scripts/derive_thresholds.py --budget N --publish</span> for a new audited threshold set, rebuild the demo, and update the figures in every document.</dd>
+      <dt>Done when</dt><dd>The live threshold set records the new budget, the demo day stays within it, and the decision is logged.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">4</span> Make the bank's procedure loadable <span class="chip part">slot built</span></h3>
+    <dl>
+      <dt>Why</dt><dd>No bank has shared its fraud procedures, so the playbook is our own. It must be replaceable without code, and never described as a bank's policy until one is loaded.</dd>
+      <dt>What</dt><dd>Document the playbook's format (situation in, action, steps and urgency out) and load it from a file the administrator can replace, with every change recorded.</dd>
+      <dt>Done when</dt><dd>Swapping the file changes the recommendations on the next case, with no deployment, and the change appears in the permanent record.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">5</span> Keep the contract and the code in step <span class="chip part">ongoing</span></h3>
+    <dl>
+      <dt>Why</dt><dd>A field renamed on the server breaks a screen silently.</dd>
+      <dt>What</dt><dd>A contract test that calls each endpoint in the API contract and checks the fields listed there; any change to a field updates the contract document in the same commit.</dd>
+      <dt>Done when</dt><dd>The test runs with the others, and the contract is frozen on the Monday of week five (feature freeze).</dd>
+    </dl>
+  </div>
+
+  <h2>Rules Chidera works under</h2>
+  <ul>
+    <li><strong>Advisory only.</strong> Nothing Risk Radar does blocks, holds or reverses a payment.</li>
+    <li><strong>The server enforces roles.</strong> The dashboard hides what a role cannot do, but the API refuses it regardless.</li>
+    <li><strong>Money is integer kobo everywhere,</strong> in the database, the API and every total.</li>
+    <li><strong>Decisions and alerts are never edited;</strong> only cases change, and every change is recorded.</li>
+    <li><strong>Detection never reads the simulator,</strong> and a test enforces it.</li>
+  </ul>
+
+  <footer>
+    Sources: <span class="mono">docs/qa-report.md</span> (NFR-001, NFR-002), <span class="mono">backend/riskradar/api/</span>,
+    <span class="mono">backend/riskradar/security/rbac.py</span>, decisions D9–D68 in <span class="mono">docs/decisions.md</span>.
+    Companions: Dashboard API Contract, Ire's Deliverables, Risk Radar Blueprint.
+  </footer>
+</div>
+</body>
+</html>

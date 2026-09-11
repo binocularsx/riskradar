@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dashboard API Contract</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #ffffff; --surface-2: #eef2f7;
+  --line: #d0d8e2; --line-2: #a9b6c6;
+  --ink: #141a22; --ink-2: #4a5566; --ink-3: #7a8697;
+  --accent: #25548f; --accent-bg: #e6eef8;
+  --met: #2c6b47; --met-bg: #e0efe6;
+  --part: #8a6516; --part-bg: #f5ecd8;
+  --not: #9a3a33; --not-bg: #f6e3e1;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+       font-family: "Source Serif 4", Georgia, serif; font-size: 10.5pt; line-height: 1.48; }
+.wrap { max-width: 800px; margin: 0 auto; padding: 36px 28px 60px; }
+h1, h2, h3, th, .kicker, .chip, table { font-family: "Libre Franklin", system-ui, sans-serif; }
+h1 { font-size: 26pt; line-height: 1.08; letter-spacing: -.02em; margin: 0 0 8px; font-weight: 700; }
+h2 { font-size: 14pt; margin: 24px 0 8px; font-weight: 650; letter-spacing: -.01em; break-after: avoid; }
+h3 { font-size: 11pt; margin: 14px 0 5px; font-weight: 650; break-after: avoid; }
+p { margin: 0 0 9px; }
+.kicker { font-family: "IBM Plex Mono", monospace; font-size: 8pt; letter-spacing: .16em;
+          text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.lede { font-size: 12pt; color: var(--ink-2); }
+code, .mono { font-family: "IBM Plex Mono", monospace; font-size: .85em; }
+.box { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 3px;
+       padding: 11px 15px; margin: 12px 0; background: var(--accent-bg); break-inside: avoid; }
+.box p:last-child { margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 8.8pt; margin: 5px 0 6px; }
+th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 7pt; letter-spacing: .1em;
+     text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding: 5px 7px;
+     border-bottom: 1px solid var(--line-2); background: var(--surface-2); }
+td { padding: 5px 7px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.38; }
+tr { break-inside: avoid; }
+td.ep { font-family: "IBM Plex Mono", monospace; font-size: 8pt; white-space: nowrap; }
+td.ep b { color: var(--accent); font-weight: 600; }
+td.f { font-family: "IBM Plex Mono", monospace; font-size: 7.6pt; color: var(--ink-2); }
+.c { text-align: center; }
+.chip { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 6.8pt; letter-spacing: .07em;
+        text-transform: uppercase; padding: 1px 6px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.met { color: var(--met); background: var(--met-bg); border-color: var(--met); }
+.part { color: var(--part); background: var(--part-bg); border-color: var(--part); }
+.not { color: var(--not); background: var(--not-bg); border-color: var(--not); }
+.view { border: 1px solid var(--line); border-radius: 3px; padding: 11px 14px 8px; margin: 10px 0 12px; }
+.view > h3 { margin-top: 0; }
+.view .who { font-family: "IBM Plex Mono", monospace; font-size: 7.5pt; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
+ul { margin: 4px 0 9px; padding-left: 20px; } li { margin-bottom: 3px; }
+footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 10px; font-size: 8.5pt; color: var(--ink-3);
+         font-family: "Libre Franklin", sans-serif; }
+@media print {
+  @page { size: A4; margin: 13mm 12mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wrap { padding: 0; max-width: none; }
+  .box, table, .conv li { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Risk Radar · shared between Chidera (backend) and Paul (frontend) · 11 September 2026</div>
+  <h1>Dashboard API Contract</h1>
+  <p class="lede">Every endpoint the dashboard calls, what each role may call, and the exact
+  fields that come back — so the screens Paul builds and the server Chidera runs match,
+  view by view.</p>
+
+  <div class="box">
+    <p><strong>How to use this.</strong> Each dashboard view below lists the endpoints it
+    needs and the fields it reads. If a field here does not match the server, the server is
+    wrong. If a screen needs something not listed, it goes in <em>Gaps</em> at the end, with an
+    owner, rather than being worked around in the browser. The design these views follow is
+    the shareable <em>Risk Radar Desk</em> page.</p>
+  </div>
+
+  <h2>Rules both sides follow</h2>
+  <ul class="conv">
+    <li><strong>One base path, same origin.</strong> Everything is under <code>/v1</code>. In development the Vite server forwards <code>/v1</code> to the API on port 8000.</li>
+    <li><strong>Sign-in is a cookie.</strong> <code>POST /v1/auth/login</code> sets a server-side session in a cookie JavaScript cannot read. Every request sends it (<code>credentials: 'include'</code>); nothing stores a token in the browser.</li>
+    <li><strong>The menu comes from the server.</strong> <code>GET /v1/auth/me</code> returns the role's <code>permissions</code>; Paul builds navigation and hides buttons from that list. The server still refuses anything not allowed (<code>403</code>), so hiding is convenience, not security.</li>
+    <li><strong>Money is integer kobo.</strong> Any field ending <code>_minor</code> is kobo as a whole number. Divide by 100 only for display; never add money as decimals.</li>
+    <li><strong>Times are ISO 8601</strong> with a time zone. <code>occurred_at</code> is when a payment happened; show that, not when it arrived.</li>
+    <li><strong>Risk levels are words:</strong> <code>LOW</code>, <code>MEDIUM</code>, <code>HIGH</code>, <code>CRITICAL</code>. The screen always shows the word as well as the colour.</li>
+    <li><strong>Errors</strong> return <code>{"detail": ...}</code>. <code>401</code>: send to sign-in. <code>403</code>: this role may not. <code>404</code>: gone. <code>409</code>: someone else got there first (for example two analysts taking the same case) — refetch and try again.</li>
+    <li><strong>Advisory only.</strong> No endpoint blocks, holds or reverses a payment, and no screen may suggest one does.</li>
+  </ul>
+
+  <h2>Who may call what</h2>
+  <table>
+    <thead><tr><th>Permission</th><th>Allows</th><th class="c">Analyst</th><th class="c">Ops lead</th><th class="c">InfoSec</th><th class="c">Admin</th></tr></thead>
+    <tbody>
+      <tr><td class="ep">cases:read</td><td>Worklist, cases, case detail, alerts, search, live stream</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">—</td></tr>
+      <tr><td class="ep">cases:review</td><td>Take the next case, start review, add notes</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">—</td></tr>
+      <tr><td class="ep">cases:set_outcome</td><td>Record fraud / false alarm / can't tell</td><td class="c">✓</td><td class="c">✓</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td class="ep">cases:escalate</td><td>Escalate to InfoSec or Fraud Ops</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">—</td></tr>
+      <tr><td class="ep">cases:close</td><td>Close a case (and close on disposition)</td><td class="c">—</td><td class="c">✓</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td class="ep">cases:reassign</td><td>Assign a case to someone</td><td class="c">—</td><td class="c">✓</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td class="ep">metrics:read</td><td>Operations and overview metrics</td><td class="c">—</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td></tr>
+      <tr><td class="ep">admin:*</td><td>Rules, thresholds, lists, models, users</td><td class="c">—</td><td class="c">—</td><td class="c">—</td><td class="c">✓</td></tr>
+      <tr><td class="ep">audit:read</td><td>Read and verify the permanent record</td><td class="c">—</td><td class="c">—</td><td class="c">—</td><td class="c">✓</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:9.5pt;color:var(--ink-2)">The administrator deliberately has no case permission: someone who can loosen a threshold must not be able to inspect the cases it missed. Two-step sign-in is mandatory for the lead and the administrator.</p>
+
+  <h2>Signing in</h2>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Send</th><th>Get back</th></tr></thead>
+    <tbody>
+      <tr><td class="ep"><b>POST</b> /v1/auth/login</td><td class="f">{ email, password, totp_code? }</td><td class="f">{ status: "ok" | "mfa_required", user? } — on "mfa_required", ask for the six-digit code and send again</td></tr>
+      <tr><td class="ep"><b>GET</b> /v1/auth/me</td><td class="f">—</td><td class="f">{ id, email, display_name, role, permissions[], mfa_satisfied }</td></tr>
+      <tr><td class="ep"><b>POST</b> /v1/auth/logout</td><td class="f">—</td><td class="f">ends the session on the server</td></tr>
+    </tbody>
+  </table>
+
+  <h2>View by view</h2>
+
+  <div class="view">
+    <h3>Fraud analyst — Triage</h3>
+    <div class="who">worklist · case panel · one-key outcome · live updates</div>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
+      <tbody>
+        <tr><td class="ep"><b>GET</b> /v1/worklist</td><td class="f">scope = all | mine | unassigned | breaching; risk_level?; limit ≤ 200 (default 60)</td><td class="f">items[]: id, customer_name, risk_level, exposure_minor, attempted_minor, alert_count, distinct_beneficiaries, declined_count, new_device, channels[], signal_codes[], state, assignee_id, assignee_name, escalated_to, opened_at, last_alert_at, age_minutes, sla_state (OK | DUE | BREACHED), sla_remaining_minutes (negative = overdue), priority, recommendation { action, because, urgency: now | soon | routine, disposition_hint }<br>summary: open_cases, total_exposure_minor, breaching, due_soon, unassigned, mine · total</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/worklist/next</td><td class="f">—</td><td class="f">{ case, resumed } — the highest-priority case, now assigned to the caller; 409 if taken in the same instant</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/cases/{id}</td><td class="f">—</td><td class="f">alerts[]: id, risk_level, amount_minor, channel, auth_result, occurred_at, signals[], features{12}, policy_trace[], attributions{}, rule_only_mode, model_name, model_version, ruleset_version, threshold_version, feature_spec_version<br>timeline[]: occurred_at, amount_minor, channel, auth_result, alerted<br>baseline[]: account_token, product_type, txn_30d, approved_value_30d_minor · notes[] · history[]</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/disposition</td><td class="f">{ outcome: CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE, note?, close, followed_recommendation }</td><td class="f">{ case_id, outcome, closed, steps[] } — closed is true only if the caller may close; otherwise the case waits for a lead. steps lists the state changes made</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/review</td><td class="f">—</td><td class="f">take an unassigned case ("Take this case")</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/notes</td><td class="f">{ body } (1–4,000 characters)</td><td class="f">the updated case</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/escalate</td><td class="f">{ target: INFOSEC | FRAUD_OPS, note? }</td><td class="f">the updated case</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/stream</td><td class="f">server-sent events, cookie sign-in</td><td class="f">event "alert": { alert_id, case_id, risk_level, score } → refetch the worklist<br>event "alarm": { code, detail } → show a banner that stays until dismissed (for example the model is down and the system is on rules only)</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:9.5pt">Keys 1, 2, 3 send the three outcomes; N skips. Send <code>followed_recommendation = (recommendation.disposition_hint === outcome)</code>. The stream reconnects on its own and replays what was missed, so no polling is needed.</p>
+  </div>
+
+  <div class="view">
+    <h3>Fraud operations lead — Is the desk coping?</h3>
+    <div class="who">capacity chart · backlog · waiting times · team · outcomes</div>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
+      <tbody>
+        <tr><td class="ep"><b>GET</b> /v1/metrics/operations</td><td class="f">—</td><td class="f">backlog[]: risk_level, cases, exposure_minor, avg_age_minutes · ageing[]: bucket (under 30m … over 24h), cases · analysts[]: display_name, role, open_cases, closed_24h · outcomes[]: outcome, n · decided · false_positive_rate · sla_minutes { CRITICAL 15, HIGH 30, MEDIUM 240, LOW 1440 }</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/metrics/overview</td><td class="f">hours = 1 … 720 (default 24)</td><td class="f">alert_volume[]: bucket (hour), risk_level, alerts · alert_budget { per_day, last_24h, utilisation } · transaction_volume[]: bucket, transactions, approved, declined · risk_mix[] · case_outcomes[] · signal_frequency[]: code, power, n · latency { p95_ms, scored, rule_only } · queue { depth, oldest_seconds } · active_model</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/assign</td><td class="f">{ assignee_id | null }</td><td class="f">the updated case</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/close</td><td class="f">—</td><td class="f">the closed case (signs off an analyst's outcome)</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:9.5pt">The hourly capacity chart is <code>alert_volume</code> summed per hour against <code>alert_budget.per_day ÷ 24</code>. Bars over the line say so in words as well as colour.</p>
+  </div>
+
+  <div class="view">
+    <h3>Information security — Suspected break-ins</h3>
+    <div class="who">escalations · new devices · dormant accounts</div>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
+      <tbody>
+        <tr><td class="ep"><b>GET</b> /v1/worklist</td><td class="f">scope = all</td><td class="f">items where escalated_to = "INFOSEC", or new_device = true (filtered in the browser until gap 3 is closed)</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/cases</td><td class="f">state = ESCALATED; risk_level?; channel?; sort = score | recent | opened; limit, offset</td><td class="f">escalated cases, including ones no longer on the worklist</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/cases/{id}</td><td class="f">—</td><td class="f">features.days_since_account_activity (≥ 21 means dormant) and device_is_new_to_subject</td></tr>
+        <tr><td class="ep"><b>POST</b> /v1/cases/{id}/escalate · /notes</td><td class="f">as above</td><td class="f">InfoSec may investigate and escalate, but <strong>not</strong> record a fraud outcome (403)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="view">
+    <h3>Administrator — Rules, model and budget</h3>
+    <div class="who">no case access, by design</div>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
+      <tbody>
+        <tr><td class="ep"><b>GET</b> · <b>PATCH</b> /v1/admin/rules[/{code}]</td><td class="f">{ enabled?, params?, severity? }</td><td class="f">the active ruleset's version, and each rule's code, power, severity, enabled, params — every change makes a new audited ruleset version</td></tr>
+        <tr><td class="ep"><b>GET</b> · <b>POST</b> /v1/admin/thresholds</td><td class="f">{ p_monitor, p_review, p_hold, alert_min_level = MEDIUM, notes? }</td><td class="f">the active set and its history</td></tr>
+        <tr><td class="ep"><b>GET</b> · <b>POST</b> · <b>DELETE</b> /v1/admin/lists</td><td class="f">kind = SANCTIONED | KNOWN_MULE | ALLOWLIST; { kind, beneficiary_account_id, account_id?, note? }</td><td class="f">list entries (tokens, never readable numbers)</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/admin/models · <b>POST</b> /models/promote</td><td class="f">{ model_version_id, comparison? }</td><td class="f">versions, calibration, metrics, which is active</td></tr>
+        <tr><td class="ep"><b>GET</b> · <b>POST</b> /v1/admin/users · <b>POST</b> /api-keys</td><td class="f">—</td><td class="f">accounts and simulator keys</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/admin/audit · /audit/verify</td><td class="f">object_type?, object_id?</td><td class="f">the permanent record, and whether its chain is intact</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/metrics/overview</td><td class="f">hours</td><td class="f">signal_frequency, latency, queue, alert_budget</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="view">
+    <h3>Everyone with case access — Search</h3>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
+      <tbody>
+        <tr><td class="ep"><b>GET</b> /v1/transactions/search</td><td class="f">q (reference or name fragment), channel?, auth_result?, risk_level?, min_amount_minor?, limit, offset</td><td class="f">matching payments with their decision and any alert</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/alerts</td><td class="f">since_id, limit</td><td class="f">id, case_id, risk_level, score_0_100, raised_at, transaction_ref, amount_minor, channel, instrument, rail, auth_result, display_name</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>What this means for Paul</h2>
+  <ul>
+    <li>Build the menu and every button from <code>me.permissions</code>; never from the role name.</li>
+    <li>Treat the worklist as the source of truth: refetch on each stream "alert" event and after every action; do not patch the list by hand.</li>
+    <li>Show money from <code>_minor</code> fields only, divided by 100 at the last step.</li>
+    <li>Handle <code>409</code> on "take next case" by fetching again; handle <code>403</code> by explaining what the role cannot do, not by showing an error.</li>
+    <li>Every risk level, clock and chart state carries a word, not just a colour, using the validated colours in the Desk design.</li>
+    <li>The administrator's screens never link to a case, even by ID.</li>
+  </ul>
+
+  <h2>Gaps between the full dashboard and today's API</h2>
+  <table>
+    <thead><tr><th>#</th><th>Dashboard needs</th><th>Today</th><th>Proposed</th><th>Owner</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Ops lead: how often analysts follow the advice</td><td>saved with each outcome, not returned</td><td class="f">operations → advice_followed { rate, by_action[] }</td><td>Chidera</td></tr>
+      <tr><td>2</td><td>Admin: "who catches what" and the calibration chart</td><td>held in the model's evaluation file; shape not fixed in the API</td><td class="f">GET /v1/admin/models/{id}/evaluation → per_type[], calibration_bins[]</td><td>Chidera</td></tr>
+      <tr><td>3</td><td>InfoSec: their queue without filtering in the browser</td><td>escalated_to on items, no filter</td><td class="f">GET /v1/worklist?escalated_to=INFOSEC</td><td>Chidera</td></tr>
+      <tr><td>4</td><td>InfoSec: dormant accounts visible in the list</td><td>only inside case detail</td><td class="f">worklist item → dormant_days</td><td>Chidera</td></tr>
+      <tr><td>5</td><td>Admin: rule fired vs turned into an alert</td><td>signal_frequency has n only</td><td class="f">signal_frequency[] → on_alerts</td><td>Chidera</td></tr>
+      <tr><td>6</td><td>Ops lead: alerts per hour against capacity</td><td>available (alert_volume + alert_budget)</td><td class="f">— chart built on Operations</td><td>Paul <span class="chip met">done</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Changing this contract</h2>
+  <ul>
+    <li>A field changes in the same commit as this document and the contract test that checks it (Chidera, task 5 in <em>Chidera's Deliverables</em>).</li>
+    <li>A new need goes in the gaps table with an owner before anyone builds around it.</li>
+    <li>The contract freezes on the Monday of week five, with the features.</li>
+  </ul>
+
+  <footer>
+    Sources: <span class="mono">backend/riskradar/api/routers/</span>, <span class="mono">api/schemas.py</span>,
+    <span class="mono">security/rbac.py</span>, <span class="mono">worker/scoring.py</span>,
+    <span class="mono">frontend/src/lib/api.js</span> and <span class="mono">useStream.js</span>, as of 11 September 2026.
+    Companions: Chidera's Deliverables, Risk Radar Blueprint, Risk Radar Desk.
+  </footer>
+</div>
+</body>
+</html>
