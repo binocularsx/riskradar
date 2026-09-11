@@ -107,20 +107,46 @@ def rule(code: str) -> Callable[[RuleFn], RuleFn]:
 
 @rule("VELOCITY_BURST_1H")
 def velocity_burst_1h(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
-    """More transactions in an hour than this account ever normally makes.
+    """A burst of payments in an hour, going somewhere brand new.
 
     Counts attempts, not successes: an attacker hitting a limit and retrying is
     the same burst, and filtering to approvals would hide the loudest part of it.
+
+    D67: speed alone is what traders and shop owners do all day. Speed *to a
+    destination that first appeared in the bank's traffic within the last day*
+    is how a taken-over account is emptied and how a mule ring spreads money.
+    With ``new_destination_days`` set, the rule only fires when this payment's
+    destination is that fresh. A payment with no destination (card, cash)
+    never fires it on the gate; ``no_destination_min_count`` is the separate,
+    higher bar for those payments, so a burst of card probes the card-testing
+    rule misses is still caught (it restored 10 of 194 held-out card
+    incidents for 0.7 extra false alarms a day).
     """
     threshold = int(params.get("min_count", 5))
     count = int(ctx.features.get("txn_count_1h_account", 0))
     if count < threshold:
         return None
+    evidence: dict[str, Any] = {"count": count, "threshold": threshold, "window": "1h"}
+    fresh = params.get("new_destination_days")
+    if fresh is not None:
+        first_seen = float(ctx.features.get("beneficiary_first_seen_days", -1.0))
+        if first_seen < 0:
+            # -1 is NOT_APPLICABLE: no destination (card, cash). It must never
+            # read as "new"; these payments face their own, higher count.
+            bar = params.get("no_destination_min_count")
+            if bar is None or count < int(bar):
+                return None
+            evidence["no_destination_threshold"] = int(bar)
+        elif first_seen < float(fresh):
+            evidence["destination_first_seen_days"] = round(first_seen, 2)
+            evidence["new_destination_days"] = fresh
+        else:
+            return None
     return Signal(
         code="VELOCITY_BURST_1H",
         power="ESCALATE",
         severity=params.get("severity", "HIGH"),
-        evidence={"count": count, "threshold": threshold, "window": "1h"},
+        evidence=evidence,
     )
 
 

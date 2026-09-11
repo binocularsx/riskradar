@@ -76,7 +76,7 @@ BASELINE_FEATURE = "txn_count_1h_account"
 # The seeded ruleset (scripts/seed.py). Read here rather than invented, so the
 # evaluation measures the rules that actually ship.
 RULE_CONFIGS = {
-    "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 10}},  # D62
+    "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5, "new_destination_days": 1, "no_destination_min_count": 10}},  # D67
     "CARD_TESTING_PROBES": {
         "enabled": True,
         "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3},
