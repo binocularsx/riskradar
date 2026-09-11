@@ -94,7 +94,7 @@ def main() -> None:
         print(f"\n=== holding out {held_out} ===")
         train_idx, test_idx = holdout_typology_split(corpus, held_out)
         model = build_model()
-        model.fit(corpus.X[train_idx], corpus.y[train_idx])
+        model.fit(corpus.X[train_idx], corpus.y[train_idx], times=corpus.occurred_at[train_idx])
 
         p = model.predict_proba(corpus.X[test_idx])[:, 1]
         summary = summarise(

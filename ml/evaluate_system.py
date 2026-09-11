@@ -201,7 +201,7 @@ def main() -> None:
 
         print("   fitting gradient boosting …")
         gbm = build_model()
-        gbm.fit(Xtr, ytr)
+        gbm.fit(Xtr, ytr, times=corpus.occurred_at[train_idx])
         p_gbm = gbm.predict_proba(Xte)[:, 1]
 
         print("   fitting logistic regression …")

@@ -46,40 +46,29 @@ sys.path.insert(0, str(REPO_ROOT / "ml"))
 
 import joblib  # noqa: E402
 import psycopg  # noqa: E402
-from sklearn.calibration import CalibratedClassifierCV  # noqa: E402
-from sklearn.ensemble import HistGradientBoostingClassifier  # noqa: E402
 
 from dataset import Corpus, holdout_typology_split, load_corpus  # noqa: E402
 from metrics import summarise  # noqa: E402
 from riskradar.config import settings  # noqa: E402
+from riskradar.model.calibrated import TimeSplitCalibratedBooster  # noqa: E402
 from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION  # noqa: E402
 
 TYPOLOGIES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
 ALERT_BUDGET_PER_DAY = 120  # D24
 
 
-def build_model() -> CalibratedClassifierCV:
-    """Gradient boosting, wrapped in isotonic calibration.
+def build_model() -> TimeSplitCalibratedBooster:
+    """Gradient boosting on older rows, isotonic calibration on newer ones.
 
-    Boosting because the signal is a set of threshold-ish interactions over
-    twelve numeric features and trees find those without hand-crafted crossings.
-    Isotonic rather than Platt because the raw scores are not sigmoid-shaped and
-    we have plenty of data to fit a monotone map without overfitting it.
+    Replaced the previous ``CalibratedClassifierCV(balanced booster, isotonic,
+    cv=3)`` after ``ml/calibration.py`` measured it on a fair time-ordered test:
+    it stated 16% fewer frauds among its alerts than there were. This version
+    states 8% fewer and halves the calibration error where alerts are raised,
+    with detection unchanged. See ``riskradar/model/calibrated.py`` for why.
 
-    ``class_weight="balanced"`` improves *ranking* at a 0.3% base rate; the
-    calibration layer then maps the distorted scores back onto true observed
-    frequencies, which is why the two are used together rather than either alone.
+    Callers must pass ``times=`` to ``fit`` whenever rows are shuffled.
     """
-    base = HistGradientBoostingClassifier(
-        max_iter=250,
-        learning_rate=0.08,
-        max_leaf_nodes=31,
-        min_samples_leaf=40,
-        l2_regularization=1.0,
-        class_weight="balanced",
-        random_state=20260909,
-    )
-    return CalibratedClassifierCV(base, method="isotonic", cv=3)
+    return TimeSplitCalibratedBooster(random_state=20260909)
 
 
 def register(
@@ -167,7 +156,7 @@ def main() -> None:
     print("training ...")
     started = time.perf_counter()
     model = build_model()
-    model.fit(corpus.X[train_idx], corpus.y[train_idx])
+    model.fit(corpus.X[train_idx], corpus.y[train_idx], times=corpus.occurred_at[train_idx])
     print(f"  fit in {time.perf_counter() - started:.1f}s")
 
     p_test = model.predict_proba(corpus.X[test_idx])[:, 1]
