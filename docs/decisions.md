@@ -327,3 +327,12 @@ Corpus lengthened to 120 days: 2,454,813 rows, **604 incidents** (was 153), frau
 | 64d | **The "0.857 correlation" was my measurement bug** | `diagnose.py` ranked with argsort-of-argsort, which breaks ties by row order. On two columns that are 96.8% and 99.8% zeros, that manufactures correlation from nothing. Average-rank Spearman for `failed_attempts_1h_account` vs `device_is_new_to_subject` is **-0.007**. No action needed; the method is what was wrong. | LOCKED |
 | 64e | The real overlap is kept, on evidence | `amount_log10` vs `amount_ratio_to_account_p95_30d`, Spearman **0.944**. Ablation (in-distribution, time-ordered): all 12 features PR-AUC **0.7147**, 149/150 incidents; without `amount_ratio` **0.7144**, 149/150 — no loss; without `amount_log10` **0.6955**, 148/150 — a loss. `amount_ratio` is redundant for the model but load-bearing for the suppression rule and the analyst's "compared to normal" line. Removing either buys nothing. | LOCKED |
 | 64f | Spec version bumped 1.0.0 -> 1.1.0 | Every decision records the spec that produced it, so old decisions stay reproducible under 1.0.0. The registry refuses a model whose spec differs from the running code, so the feature cache, the production model and the live services all have to move together. | LOCKED |
+
+
+## Figures on spec 1.1.0 (2026-09-11)
+
+| # | Decision | Answer | Status |
+|---|---|---|---|
+| 65 | The suppression fix recovered card testing | Held-out six-arm on spec 1.1.0, velocity at 10, budget honoured: card testing rules-only **0.954 -> 0.990** (185 -> 192 of 194), full system the same. With the risk-lowering rule no longer firing on card payments, the card-testing rule's escalations stand. Account takeover 0.777 [0.71, 0.83], mule fan-out 0.649 [0.58, 0.71] — both inside their previous intervals. **Mean 0.805.** Switch audit passes. | LOCKED |
+| 65a | A cost, stated | The card-testing held-out arm now raises 6,457 alerts against ~3,620 (was 5,498). Those alerts were previously being pulled down by the bug; they are the precision-0.998 rule doing its job, and the whole-system budget in `derive_thresholds.py` spends them first and gives the model what is left. | LOCKED |
+| 65b | Production model | Retrained on every typology on spec 1.1.0 and promoted (`riskradar-gbm-20260911.0651-final`). | LOCKED |

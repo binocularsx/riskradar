@@ -50,13 +50,13 @@
     },
     {
       "feature": "beneficiary_is_new_to_account",
-      "auc": 0.5083,
+      "auc": 0.4496,
       "free_exclusion": 0.0,
-      "verdict": "weak"
+      "verdict": "useful"
     },
     {
       "feature": "beneficiary_first_seen_days",
-      "auc": 0.5647,
+      "auc": 0.3973,
       "free_exclusion": 0.0,
       "verdict": "useful"
     },
@@ -68,7 +68,7 @@
     },
     {
       "feature": "days_since_account_activity",
-      "auc": 0.6053,
+      "auc": 0.5899,
       "free_exclusion": 0.0,
       "verdict": "useful"
     }
@@ -100,9 +100,21 @@
         "verdict": "useful"
       },
       {
+        "feature": "beneficiary_first_seen_days",
+        "auc": 0.4828,
+        "free_exclusion": 0.0002,
+        "verdict": "weak"
+      },
+      {
+        "feature": "days_since_account_activity",
+        "auc": 0.7191,
+        "free_exclusion": 0.0002,
+        "verdict": "useful"
+      },
+      {
         "feature": "amount_ratio_to_account_p95_30d",
         "auc": 0.6583,
-        "free_exclusion": 0.0001,
+        "free_exclusion": 0.0,
         "verdict": "useful"
       },
       {
@@ -130,22 +142,10 @@
         "verdict": "useful"
       },
       {
-        "feature": "beneficiary_first_seen_days",
-        "auc": 0.4066,
-        "free_exclusion": 0.0,
-        "verdict": "useful"
-      },
-      {
         "feature": "device_is_new_to_subject",
         "auc": 0.5477,
         "free_exclusion": 0.0,
         "verdict": "weak"
-      },
-      {
-        "feature": "days_since_account_activity",
-        "auc": 0.7578,
-        "free_exclusion": 0.0,
-        "verdict": "very strong"
       }
     ],
     "CARD_TESTING": [
@@ -166,6 +166,12 @@
         "auc": 0.4098,
         "free_exclusion": 0.0006,
         "verdict": "useful"
+      },
+      {
+        "feature": "days_since_account_activity",
+        "auc": 0.5434,
+        "free_exclusion": 0.0002,
+        "verdict": "weak"
       },
       {
         "feature": "amount_ratio_to_account_p95_30d",
@@ -214,12 +220,6 @@
         "auc": null,
         "free_exclusion": null,
         "verdict": "constant"
-      },
-      {
-        "feature": "days_since_account_activity",
-        "auc": 0.5478,
-        "free_exclusion": 0.0,
-        "verdict": "weak"
       }
     ],
     "MULE_FANOUT": [
@@ -248,15 +248,15 @@
         "verdict": "very strong"
       },
       {
-        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
-        "auc": 0.7311,
-        "free_exclusion": 0.0002,
+        "feature": "amount_ratio_to_account_p95_30d",
+        "auc": 0.6843,
+        "free_exclusion": 0.0,
         "verdict": "useful"
       },
       {
-        "feature": "amount_ratio_to_account_p95_30d",
-        "auc": 0.6843,
-        "free_exclusion": 0.0001,
+        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+        "auc": 0.7311,
+        "free_exclusion": 0.0,
         "verdict": "useful"
       },
       {
@@ -279,7 +279,7 @@
       },
       {
         "feature": "beneficiary_first_seen_days",
-        "auc": 0.5883,
+        "auc": 0.4425,
         "free_exclusion": 0.0,
         "verdict": "useful"
       },
@@ -291,7 +291,7 @@
       },
       {
         "feature": "days_since_account_activity",
-        "auc": 0.5408,
+        "auc": 0.5319,
         "free_exclusion": 0.0,
         "verdict": "weak"
       }

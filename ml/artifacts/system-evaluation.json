@@ -16,7 +16,7 @@
           0.02,
           0.076
         ],
-        "alerts": 907
+        "alerts": 925
       },
       {
         "arm": "one feature (txn_count_1h_account)",
@@ -32,46 +32,46 @@
       {
         "arm": "logistic regression",
         "incidents": 202,
-        "incidents_caught": 69,
-        "incident_recall": 0.3416,
+        "incidents_caught": 121,
+        "incident_recall": 0.599,
         "ci95": [
-          0.28,
-          0.409
+          0.53,
+          0.664
         ],
         "alerts": 3618
       },
       {
         "arm": "gradient boosting (ours)",
         "incidents": 202,
-        "incidents_caught": 158,
-        "incident_recall": 0.7822,
+        "incidents_caught": 156,
+        "incident_recall": 0.7723,
         "ci95": [
-          0.72,
-          0.834
+          0.71,
+          0.825
         ],
         "alerts": 3618
       },
       {
         "arm": "rules + logistic regression",
         "incidents": 202,
-        "incidents_caught": 69,
-        "incident_recall": 0.3416,
+        "incidents_caught": 120,
+        "incident_recall": 0.5941,
         "ci95": [
-          0.28,
-          0.409
+          0.525,
+          0.659
         ],
-        "alerts": 3220
+        "alerts": 3375
       },
       {
         "arm": "rules + gradient boosting (ours)",
         "incidents": 202,
-        "incidents_caught": 160,
-        "incident_recall": 0.7921,
+        "incidents_caught": 157,
+        "incident_recall": 0.7772,
         "ci95": [
-          0.731,
-          0.842
+          0.715,
+          0.829
         ],
-        "alerts": 3733
+        "alerts": 4294
       }
     ],
     "MULE_FANOUT": [
@@ -84,7 +84,7 @@
           0.344,
           0.477
         ],
-        "alerts": 1153
+        "alerts": 1171
       },
       {
         "arm": "one feature (txn_count_1h_account)",
@@ -100,27 +100,38 @@
       {
         "arm": "logistic regression",
         "incidents": 208,
-        "incidents_caught": 131,
-        "incident_recall": 0.6298,
+        "incidents_caught": 115,
+        "incident_recall": 0.5529,
         "ci95": [
-          0.562,
-          0.693
+          0.485,
+          0.619
         ],
         "alerts": 3618
       },
       {
         "arm": "gradient boosting (ours)",
         "incidents": 208,
-        "incidents_caught": 89,
-        "incident_recall": 0.4279,
+        "incidents_caught": 91,
+        "incident_recall": 0.4375,
         "ci95": [
-          0.363,
-          0.496
+          0.372,
+          0.505
         ],
         "alerts": 3618
       },
       {
         "arm": "rules + logistic regression",
+        "incidents": 208,
+        "incidents_caught": 121,
+        "incident_recall": 0.5817,
+        "ci95": [
+          0.514,
+          0.647
+        ],
+        "alerts": 4256
+      },
+      {
+        "arm": "rules + gradient boosting (ours)",
         "incidents": 208,
         "incidents_caught": 135,
         "incident_recall": 0.649,
@@ -128,31 +139,20 @@
           0.582,
           0.711
         ],
-        "alerts": 4163
-      },
-      {
-        "arm": "rules + gradient boosting (ours)",
-        "incidents": 208,
-        "incidents_caught": 133,
-        "incident_recall": 0.6394,
-        "ci95": [
-          0.572,
-          0.702
-        ],
-        "alerts": 3909
+        "alerts": 4628
       }
     ],
     "CARD_TESTING": [
       {
         "arm": "rules only",
         "incidents": 194,
-        "incidents_caught": 185,
-        "incident_recall": 0.9536,
+        "incidents_caught": 192,
+        "incident_recall": 0.9897,
         "ci95": [
-          0.914,
-          0.975
+          0.963,
+          0.997
         ],
-        "alerts": 2067
+        "alerts": 3104
       },
       {
         "arm": "one feature (txn_count_1h_account)",
@@ -179,49 +179,49 @@
       {
         "arm": "gradient boosting (ours)",
         "incidents": 194,
-        "incidents_caught": 4,
-        "incident_recall": 0.0206,
+        "incidents_caught": 0,
+        "incident_recall": 0.0,
         "ci95": [
-          0.008,
-          0.052
+          0.0,
+          0.019
         ],
         "alerts": 3618
       },
       {
         "arm": "rules + logistic regression",
         "incidents": 194,
-        "incidents_caught": 193,
-        "incident_recall": 0.9948,
+        "incidents_caught": 194,
+        "incident_recall": 1.0,
         "ci95": [
-          0.971,
-          0.999
+          0.981,
+          1.0
         ],
-        "alerts": 3553
+        "alerts": 4096
       },
       {
         "arm": "rules + gradient boosting (ours)",
         "incidents": 194,
-        "incidents_caught": 185,
-        "incident_recall": 0.9536,
+        "incidents_caught": 192,
+        "incident_recall": 0.9897,
         "ci95": [
-          0.914,
-          0.975
+          0.963,
+          0.997
         ],
-        "alerts": 5498
+        "alerts": 6457
       }
     ]
   },
   "mean_incident_recall": {
-    "rules only": 0.4673,
+    "rules only": 0.4793,
     "one feature (txn_count_1h_account)": 0.6771,
-    "logistic regression": 0.6571,
-    "gradient boosting (ours)": 0.4102,
-    "rules + logistic regression": 0.6618,
-    "rules + gradient boosting (ours)": 0.795
+    "logistic regression": 0.7173,
+    "gradient boosting (ours)": 0.4033,
+    "rules + logistic regression": 0.7253,
+    "rules + gradient boosting (ours)": 0.8053
   },
   "verdict": [
-    "The model earns its place, but on 2 of 3 typologies only: ACCOUNT_TAKEOVER, MULE_FANOUT. Everywhere else the rules alone match the full system inside the measurement error, so the architecture is justified by one typology rather than by all three.",
-    "Our model ALONE (0.410) scores below a single raw feature (0.677) and below the rules alone (0.467). The model is only useful in combination; it must never be described as the system's engine."
+    "The model earns its place, but on 2 of 3 typologies only: ACCOUNT_TAKEOVER, MULE_FANOUT. Everywhere else the rules alone match the full system inside the measurement error, so the architecture is justified by those 2 rather than by all 3.",
+    "Our model ALONE (0.403) scores below a single raw feature (0.677) and below the rules alone (0.479). The model is only useful in combination; it must never be described as the system's engine."
   ],
   "limitations": [
     "The card-testing rule gates on instrument == CARD; the offline evaluation approximates that gate from the decline signature, so this measures the architecture rather than replaying the live path exactly.",
