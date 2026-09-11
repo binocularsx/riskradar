@@ -297,7 +297,7 @@ Corpus lengthened to 120 days: 2,454,813 rows, **604 incidents** (was 153), frau
 
 | # | Decision | Answer | Status |
 |---|---|---|---|
-| 62 | `VELOCITY_BURST_1H` min_count **5 → 10** | At 5, the rule alone raised **175-188 alerts a day, 146% of the whole 120/day budget**, at precision 0.16. It became noisy because the realistic population (D57) includes shop owners and traders who legitimately pay many people in an hour. At 10 it spends 67/day and leaves the model 53. | LOCKED |
+| 62 | `VELOCITY_BURST_1H` min_count **5 → 10** | At 5, the rule alone raised **175-188 alerts a day, 146% of the whole 120/day budget**, at precision 0.16. It became noisy because the realistic population (D57) includes shop owners and traders who legitimately pay many people in an hour. At 10 it spends 67/day and leaves the model 53. **Replaced by D67** (speed to a destination new to the bank). | SUPERSEDED |
 | 62a | Why not switch it off, which scored best | On an in-distribution test (model trained on the oldest 75%, all typologies seen) "off" scored 0.994 mean incident recall and 10 scored 0.969 — inside each other's intervals at ~50 incidents per typology. But that test only covers fraud the model already knows. The held-out evaluation (D59) showed the model catches 44% of a mule fan-out it has never seen and the rules 92%. The velocity rule is the safety net for *new* variants: at 10 the rule alone still catches **42%** of unseen fan-outs (87 of 208); at 15 only 9%; off, none. Chosen by the team as the balance between known-fraud recall and protection against novelty. | LOCKED |
 | 62b | The card-testing rule is untouched | 17 alerts a day at precision **0.998** — the cheapest detection in the system. Never the thing to cut. | LOCKED |
 
