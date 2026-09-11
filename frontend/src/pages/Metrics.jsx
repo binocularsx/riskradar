@@ -8,7 +8,7 @@ import { api, naira } from '../lib/api'
 import { Banner, Empty, RiskBadge, Stat } from '../components/ui'
 
 const LEVEL_COLOUR = {
-  LOW: '#4b9d6e', MEDIUM: '#c99a2e', HIGH: '#d97036', CRITICAL: '#d2453f',
+  LOW: '#3f9f6a', MEDIUM: '#ddc24e', HIGH: '#e2692c', CRITICAL: '#b93b6a',
 }
 
 const axis = { stroke: '#5f6b7a', fontSize: 11 }

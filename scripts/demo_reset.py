@@ -42,6 +42,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 PYTHON = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+# Simulator truth for the alerting window. Git-ignored with the rest of ml/data.
+LABELS = REPO_ROOT / "ml" / "data" / "demo-tail-labels.jsonl"
 
 
 def run(cmd: list[str], cwd: Path | None = None, quiet: bool = False) -> str:
@@ -196,7 +198,8 @@ def stage_data(args: argparse.Namespace) -> None:
     run(
         [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed + 1),
          "history", "--profile", "demo", "--batch-size", "300",
-         "--alerting-tail-hours", str(args.alerting_hours), "--only-tail"],
+         "--alerting-tail-hours", str(args.alerting_hours), "--only-tail",
+         "--labels-out", str(LABELS)],
         cwd=sim,
     )
     wait_for_drain("alerting window")
@@ -211,20 +214,42 @@ def stage_data(args: argparse.Namespace) -> None:
 def seed_worked_cases(seed: int) -> None:
     """Give the desk a plausible past.
 
-    A queue where every case is untouched and every clock is green looks like a
-    system that was switched on ten minutes ago. Real desks have work in
-    progress, cases assigned to people, and a history of outcomes — and the
-    operations view is meaningless without the last of those.
+    A queue where every case is untouched looks like a system switched on ten
+    minutes ago; a queue where every clock has run out looks like a desk nobody
+    staffs. A real three-analyst desk works its cases roughly in the order the
+    clocks demand, so:
 
-    These go through the real audit trail, so the history is genuine rather than
-    painted on.
+    * every case whose response clock has already run out has been **worked and
+      closed**, inside its target time, the way a staffed desk would have;
+    * about a tenth of the rest are in progress with an analyst;
+    * the recent ones are waiting, which is the worklist the demo shows.
+
+    Outcomes follow the simulator's truth for each case (D66a), not a dice roll.
+    A random mix put the false-alarm rate wherever the dice landed and would
+    poison the labels if anyone ever retrained on them (D13c). A case with no
+    truth on record is honestly marked inconclusive.
+
+    Everything goes through the real audit trail, so the history is genuine
+    rather than painted on.
     """
+    import json
+
     import psycopg
 
     from riskradar.audit import chain
+    from riskradar.cases import triage
     from riskradar.config import settings
 
     rng = random.Random(seed)
+
+    truth: dict[str, bool] = {}
+    if LABELS.exists():
+        for line in LABELS.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                truth[r["transaction_ref"]] = bool(r["is_fraud"])
+    else:
+        print(f"    no truth file at {LABELS}; outcomes will be inconclusive")
 
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
         users = {
@@ -237,28 +262,42 @@ def seed_worked_cases(seed: int) -> None:
         lead = users.get("lead@riskradar.local")
 
         open_cases = conn.execute(
-            "SELECT id, risk_level, state FROM cases WHERE state = 'OPEN' ORDER BY id"
+            """
+            SELECT c.id, c.risk_level,
+                   EXTRACT(EPOCH FROM (now() - c.opened_at)) / 60.0 AS age_minutes,
+                   array_agg(t.transaction_ref) AS refs
+              FROM cases c
+              JOIN alerts a ON a.case_id = c.id
+              JOIN transactions t ON t.id = a.transaction_id
+             WHERE c.state = 'OPEN'
+             GROUP BY c.id
+             ORDER BY c.id
+            """
         ).fetchall()
         if not open_cases:
             print("    no cases to work — check the alerting window")
             return
 
-        # Roughly: a fifth already closed, a tenth in progress, the rest waiting.
-        closed_target = max(3, len(open_cases) // 5)
-        review_target = max(2, len(open_cases) // 10)
+        def outcome_for(case: dict) -> str:
+            known = [truth[r] for r in case["refs"] if r in truth]
+            if not known:
+                return "INCONCLUSIVE"
+            return "CONFIRMED_FRAUD" if any(known) else "FALSE_POSITIVE"
 
-        pool = list(open_cases)
-        rng.shuffle(pool)
+        def target(case: dict) -> float:
+            return float(triage.SLA_MINUTES.get(case["risk_level"], 240))
 
-        # Outcome mix: most alerts a desk raises are not fraud. A demo where
-        # everything is confirmed fraud teaches the wrong lesson and would also
-        # poison the training labels if anyone ever retrained on it (D13c).
-        outcomes = (
-            ["FALSE_POSITIVE"] * 6 + ["CONFIRMED_FRAUD"] * 3 + ["INCONCLUSIVE"] * 1
-        )
+        overdue = [c for c in open_cases if float(c["age_minutes"]) > target(c)]
+        waiting = [c for c in open_cases if float(c["age_minutes"]) <= target(c)]
+        rng.shuffle(waiting)
+        in_review = waiting[: max(2, len(waiting) // 10)]
 
-        for case in pool[:closed_target]:
-            outcome = rng.choice(outcomes)
+        tally = {"CONFIRMED_FRAUD": 0, "FALSE_POSITIVE": 0, "INCONCLUSIVE": 0}
+        for case in overdue:
+            outcome = outcome_for(case)
+            tally[outcome] += 1
+            # Closed inside its target time: between 30% and 90% of the clock.
+            took = target(case) * rng.uniform(0.3, 0.9)
             conn.execute(
                 "UPDATE cases SET state='UNDER_REVIEW', assignee_id=%s WHERE id=%s",
                 (analyst, case["id"]),
@@ -270,16 +309,17 @@ def seed_worked_cases(seed: int) -> None:
             chain.append(conn, actor_user_id=analyst, action="CASE_OUTCOME_SET",
                          object_type="case", object_id=case["id"], to_state=outcome)
             conn.execute(
-                "UPDATE cases SET state='CLOSED', closed_at=now() - (interval '1 hour' * %s), "
+                "UPDATE cases SET state='CLOSED', "
+                "closed_at=LEAST(opened_at + (interval '1 minute' * %s), now()), "
                 "closed_by=%s WHERE id=%s",
-                (rng.uniform(0.2, 6.0), lead, case["id"]),
+                (took, lead, case["id"]),
             )
             chain.append(conn, actor_user_id=lead, action="CASE_CLOSED",
                          object_type="case", object_id=case["id"],
                          from_state="UNDER_REVIEW", to_state="CLOSED",
                          payload={"outcome": outcome})
 
-        for case in pool[closed_target:closed_target + review_target]:
+        for case in in_review:
             conn.execute(
                 "UPDATE cases SET state='UNDER_REVIEW', assignee_id=%s WHERE id=%s",
                 (analyst, case["id"]),
@@ -289,7 +329,11 @@ def seed_worked_cases(seed: int) -> None:
                          from_state="OPEN", to_state="UNDER_REVIEW")
 
         conn.commit()
-        print(f"    {closed_target} closed with outcomes, {review_target} in progress")
+        decided = sum(tally.values())
+        print(f"    {decided} overdue cases worked and closed, {len(in_review)} in progress, "
+              f"{len(waiting) - len(in_review)} waiting")
+        print(f"    outcomes from truth: {tally['CONFIRMED_FRAUD']} fraud, "
+              f"{tally['FALSE_POSITIVE']} false alarm, {tally['INCONCLUSIVE']} inconclusive")
 
 
 def summarise() -> None:

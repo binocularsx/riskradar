@@ -75,6 +75,10 @@ def cmd_history(args: argparse.Namespace) -> None:
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=args.alerting_tail_hours)
     counters = {"history": 0, "live": 0, "duplicates": 0, "rejected": 0}
+    # The truth about the alerting window, kept on this machine only. It never
+    # travels to the API (labels are not part of the ingestion contract); the
+    # demo reset reads it so seeded outcomes follow what really happened.
+    labels: list[dict] = []
     batches: dict[bool, list[dict]] = {True: [], False: []}
     started = time.perf_counter()
 
@@ -108,12 +112,25 @@ def cmd_history(args: argparse.Namespace) -> None:
                 # and throwing them away costs minutes for nothing.
                 continue
             batches[is_history].append(event.payload)
+            if not is_history and args.labels_out:
+                labels.append({
+                    "transaction_ref": event.payload["transaction_ref"],
+                    "is_fraud": event.is_fraud,
+                    "typology": event.typology,
+                    "incident_id": event.incident_id,
+                })
             if len(batches[is_history]) >= args.batch_size:
                 flush(is_history)
                 print(f"\r  history {counters['history']}  live {counters['live']}",
                       end="", flush=True)
         flush(True)
         flush(False)
+
+    if args.labels_out:
+        out = Path(args.labels_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("".join(json.dumps(r) + "\n" for r in labels), encoding="utf-8")
+        print(f"\n  truth for {len(labels)} alerting-window transactions -> {out}")
 
     elapsed = time.perf_counter() - started
     total = counters["history"] + counters["live"]
@@ -247,6 +264,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--only-tail", action="store_true",
         help="skip the older history entirely; post only the alerting window",
+    )
+    p.add_argument(
+        "--labels-out", default=None,
+        help="write the true labels of the alerting window to this local file",
     )
     p.set_defaults(func=cmd_history)
 

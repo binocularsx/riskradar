@@ -19,10 +19,78 @@ import { Banner, RiskBadge } from '../components/ui'
  */
 
 const LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+
+/**
+ * Alerts raised each hour against what the team can review in an hour. The
+ * dashed line is the budget every threshold was derived from (three analysts
+ * at forty a day); bars above it turn orange and say so in the tooltip, so
+ * the overrun never relies on colour alone.
+ */
+function AlertsVsCapacity({ overview }) {
+  const [tip, setTip] = useState(null)
+  const perHour = overview.alert_budget.per_day / 24
+  const byHour = {}
+  for (const r of overview.alert_volume) {
+    byHour[r.bucket] = (byHour[r.bucket] || 0) + Number(r.alerts)
+  }
+  const hours = Object.keys(byHour).sort().map((b) => ({ at: b, n: byHour[b] }))
+  if (!hours.length) return <p className="dim">No alerts in the last day.</p>
+
+  const W = 760, H = 230, P = { l: 38, r: 14, t: 16, b: 30 }
+  const max = Math.max(perHour * 1.4, ...hours.map((h) => h.n))
+  const bw = (W - P.l - P.r) / hours.length
+  const y = (v) => H - P.b - (v / max) * (H - P.t - P.b)
+  const label = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const total = hours.reduce((a, h) => a + h.n, 0)
+
+  return (
+    <div className="chart" onMouseLeave={() => setTip(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img"
+           aria-label={`${total} alerts in the last day against a capacity of ${Math.round(perHour * 24)}`}>
+        {[0, Math.round(max / 2), Math.round(max)].map((v) => (
+          <g key={v}>
+            <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="var(--line)" />
+            <text x={P.l - 8} y={y(v) + 4} textAnchor="end" fontSize="10" fill="var(--text-3)"
+                  fontFamily="var(--mono)">{v}</text>
+          </g>
+        ))}
+        {hours.map((h, i) => {
+          const over = h.n > perHour
+          return (
+            <g key={h.at}>
+              <rect x={P.l + i * bw + 2} y={y(h.n)} width={Math.max(bw - 4, 1)}
+                    height={Math.max(H - P.b - y(h.n), 0)} rx="4"
+                    fill={over ? 'var(--high)' : 'var(--accent)'} />
+              <rect x={P.l + i * bw} y={P.t} width={bw} height={H - P.t - P.b} fill="transparent"
+                    onMouseMove={(e) => {
+                      const box = e.currentTarget.ownerSVGElement.parentNode.getBoundingClientRect()
+                      setTip({ x: e.clientX - box.left, y: e.clientY - box.top, h, over })
+                    }} />
+              {i % 3 === 0 && (
+                <text x={P.l + i * bw + bw / 2} y={H - 10} textAnchor="middle" fontSize="10"
+                      fill="var(--text-3)" fontFamily="var(--mono)">{label(h.at)}</text>
+              )}
+            </g>
+          )
+        })}
+        <line x1={P.l} x2={W - P.r} y1={y(perHour)} y2={y(perHour)}
+              stroke="var(--text-2)" strokeWidth="1.5" strokeDasharray="5 4" />
+        <text x={W - P.r} y={y(perHour) - 6} textAnchor="end" fontSize="10.5" fill="var(--text-2)">capacity</text>
+      </svg>
+      {tip && (
+        <div className="chart-tip" style={{ left: tip.x, top: tip.y }}>
+          <b>{label(tip.h.at)}</b> · {tip.h.n} alert{tip.h.n === 1 ? '' : 's'}
+          {tip.over ? ' · over capacity' : ''}
+        </div>
+      )}
+    </div>
+  )
+}
 const AGE_ORDER = ['under 30m', '30m - 2h', '2h - 8h', '8h - 24h', 'over 24h']
 
 export default function Operations() {
   const [data, setData] = useState(null)
+  const [overview, setOverview] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -31,9 +99,12 @@ export default function Operations() {
       api.operations()
         .then((d) => !cancelled && setData(d))
         .catch((e) => !cancelled && setError(e.message))
-    fetch()
+    const fetchOverview = () =>
+      api.overview(24).then((d) => !cancelled && setOverview(d)).catch(() => {})
+    fetch(); fetchOverview()
+    const overviewTimer = setInterval(fetchOverview, 60000)
     const timer = setInterval(fetch, 20000)
-    return () => { cancelled = true; clearInterval(timer) }
+    return () => { cancelled = true; clearInterval(timer); clearInterval(overviewTimer) }
   }, [])
 
   if (error) return <Banner kind="error">{error}</Banner>
@@ -64,7 +135,7 @@ export default function Operations() {
           <div className="v">{totalCases}</div>
           <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>across all severities</div>
         </div>
-        <div className="deskstat money" style={{ minWidth: 0 }}>
+        <div className="deskstat hero" style={{ minWidth: 0 }}>
           <div className="badge">₦</div>
           <div className="k">Money at risk</div>
           <div className="v">{nairaShort(totalExposure)}</div>
@@ -85,6 +156,29 @@ export default function Operations() {
           <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>bucket still holding cases</div>
         </div>
       </div>
+
+      {overview && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="between wrap">
+            <h2 style={{ margin: 0 }}>Alerts across the last day</h2>
+            <span className={overview.alert_budget.utilisation > 1 ? 'risk risk-HIGH' : 'muted'}>
+              {overview.alert_budget.last_24h} of {overview.alert_budget.per_day}
+              {overview.alert_budget.utilisation > 1 ? ' · over capacity' : ' · within capacity'}
+            </span>
+          </div>
+          <p className="dim" style={{ fontSize: 12, margin: '4px 0 12px' }}>
+            Alerts raised each hour against the team's capacity of{' '}
+            {Math.round(overview.alert_budget.per_day / 24)} an hour. Hover for the hour.
+          </p>
+          <AlertsVsCapacity overview={overview} />
+          <div className="legend">
+            <span><i style={{ background: 'var(--accent)' }} />Alerts raised</span>
+            <span><i style={{ background: 'var(--high)' }} />Hour over capacity</span>
+            <span><i style={{ borderTop: '2px dashed var(--text-2)', background: 'transparent',
+                              height: 0, width: 14, borderRadius: 0 }} />Capacity</span>
+          </div>
+        </div>
+      )}
 
       <div className="grid cols-2">
         <div className="card">

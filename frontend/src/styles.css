@@ -37,10 +37,14 @@
   --accent-dim:  #12283f;
 
   /* Semantic risk ramp — the only saturated colour on the page. */
-  --low:         #2fbf71;
-  --medium:      #f0b429;
-  --high:        #f08a3c;
-  --critical:    #f2555a;
+  /* Validated with the dataviz palette checker against --bg: every adjacent
+     pair stays apart for colour-blind readers (worst difference 15.2), and
+     every level is also written as a word, never shown by colour alone. */
+  --low:         #3f9f6a;
+  --medium:      #ddc24e;
+  --high:        #e2692c;
+  --critical:    #b93b6a;
+  --critical-text: #e07aa1;  /* the critical hue lifted for small text */
 
   --ok:          #2fbf71;
   --warn:        #f0b429;
@@ -53,8 +57,8 @@
   --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.65);
   --shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 18px 44px -18px rgba(0,0,0,.8);
 
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: Onest, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -62,7 +66,7 @@
 body {
   margin: 0;
   font-family: var(--sans);
-  background: var(--bg);
+  background: radial-gradient(1200px 520px at 70% -12%, #13304f 0%, var(--bg) 58%) fixed, var(--bg);
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
@@ -212,6 +216,21 @@ h3 { font-size: 10.5px; margin: 0 0 12px; font-weight: 650; color: var(--text-3)
 .deskstat.alarm .v { color: var(--danger); }
 .deskstat.money .badge { background: rgba(47,191,113,.14); color: var(--low); }
 
+/* The one figure that matters on a screen lives inside a filled block. */
+.deskstat.hero { background: linear-gradient(145deg, #2a78cf, #173a63 78%); border-color: #3b7fd0; }
+.deskstat.hero .badge { background: rgba(255,255,255,.16); color: #fff; }
+.deskstat.hero .k, .deskstat.hero .dim { color: #cfe3fb; }
+
+/* Hand-drawn SVG charts share one tooltip style. */
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart-tip { position: absolute; pointer-events: none; background: #eef4fb; color: #0a121c;
+             border-radius: 10px; padding: 7px 10px; font-size: 12px; line-height: 1.35;
+             box-shadow: 0 8px 24px rgba(0,0,0,.45); white-space: nowrap;
+             transform: translate(-50%, -115%); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-2); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
 /* ------------------------------------------------------------ worklist */
 
 .workspace { display: flex; flex: 1; min-height: 0; }
@@ -297,7 +316,7 @@ h3 { font-size: 10.5px; margin: 0 0 12px; font-weight: 650; color: var(--text-3)
 .risk-LOW      { color: var(--low);      border-color: color-mix(in srgb, var(--low) 42%, transparent);      background: color-mix(in srgb, var(--low) 14%, transparent); }
 .risk-MEDIUM   { color: var(--medium);   border-color: color-mix(in srgb, var(--medium) 42%, transparent);   background: color-mix(in srgb, var(--medium) 14%, transparent); }
 .risk-HIGH     { color: var(--high);     border-color: color-mix(in srgb, var(--high) 42%, transparent);     background: color-mix(in srgb, var(--high) 14%, transparent); }
-.risk-CRITICAL { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 50%, transparent); background: color-mix(in srgb, var(--critical) 17%, transparent); }
+.risk-CRITICAL { color: var(--critical-text); border-color: color-mix(in srgb, var(--critical) 50%, transparent); background: color-mix(in srgb, var(--critical) 17%, transparent); }
 
 .sla { font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 999px;
        border: 1px solid; white-space: nowrap; }

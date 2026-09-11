@@ -94,7 +94,7 @@ export default function Triage({ user }) {
           <div className="k">Open cases</div>
           <div className="v">{s?.open_cases ?? '—'}</div>
         </div>
-        <div className="deskstat money">
+        <div className="deskstat hero">
           <div className="badge">₦</div>
           <div className="k">Money at risk</div>
           <div className="v">{s ? nairaShort(s.total_exposure_minor) : '—'}</div>
