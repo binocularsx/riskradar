@@ -40,6 +40,14 @@ def cmd_corpus(args: argparse.Namespace) -> None:
     config = SimulationConfig.profile(args.profile)
     if args.seed is not None:
         config.seed = args.seed
+    if args.days is not None:
+        # D58: the binding constraint on every comparison in the evaluation is
+        # the number of fraud incidents — 153 gives Wilson intervals about 0.17
+        # wide, which is wider than the differences we were drawing conclusions
+        # from. Lengthening the window raises incidents and legitimate traffic
+        # together, so the fraud rate stays at the ~0.3% reference point while
+        # the intervals narrow with the square root of the count.
+        config.days = args.days
     out = Path(args.out)
     started = time.perf_counter()
     counts = write_corpus(config, out)
@@ -222,6 +230,11 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("corpus", help="write a labelled JSONL corpus for training")
     p.add_argument("--profile", default="training", choices=["demo", "training", "reference"])
     p.add_argument("--out", default="ml/data/corpus.jsonl")
+    p.add_argument(
+        "--days", type=int, default=None,
+        help="override the profile's window. Raises incidents and legitimate "
+             "traffic together, so the fraud rate is unchanged (D58)",
+    )
     p.set_defaults(func=cmd_corpus)
 
     p = sub.add_parser("history", help="seed the database with replayed history")
