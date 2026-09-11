@@ -1,0 +1,519 @@
+<title>Risk Radar Blueprint</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --paper:     #f3f5f8;
+  --surface:   #ffffff;
+  --surface-2: #e8edf3;
+  --line:      #d0d8e2;
+  --line-2:    #a9b6c6;
+  --ink:       #141a22;
+  --ink-2:     #4a5566;
+  --ink-3:     #7a8697;
+  --accent:    #25548f;
+  --accent-bg: #e1eaf6;
+  --on-accent: #ffffff;
+  --met:       #2c6b47;
+  --met-bg:    #e0efe6;
+  --part:      #8a6516;
+  --part-bg:   #f5ecd8;
+  --not:       #9a3a33;
+  --not-bg:    #f6e3e1;
+  --measure:   66ch;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1117; --surface: #151c25; --surface-2: #1c2531;
+    --line: #28333f; --line-2: #3f4d5e;
+    --ink: #e8eef5; --ink-2: #a6b3c3; --ink-3: #7a889a;
+    --accent: #7fa9e3; --accent-bg: #172437; --on-accent: #0d1117;
+    --met: #6cbf8e; --met-bg: #142a1e;
+    --part: #d9ab52; --part-bg: #2c2312;
+    --not: #e07f76; --not-bg: #2e1917;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1117; --surface: #151c25; --surface-2: #1c2531;
+  --line: #28333f; --line-2: #3f4d5e;
+  --ink: #e8eef5; --ink-2: #a6b3c3; --ink-3: #7a889a;
+  --accent: #7fa9e3; --accent-bg: #172437; --on-accent: #0d1117;
+  --met: #6cbf8e; --met-bg: #142a1e;
+  --part: #d9ab52; --part-bg: #2c2312;
+  --not: #e07f76; --not-bg: #2e1917;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+       font-family: "Source Serif 4", Georgia, serif; font-size: 17px; line-height: 1.64;
+       -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1020px; margin: 0 auto; padding: 52px 32px 110px; }
+.narrow { max-width: 760px; }
+
+h1 { font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 700;
+     font-size: clamp(2rem, 4.8vw, 2.8rem); line-height: 1.08; letter-spacing: -.025em;
+     margin: 0 0 14px; text-wrap: balance; }
+h2 { font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 650; font-size: 1.34rem;
+     line-height: 1.25; letter-spacing: -.012em; margin: 0 0 12px; text-wrap: balance; }
+h3 { font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 650; font-size: .98rem;
+     margin: 22px 0 8px; }
+p { margin: 0 0 16px; max-width: var(--measure); }
+strong { font-weight: 600; }
+.mono, code { font-family: "IBM Plex Mono", monospace; font-size: .84em; }
+.kicker { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .16em;
+          text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.lede { font-size: 1.18rem; color: var(--ink-2); max-width: 60ch; }
+
+section { padding: 38px 0; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: none; }
+
+.scope { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+         border-radius: 4px; padding: 22px 26px; margin: 26px 0 0; }
+.scope p { font-size: 18px; margin-bottom: 12px; }
+.scope p:last-child { margin-bottom: 0; }
+
+figure { margin: 18px 0 0; }
+.figframe { background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+            padding: 22px 18px; overflow-x: auto; }
+figure svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--ink); }
+figcaption { font-size: 14px; color: var(--ink-2); margin-top: 12px; padding-left: 14px;
+             border-left: 2px solid var(--accent); max-width: 82ch; }
+
+.part { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 20px; }
+.badge { width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+         font-family: "Libre Franklin", system-ui, sans-serif; font-weight: 700; font-size: 19px;
+         display: grid; place-items: center; }
+.badge.neutral { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line-2); }
+.objective { font-size: 17.5px; }
+.objective strong { color: var(--accent); }
+
+ul.tight { margin: 0 0 16px; padding-left: 22px; max-width: var(--measure); }
+ul.tight li { margin-bottom: 6px; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px;
+             background: var(--surface); margin: 12px 0 6px; }
+table { width: 100%; border-collapse: collapse; font-family: "Libre Franklin", system-ui, sans-serif;
+        font-size: 14px; }
+th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 9.5px; letter-spacing: .13em;
+     text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding: 10px 14px;
+     border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.45; }
+tbody tr:last-child td { border-bottom: none; }
+td.v { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.chip { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .08em;
+        text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.chip.met  { color: var(--met);  background: var(--met-bg);  border-color: var(--met); }
+.chip.part { color: var(--part); background: var(--part-bg); border-color: var(--part); }
+.chip.not  { color: var(--not);  background: var(--not-bg);  border-color: var(--not); }
+
+.note { border-left: 3px solid var(--part); background: var(--surface); padding: 14px 18px;
+        border-radius: 0 4px 4px 0; margin: 14px 0; max-width: 82ch; font-size: 15.5px; }
+.note p:last-child { margin-bottom: 0; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+.card h3 { margin-top: 0; }
+.card ul { margin: 0; padding-left: 20px; font-size: 15px; }
+.card li { margin-bottom: 5px; }
+
+footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px; color: var(--ink-3);
+         font-size: 13.5px; font-family: "Libre Franklin", system-ui, sans-serif; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 640px) { body { font-size: 16px; } .wrap { padding: 34px 18px 80px; } .part { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+
+  <header class="narrow">
+    <div class="kicker">Risk Radar · scope statement and product requirements · 11 September 2026</div>
+    <h1>Risk Radar Blueprint</h1>
+    <p class="lede">
+      What we are building, in six parts. What each part is for, what it must do,
+      and the number that tells us whether it is doing it.
+    </p>
+
+    <div class="scope">
+      <p>
+        <strong>Scope statement.</strong> Risk Radar watches a Nigerian bank's
+        stream of payments, spots the ones that look like fraud, and puts them in
+        front of a fraud analyst with a clear recommendation of what to do next.
+        It <strong>advises</strong>; a person decides. It never blocks, holds or
+        reverses a payment.
+      </p>
+      <p>
+        It is built from six parts: <strong>realistic data</strong> to learn
+        from, a <strong>checklist of written rules</strong> for fraud that is
+        obvious, a <strong>trained model</strong> for fraud that is not, a
+        <strong>recommendation engine</strong> that turns the evidence into a
+        next step, a <strong>case system</strong> with a permanent record, and a
+        <strong>dashboard</strong> the fraud department works in all day.
+      </p>
+    </div>
+  </header>
+
+  <!-- ================================================ DIAGRAM -->
+  <section>
+    <h2>How the parts connect</h2>
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 980 410" role="img" aria-label="Payments flow left to right from the data foundation through the ingestion service into twelve measurements, which feed both the rules checklist and the trained model. Both feed the policy step, which produces a verdict held to the team's alert budget. The verdict flows down to the recommendation engine, then leftwards into the case system and the dashboard, where analysts read and decide. Analyst outcomes flow back to the model as training labels. Every step writes to a permanent, uneditable record.">
+          <defs>
+            <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="currentColor"></path>
+            </marker>
+            <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+
+          <g font-family="Libre Franklin, system-ui, sans-serif">
+            <!-- Lane 1 boxes -->
+            <rect x="35" y="70" width="130" height="58" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"></rect>
+            <text x="100" y="95" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Data foundation</text>
+            <text x="100" y="113" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">realistic customers</text>
+
+            <rect x="210" y="70" width="120" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
+            <text x="270" y="95" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Intake</text>
+            <text x="270" y="113" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">checks · hides IDs</text>
+
+            <rect x="375" y="70" width="130" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
+            <text x="440" y="95" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Measurements</text>
+            <text x="440" y="113" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">12 per payment</text>
+
+            <rect x="565" y="22" width="150" height="54" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"></rect>
+            <text x="640" y="45" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Rules checklist</text>
+            <text x="640" y="62" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">obvious fraud</text>
+
+            <rect x="565" y="122" width="150" height="54" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"></rect>
+            <text x="640" y="145" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Trained model</text>
+            <text x="640" y="162" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">complex fraud</text>
+
+            <rect x="795" y="70" width="150" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
+            <text x="870" y="95" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Policy</text>
+            <text x="870" y="113" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">verdict · 120/day cap</text>
+
+            <!-- Lane 2 boxes -->
+            <rect x="795" y="250" width="150" height="58" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"></rect>
+            <text x="870" y="275" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Recommendations</text>
+            <text x="870" y="293" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">bank playbook</text>
+
+            <rect x="565" y="250" width="150" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
+            <text x="640" y="275" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Case system</text>
+            <text x="640" y="293" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">one per customer</text>
+
+            <rect x="375" y="250" width="130" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
+            <text x="440" y="275" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Dashboard</text>
+            <text x="440" y="293" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">four roles</text>
+
+            <rect x="210" y="250" width="120" height="58" rx="29" fill="none" stroke="var(--line-2)" stroke-dasharray="3 3"></rect>
+            <text x="270" y="275" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Fraud team</text>
+            <text x="270" y="293" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">people decide</text>
+
+            <!-- Permanent record -->
+            <rect x="35" y="352" width="910" height="40" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
+            <text x="490" y="377" text-anchor="middle" font-size="12.5" fill="var(--ink-2)"><tspan font-weight="650" fill="var(--ink)">Permanent record</tspan> — every step above writes an entry here; no entry can be edited or deleted</text>
+
+            <!-- Numbered badges -->
+            <g font-size="11.5" font-weight="700" text-anchor="middle">
+              <circle cx="35" cy="70" r="11" fill="var(--accent)"></circle><text x="35" y="74" fill="var(--on-accent)">1</text>
+              <circle cx="565" cy="22" r="11" fill="var(--accent)"></circle><text x="565" y="26" fill="var(--on-accent)">2</text>
+              <circle cx="565" cy="122" r="11" fill="var(--accent)"></circle><text x="565" y="126" fill="var(--on-accent)">3</text>
+              <circle cx="795" cy="250" r="11" fill="var(--accent)"></circle><text x="795" y="254" fill="var(--on-accent)">4</text>
+              <circle cx="565" cy="250" r="11" fill="var(--surface)" stroke="var(--line-2)"></circle><text x="565" y="254" fill="var(--ink-2)">5</text>
+              <circle cx="375" cy="250" r="11" fill="var(--surface)" stroke="var(--line-2)"></circle><text x="375" y="254" fill="var(--ink-2)">6</text>
+            </g>
+
+            <!-- Arrows, labelled -->
+            <g stroke="currentColor" stroke-width="1.4" fill="none" color="var(--ink-3)">
+              <path d="M165 99 L206 99" marker-end="url(#a)"></path>
+              <path d="M330 99 L371 99" marker-end="url(#a)"></path>
+              <path d="M505 99 L535 99 L535 49 L561 49" marker-end="url(#a)"></path>
+              <path d="M535 99 L535 149 L561 149" marker-end="url(#a)"></path>
+              <path d="M715 49 L760 49 L760 92 L791 92" marker-end="url(#a)"></path>
+              <path d="M715 149 L760 149 L760 106 L791 106" marker-end="url(#a)"></path>
+              <path d="M870 128 L870 246" marker-end="url(#a)"></path>
+              <path d="M795 279 L719 279" marker-end="url(#a)"></path>
+              <path d="M565 279 L509 279" marker-end="url(#a)"></path>
+              <path d="M375 272 L334 272" marker-end="url(#a)"></path>
+              <path d="M334 288 L375 288" marker-end="url(#a)"></path>
+            </g>
+            <!-- Feedback loop: outcomes become labels -->
+            <path d="M640 250 L640 180" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#aa)"></path>
+
+            <g font-size="10" fill="var(--ink-2)">
+              <text x="186" y="91" text-anchor="middle">payments</text>
+              <text x="351" y="91" text-anchor="middle">clean</text>
+              <text x="525" y="120" text-anchor="end">12 numbers</text>
+              <text x="738" y="42" text-anchor="middle">warnings</text>
+              <text x="738" y="170" text-anchor="middle">probability</text>
+              <text x="880" y="192">verdict + reasons</text>
+              <text x="757" y="271" text-anchor="middle">next step</text>
+              <text x="537" y="271" text-anchor="middle">worklist</text>
+              <text x="354" y="264" text-anchor="middle">shows</text>
+              <text x="354" y="303" text-anchor="middle">decides</text>
+              <text x="648" y="222" fill="var(--accent)">outcomes → training labels</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <figcaption>
+        Every payment runs left to right along the top, and the result runs back
+        along the bottom to the people who act on it. The rules and the model
+        look at the <em>same</em> twelve measurements independently and never
+        blend into one number: the policy step decides. The dashed line is the
+        loop that matters most in the long run. When an analyst records "real
+        fraud" or "false alarm", that answer becomes a training label, which is
+        how the model eventually stops learning only from invented data.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ================================================ PART 1 -->
+  <section>
+    <div class="part">
+      <div class="badge">1</div>
+      <div>
+        <div class="kicker">Part one</div>
+        <h2>Data foundation — a realistic financial dataset, built with context</h2>
+        <p class="objective"><strong>Objective:</strong> give the rules and the model believable Nigerian payment behaviour to learn from, with fraud that hides among ordinary life rather than standing apart from it.</p>
+        <p>
+          No bank's real transactions are available, and no public Nigerian fraud
+          dataset exists. So we generate customers — ordinary people, salaried
+          workers, shop owners, traders — who each own accounts, keep habits and
+          pay people, then have some of them robbed in three different ways. Real
+          published statistics shape the result: our fraud rate is tuned to the
+          one Nigeria's interbank settlement body reports.
+        </p>
+        <h3>Must do</h3>
+        <ul class="tight">
+          <li>Model customers owning several accounts, so one person's incident stays one investigation.</li>
+          <li>Give legitimate customers the behaviours fraud also has — paying new people, paying many people in an hour, occasional large sums — so fraud has something to hide in.</li>
+          <li>Fail its own check if any single measurement can separate fraud from normal by itself.</li>
+        </ul>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Fraud rate</td><td class="v">≈ 0.30% (NIBSS)</td><td class="v">0.296%</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Fraud incidents to test on</td><td class="v">≥ 600</td><td class="v">604</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Measurements that give fraud away on their own</td><td class="v">0 over 15%</td><td class="v">0 · one at 5.6%, explained</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Checked against published channel and state figures</td><td class="v">all key shares</td><td class="v">fraud rate only</td><td><span class="chip part">partly</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ PART 2 -->
+  <section>
+    <div class="part">
+      <div class="badge">2</div>
+      <div>
+        <div class="kicker">Part two</div>
+        <h2>Rules checklist — fraud that is obvious</h2>
+        <p class="objective"><strong>Objective:</strong> catch the fraud a person would recognise instantly, with near-certain accuracy, and catch it even when it is a new variant the model has never seen.</p>
+        <p>
+          Plain written rules, each producing a named warning with its evidence —
+          never a score. Some raise the risk (a burst of payments, a run of refused
+          card attempts). Some override everything (a sanctioned destination). Some
+          lower it (a long-standing payee receiving a normal amount). Settings
+          change from the admin screen, with every change recorded.
+        </p>
+        <h3>Must do</h3>
+        <ul class="tight">
+          <li>Explain itself: every warning says what fired and why.</li>
+          <li>Stay inside the team's capacity: no rule may spend more of the daily alert budget than it earns.</li>
+          <li>Be tested one rule at a time, and drop any rule the data does not support.</li>
+        </ul>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Card-testing rule: how often it is right</td><td class="v">≥ 0.95</td><td class="v">0.998</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Card testing caught, new variant, rules alone</td><td class="v">≥ 0.90</td><td class="v">192 of 194 · 0.99</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Payment-burst rule: share of daily budget</td><td class="v">≤ 60%</td><td class="v">~56% (set at 10+ per hour)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>New mule fan-out caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.41</td><td><span class="chip part">trade-off</span></td></tr>
+            <tr><td>"Familiar payee" rule firing where there is no payee</td><td class="v">never</td><td class="v">never (was 84% of its firings)</td><td><span class="chip met">fixed</span></td></tr>
+            <tr><td>Every rule measured on its own</td><td class="v">all six</td><td class="v">three</td><td><span class="chip part">partly</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ PART 3 -->
+  <section>
+    <div class="part">
+      <div class="badge">3</div>
+      <div>
+        <div class="kicker">Part three</div>
+        <h2>Trained model — fraud that is complex, calibrated to tell the truth</h2>
+        <p class="objective"><strong>Objective:</strong> catch fraud that no single rule describes — the combination of a new device, a quiet pause and a rush of transfers — and give a probability that means exactly what it says.</p>
+        <p>
+          Hundreds of small decision trees, each correcting the last, trained on
+          older data and then adjusted on newer data it never saw, so that "0.30"
+          really means about three in ten. It is one voice, not the decision: on
+          its own it catches only what resembles its training, which is why the
+          rules sit beside it.
+        </p>
+        <h3>Must do</h3>
+        <ul class="tight">
+          <li>Be tested on a kind of fraud hidden from its training, not only on more of the same.</li>
+          <li>Produce an honest probability, because the daily workload is predicted from it.</li>
+          <li>Use the same twelve measurements live as in training, checked by a test.</li>
+        </ul>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.77 (rules alone: 0.04)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Honesty of its probability (stated ÷ actual)</td><td class="v">≥ 0.90</td><td class="v">0.92</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Calibration error where alerts are raised</td><td class="v">≤ 0.04</td><td class="v">0.032</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Same numbers in training and live</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Useful on its own</td><td class="v">—</td><td class="v">0.40 · below one raw measurement</td><td><span class="chip part">by design</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ PART 4 -->
+  <section>
+    <div class="part">
+      <div class="badge">4</div>
+      <div>
+        <div class="kicker">Part four</div>
+        <h2>Recommendation engine — the next step, in the bank's own procedure</h2>
+        <p class="objective"><strong>Objective:</strong> turn the evidence into one clear next action and its reason — "block the card and reissue: 14 refused small attempts" — so an analyst never has to work out what to do from raw data.</p>
+        <p>
+          It reads the verdict, the warnings, the money at risk and the customer's
+          pattern, and picks the step from a playbook. It is deterministic and
+          written down, never learned, so every recommendation can be explained in
+          the words that produced it.
+        </p>
+        <div class="note">
+          <p><strong>On "real bank policy".</strong> No bank has shared its fraud
+          procedures with us, so the playbook today is our own, written from how
+          Nigerian fraud desks describe their work. It is built as a lookup the
+          bank can replace: their procedure in, their steps out, with no code
+          change. We will not describe it as a bank's policy until one is loaded.</p>
+        </div>
+        <h3>Must do</h3>
+        <ul class="tight">
+          <li>Give one action, numbered next steps, and the reason, for every case.</li>
+          <li>Say how urgent it is, tied to a response clock.</li>
+          <li>Record whether the analyst followed it, so the advice can be checked against real outcomes.</li>
+        </ul>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Cases with an action, steps and reason</td><td class="v">100%</td><td class="v">100%</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Bank's own procedure loaded</td><td class="v">yes</td><td class="v">our playbook, bank-replaceable</td><td><span class="chip part">partly</span></td></tr>
+            <tr><td>How often analysts follow the advice</td><td class="v">tracked weekly</td><td class="v">recorded, not yet reported</td><td><span class="chip not">not yet</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ PART 5 -->
+  <section>
+    <div class="part">
+      <div class="badge neutral">5</div>
+      <div>
+        <div class="kicker">Part five</div>
+        <h2>Case system and permanent record — what holds it together</h2>
+        <p class="objective"><strong>Objective:</strong> turn many alerts about one customer into one case, keep the team inside its capacity, and prove afterwards who did what.</p>
+        <ul class="tight">
+          <li>Group alerts about the same customer into one case, so an attacker moving between someone's accounts stays one investigation.</li>
+          <li>Hold the whole system to the daily alert budget — rules first, the model gets what is left.</li>
+          <li>Record every decision and action permanently; administrators may tune the system but can never open a case.</li>
+        </ul>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Time from payment to decision (95% of the time)</td><td class="v">under 2 s</td><td class="v">0.88 s</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Payments lost in a 5× burst</td><td class="v">0</td><td class="v">0</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Alerts per day, whole system</td><td class="v">≤ 120</td><td class="v">154 in the latest demo day</td><td><span class="chip not">over</span></td></tr>
+            <tr><td>Record edits possible</td><td class="v">none</td><td class="v">none · tamper-evident</td><td><span class="chip met">met</span></td></tr>
+          </tbody>
+        </table></div>
+        <div class="note"><p><strong>The one red number.</strong> The budget is set from four days of history, and the next day ran 28% over. Either the setting is too loose for a single day's swing, or one rule spikes on some days. It needs a week of data to tell which, and it is the next thing to look at.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ PART 6 -->
+  <section>
+    <div class="part">
+      <div class="badge neutral">6</div>
+      <div>
+        <div class="kicker">Part six</div>
+        <h2>Dashboard — where the department works</h2>
+        <p class="objective"><strong>Objective:</strong> let each person in the fraud department do their day's job from one screen: analysts clear cases, the lead sees whether the desk is coping, security handles break-ins, the administrator tunes settings.</p>
+        <div class="grid2">
+          <div class="card"><h3>Fraud analyst</h3><ul><li>The next case handed to them, largest risk first</li><li>Money at risk, the recommendation, why it fired</li><li>One key to record the outcome</li></ul></div>
+          <div class="card"><h3>Fraud operations lead</h3><ul><li>Backlog, waiting times, who carries what</li><li>How many alerts turned out to be false</li><li>Signs off analysts' outcomes</li></ul></div>
+          <div class="card"><h3>Information security</h3><ul><li>Cases showing a break-in — new device, dormant account</li><li>Escalations routed to them</li></ul></div>
+          <div class="card"><h3>Administrator</h3><ul><li>Rules, thresholds, models, the record</li><li>No access to any case, by design</li></ul></div>
+        </div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Keystrokes to record an outcome</td><td class="v">1</td><td class="v">1</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Cases past their response clock</td><td class="v">under 10%</td><td class="v">not yet measured with real users</td><td><span class="chip not">not yet</span></td></tr>
+            <tr><td>Median time to decide a case</td><td class="v">under 3 min</td><td class="v">not yet measured</td><td><span class="chip not">not yet</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================ HEADLINE + SCOPE -->
+  <section class="narrow">
+    <h2>The number that sums it up</h2>
+    <p>
+      Shown a kind of fraud hidden from its training, with the team held to 120
+      alerts a day, the whole system catches <strong>about eight incidents in
+      ten</strong> (0.81): account takeover 0.78, mule fan-out 0.65, card testing
+      0.99. The model is what catches account takeover; the rules are what catch
+      card testing; mule fan-out needs both.
+    </p>
+    <p>
+      We can claim the method is sound and measured. We cannot yet claim it
+      works on real criminals, because we have never seen any. Running it
+      alongside a real bank for a month, alerting nobody, is what would settle
+      that.
+    </p>
+
+    <h2 style="margin-top:30px">Out of scope</h2>
+    <ul class="tight">
+      <li>Blocking, holding or reversing payments — advisory only, permanently.</li>
+      <li>Connecting to a real bank's systems — a separate project.</li>
+      <li>Detecting networks of linked criminals — a later version.</li>
+      <li>Testing a new model on live traffic before switching to it — designed, not built.</li>
+    </ul>
+
+    <h2 style="margin-top:30px">Who owns which part</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Part</th><th>Owner</th></tr></thead>
+      <tbody>
+        <tr><td>1 · Data foundation, and testing each rule on the data</td><td>Ire</td></tr>
+        <tr><td>2, 3 · Rules and model code · 5 · intake, measurements, policy, case system, record</td><td>Chidera</td></tr>
+        <tr><td>4 · Recommendation playbook</td><td>Chidera, with the team</td></tr>
+        <tr><td>6 · Dashboard</td><td>Paul</td></tr>
+        <tr><td>Plan, tests, documents, presentation</td><td>Kanyinsola</td></tr>
+      </tbody>
+    </table></div>
+
+    <footer>
+      Figures from the project's own measurements on 11 September 2026:
+      <span class="mono">system-evaluation.json</span>, <span class="mono">calibration.json</span>,
+      <span class="mono">budget-grid.json</span>, <span class="mono">own-corpus-audit.json</span>
+      and the load test. Each decision behind them is in the project decision log.
+      Companions: <em>What We Are Building</em> and <em>What We Learned From Testing Both Approaches</em>.
+    </footer>
+  </section>
+
+</div>
