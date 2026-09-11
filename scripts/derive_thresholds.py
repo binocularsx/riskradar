@@ -54,7 +54,7 @@ def main() -> None:
 
         rows = conn.execute(
             """
-            SELECT d.p_fraud, t.occurred_at
+            SELECT d.p_fraud, t.occurred_at, d.signals
               FROM decisions d
               JOIN transactions t ON t.id = d.transaction_id
              WHERE d.rule_only_mode = false
@@ -74,13 +74,66 @@ def main() -> None:
         span_days = max((max(times) - min(times)).total_seconds() / 86400.0, 0.5)
         daily_volume = len(p) / span_days
 
-        # The alert rate the budget permits.
-        alert_rate = min(1.0, budget / daily_volume)
-        p_monitor = float(np.quantile(p, 1.0 - alert_rate))
-        # REVIEW takes a third of the budget, HOLD a tenth: the bands stay nested
-        # inside the same volume envelope rather than each having its own.
-        p_review = float(np.quantile(p, 1.0 - alert_rate / 3.0))
-        p_hold = float(np.quantile(p, 1.0 - alert_rate / 10.0))
+        # The budget is for the WHOLE SYSTEM, not for the model (D61b).
+        #
+        # The first version solved the threshold from the model's scores alone.
+        # But the rules raise alerts on their own — an ESCALATE rule lifts a
+        # payment to HIGH whatever the model thinks — so the desk received the
+        # model's 120 plus every rule alert on top: 1.5x to 2.2x the budget in
+        # offline tests. The operations screen promised analysts a workload the
+        # system did not deliver.
+        #
+        # Now: work out which payments the rules would alert on even if the
+        # model said zero, using the real policy engine on the stored signals so
+        # this cannot drift from what the worker does. Those alerts are spent
+        # first. The model gets whatever budget is left, and competes only among
+        # payments the rules did not already flag.
+        from riskradar.policy.engine import Thresholds, apply as apply_policy
+        from riskradar.rules.engine import Signal
+
+        never = Thresholds(id=0, version=0, p_monitor=2.0, p_review=2.0, p_hold=2.0,
+                           alert_min_level="MEDIUM")
+
+        def rules_alone(raw) -> bool:
+            sigs = raw if isinstance(raw, list) else json.loads(raw or "[]")
+            signals = [Signal(code=x["code"], power=x["power"], severity=x["severity"],
+                              evidence=x.get("evidence") or {}) for x in sigs]
+            return apply_policy(0.0, signals, never).actionable
+
+        rule_driven = np.array([rules_alone(r["signals"]) for r in rows])
+        rule_per_day = float(rule_driven.sum()) / span_days
+        remaining = budget - rule_per_day
+
+        from collections import Counter
+        by_rule = Counter()
+        for r, flagged in zip(rows, rule_driven):
+            if flagged:
+                sigs = r["signals"] if isinstance(r["signals"], list) else json.loads(r["signals"] or "[]")
+                for x in sigs:
+                    if x["power"] in ("ESCALATE", "OVERRIDE"):
+                        by_rule[x["code"]] += 1
+
+        print("rule-driven alerts (raised even if the model scored zero):")
+        print(f"  {rule_per_day:.1f}/day of a {budget}/day budget")
+        for code, n in by_rule.most_common():
+            print(f"    {code:<28} {n / span_days:7.1f}/day")
+        print()
+
+        if remaining <= 0:
+            print(f"REFUSING: the rules alone use {rule_per_day:.0f}/day, over the whole "
+                  f"{budget}/day budget. No model threshold can fix that — retune the")
+            print("rules above (Administration > Rules) or raise the budget, then re-run.")
+            raise SystemExit(2)
+
+        # The model competes only for the budget the rules left, and only among
+        # payments the rules did not already flag.
+        p_free = p[~rule_driven]
+        alert_rate = min(1.0, remaining / max(daily_volume * (1 - rule_driven.mean()), 1e-9))
+        p_monitor = float(np.quantile(p_free, 1.0 - alert_rate))
+        # REVIEW takes a third of the model's share, HOLD a tenth: the bands stay
+        # nested inside the same envelope rather than each having its own.
+        p_review = float(np.quantile(p_free, 1.0 - alert_rate / 3.0))
+        p_hold = float(np.quantile(p_free, 1.0 - alert_rate / 10.0))
 
         # Ordering is a database constraint too, but a degenerate distribution
         # (every probability identical) would otherwise produce three equal
@@ -88,7 +141,10 @@ def main() -> None:
         p_review = max(p_review, p_monitor)
         p_hold = max(p_hold, p_review)
 
+        system_alerts = rule_driven | (p >= p_monitor)
         implied = {
+            "whole_system_alerts_per_day": round(float(system_alerts.sum()) / span_days, 1),
+            "of_which_rules_alone_per_day": round(rule_per_day, 1),
             "monitor_and_above_per_day": round(float(np.mean(p >= p_monitor)) * daily_volume, 1),
             "review_and_above_per_day": round(float(np.mean(p >= p_review)) * daily_volume, 1),
             "hold_per_day": round(float(np.mean(p >= p_hold)) * daily_volume, 1),

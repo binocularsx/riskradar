@@ -127,6 +127,81 @@ def register(
     return model_id
 
 
+def train_final(corpus: Corpus, args, days: float) -> None:
+    """Fit the model the live system actually runs, on every kind of fraud.
+
+    Why this exists (D60e): the default path holds one typology out so the
+    evaluation can ask "will it catch something new". That is right for
+    *measuring* and wrong for *running*. It was promoting the held-out model,
+    so the live system scored payments with a model that had never seen an
+    account takeover — the one typology D59 showed the model is responsible
+    for, because the rules catch it only 27% of the time.
+
+    A model trained on everything has no held-out typology left to test on, so
+    it cannot grade itself. Its evidence is the held-out evaluation of the same
+    recipe, which is recorded alongside it rather than being replaced by a
+    flattering in-distribution number.
+    """
+    print("FINAL model: training on every typology "
+          f"{sorted(set(t for t in corpus.typology if t))}")
+    started = time.perf_counter()
+    model = build_model()
+    model.fit(corpus.X, corpus.y, times=corpus.occurred_at)
+    print(f"  fit in {time.perf_counter() - started:.1f}s on {len(corpus.y):,} rows")
+
+    def evidence(name: str) -> dict:
+        path = REPO_ROOT / "ml" / "artifacts" / name
+        return json.loads(path.read_text()) if path.exists() else {}
+
+    system = evidence("system-evaluation.json")
+    calibration = evidence("calibration.json")
+    shipped_cal = next(
+        (v for k, v in (calibration.get("variants") or {}).items() if "SHIPPED" in k), {}
+    )
+
+    version = args.version or datetime.now(timezone.utc).strftime("%Y%m%d.%H%M") + "-final"
+    artifact = REPO_ROOT / "ml" / "artifacts" / f"{args.name}-{version}.joblib"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, artifact)
+
+    metrics = {
+        "trained_on": "all typologies (production model)",
+        "held_out_typology": None,
+        "evidence_note": (
+            "Trained on everything, so it cannot be tested on an unseen typology. "
+            "The figures below are the held-out evaluation of this same recipe."
+        ),
+        "system_mean_incident_recall": (system.get("mean_incident_recall") or {}),
+        "calibration_on_fair_test": {
+            "confidence_ratio": shipped_cal.get("confidence_ratio"),
+            "ece_alerting_region": shipped_cal.get("ece_alerting_region"),
+        },
+        "corpus": {
+            "rows": int(len(corpus.y)),
+            "fraud": int(corpus.y.sum()),
+            "incidents": len({i for i in corpus.incident_id if i}),
+            "span_days": round(days, 2),
+        },
+        "feature_names": list(FEATURE_NAMES),
+        "feature_baseline": [float(v) for v in np.median(corpus.X, axis=0)],
+        "alert_budget_per_day": ALERT_BUDGET_PER_DAY,
+    }
+    model_id = register(
+        name=args.name, version=version, artifact_path=artifact,
+        metrics=metrics, promote=args.promote,
+    )
+    print(f"registered model_versions.id={model_id} ({artifact.name})"
+          f"{' and PROMOTED' if args.promote else ''}")
+
+    # scripts/demo_reset.py re-registers a model from this file after a database
+    # rebuild. Without it the rebuilt registry would carry no feature_baseline,
+    # and every "what moved the score" explanation would be measured against a
+    # vector of zeros instead of the training medians.
+    report = REPO_ROOT / "ml" / "artifacts" / f"evaluation-{version}.json"
+    report.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    print(f"evaluation report: {report.relative_to(REPO_ROOT)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train the Risk Radar model")
     parser.add_argument("--corpus", default="ml/data/corpus.jsonl")
@@ -135,6 +210,11 @@ def main() -> None:
     parser.add_argument("--name", default="riskradar-gbm")
     parser.add_argument("--version", default=None)
     parser.add_argument("--promote", action="store_true")
+    parser.add_argument(
+        "--final", action="store_true",
+        help="train the production model on EVERY typology. No held-out test is "
+             "possible, so its evidence is the latest held-out evaluation (D60e)",
+    )
     args = parser.parse_args()
 
     print(f"loading corpus {args.corpus}")
@@ -142,6 +222,10 @@ def main() -> None:
 
     days = (max(corpus.occurred_at) - min(corpus.occurred_at)).total_seconds() / 86400.0
     print(f"  span {days:.1f} days, base rate {100 * corpus.y.mean():.3f}%")
+
+    if args.final:
+        train_final(corpus, args, days)
+        return
 
     train_idx, test_idx = holdout_typology_split(corpus, args.holdout)
     print(
