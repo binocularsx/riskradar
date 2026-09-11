@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ire's Deliverables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #ffffff; --surface: #ffffff; --surface-2: #eef2f7;
+  --line: #d0d8e2; --line-2: #a9b6c6;
+  --ink: #141a22; --ink-2: #4a5566; --ink-3: #7a8697;
+  --accent: #25548f; --accent-bg: #e6eef8; --on-accent: #ffffff;
+  --met: #2c6b47; --met-bg: #e0efe6;
+  --part: #8a6516; --part-bg: #f5ecd8;
+  --not: #9a3a33; --not-bg: #f6e3e1;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+       font-family: "Source Serif 4", Georgia, serif; font-size: 11pt; line-height: 1.5; }
+.wrap { max-width: 780px; margin: 0 auto; padding: 36px 28px 60px; }
+h1, h2, h3, th, .kicker, .chip, table { font-family: "Libre Franklin", system-ui, sans-serif; }
+h1 { font-size: 26pt; line-height: 1.08; letter-spacing: -.02em; margin: 0 0 8px; font-weight: 700; }
+h2 { font-size: 14pt; margin: 26px 0 8px; font-weight: 650; letter-spacing: -.01em; break-after: avoid; }
+h3 { font-size: 11pt; margin: 16px 0 6px; font-weight: 650; break-after: avoid; }
+p { margin: 0 0 10px; }
+.kicker { font-family: "IBM Plex Mono", monospace; font-size: 8pt; letter-spacing: .16em;
+          text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.lede { font-size: 12.5pt; color: var(--ink-2); }
+.mono { font-family: "IBM Plex Mono", monospace; font-size: .86em; }
+.box { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 3px;
+       padding: 12px 16px; margin: 14px 0; background: var(--accent-bg); break-inside: avoid; }
+.box p:last-child { margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 6px 0 4px; }
+th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 7.5pt; letter-spacing: .12em;
+     text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding: 6px 8px;
+     border-bottom: 1px solid var(--line-2); background: var(--surface-2); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.4; }
+tr { break-inside: avoid; }
+td.v { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 7pt; letter-spacing: .08em;
+        text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.met { color: var(--met); background: var(--met-bg); border-color: var(--met); }
+.part { color: var(--part); background: var(--part-bg); border-color: var(--part); }
+.not { color: var(--not); background: var(--not-bg); border-color: var(--not); }
+.task { border: 1px solid var(--line); border-radius: 3px; padding: 12px 16px; margin: 10px 0; break-inside: avoid; }
+.task h3 { margin-top: 0; display: flex; gap: 10px; align-items: baseline; }
+.task h3 .n { font-family: "IBM Plex Mono", monospace; color: var(--accent); font-size: 9pt; }
+.task dl { display: grid; grid-template-columns: 110px 1fr; gap: 3px 12px; margin: 6px 0 0; font-size: 10pt; }
+.task dt { font-family: "Libre Franklin", sans-serif; font-weight: 600; color: var(--ink-2); font-size: 9pt; }
+.task dd { margin: 0; }
+ul { margin: 4px 0 10px; padding-left: 20px; } li { margin-bottom: 3px; }
+footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px; font-size: 8.5pt; color: var(--ink-3);
+         font-family: "Libre Franklin", sans-serif; }
+@media print {
+  @page { size: A4; margin: 14mm 13mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wrap { padding: 0; max-width: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Risk Radar · work deliverables · ML and data · 11 September 2026</div>
+  <h1>Ire's Deliverables</h1>
+  <p class="lede">What Ire owns, what is finished, what is still to do, and the number
+  that says each item is done.</p>
+
+  <div class="box">
+    <p><strong>Ire owns the data foundation and the evidence for detection:</strong> the
+    simulator that generates the bank's customers and its fraud, the twelve measurements
+    taken on every payment, the trained model, and every evaluation that says how well
+    the rules and the model work. Chidera wires these into the live system; Ire's job is
+    to make sure what goes in is realistic and what comes out is measured honestly.</p>
+  </div>
+
+  <h2>Where things stand</h2>
+  <table>
+    <thead><tr><th>Area</th><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Simulator</td><td>Fraud rate against Nigeria's interbank settlement body (NIBSS)</td><td class="v">≈ 0.30%</td><td class="v">0.296%</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Simulator</td><td>Fraud incidents available to test on</td><td class="v">≥ 600</td><td class="v">604</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Simulator</td><td>Measurements that give fraud away on their own</td><td class="v">0 over 15%</td><td class="v">0 · worst 5.6%</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Simulator</td><td>Normal behaviour checked against published Nigerian figures</td><td class="v">key shares</td><td class="v">fraud rate only</td><td><span class="chip part">partly</span></td></tr>
+      <tr><td>Measurements</td><td>Same twelve numbers in training and live</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Model</td><td>Honesty of its probability (stated ÷ actual, where alerts are raised)</td><td class="v">≥ 0.90</td><td class="v">0.92</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Model</td><td>Calibration error where alerts are raised</td><td class="v">≤ 0.04</td><td class="v">0.032</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Evaluation</td><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.777</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Evaluation</td><td>Mule fan-out caught, never seen in training</td><td class="v">—</td><td class="v">0.909</td><td><span class="chip met">up from 0.649</span></td></tr>
+      <tr><td>Evaluation</td><td>Card testing caught, never seen in training</td><td class="v">≥ 0.90</td><td class="v">0.990</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Evaluation</td><td>Every rule measured on its own</td><td class="v">all six</td><td class="v">three</td><td><span class="chip part">partly</span></td></tr>
+      <tr><td>Validation</td><td>Public dataset with invented labels (PaySim)</td><td class="v">run</td><td class="v">done</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Validation</td><td>Public dataset with real fraud labels (IEEE-CIS)</td><td class="v">run</td><td class="v">blocked</td><td><span class="chip not">blocked</span></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:9.5pt;color:var(--ink-2)">"Never seen in training" means that kind of fraud was hidden from the model while it
+  learned, with the team held to 120 alerts a day. Average across the three: <strong>0.892</strong>
+  (decision D67a). On its own the model scores 0.403, below a single raw measurement; it is useful
+  only alongside the rules, and must always be described that way.</p>
+
+  <h2>Finished — Ire presents these at the defence</h2>
+  <ul>
+    <li><strong>The simulator.</strong> Customers of four kinds (ordinary, salary earner, small business, trader) who own one to three accounts, keep habits, pay known and new people. Three kinds of fraud generated as criminal processes, not as rule thresholds: account takeover, mule fan-out, card testing. Identities now come from the seed, so the same seed rebuilds the same bank (D68).</li>
+    <li><strong>The twelve measurements</strong>, one shared package for training and live, with a test proving they match. Version 1.1.0: "does not apply" is marked −1, ratios are capped at 100 (D64).</li>
+    <li><strong>The calibrated model</strong>: gradient-boosted trees, trained on older data and adjusted on newer data it never saw, so its probability means what it says (D60–D61).</li>
+    <li><strong>The held-out evaluation</strong>: six approaches compared on identical data at the same alert budget, with 95% ranges on every figure (D59, D63, D65, D67a).</li>
+    <li><strong>The self-audit</strong> that caught eight "giveaway" measurements in our own data and led to the realistic population (D57), and the reproduction of the earlier dataset's result (D56).</li>
+    <li><strong>PaySim validation</strong>: 65% of fraud value caught while catching 18% of fraud transactions; six of our twelve measurements cannot fire on PaySim, which we state rather than hide.</li>
+  </ul>
+
+  <h2>Still to do</h2>
+
+  <div class="task">
+    <h3><span class="n">1</span> Check "normal" against published Nigerian figures <span class="chip not">not started</span></h3>
+    <dl>
+      <dt>Why</dt><dd>The most serious objection to the project is that our normal customers are invented. This turns "we made it up" into "we made it up and checked its shape".</dd>
+      <dt>What</dt><dd>Take published aggregates (NIBSS annual fraud reports, Central Bank payment statistics) and compare the simulator's shares side by side: channel mix, average transfer value, interbank (NIP) versus in-bank share, fraud loss by channel.</dd>
+      <dt>Done when</dt><dd>A table of our share against the published share for each; any gap wider than a third of the published value is either corrected in the simulator or explained in writing.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">2</span> Run the real-label validation (IEEE-CIS) <span class="chip not">blocked on a person</span></h3>
+    <dl>
+      <dt>Why</dt><dd>The only test short of a real bank with genuine fraud outcomes (about 590,000 transactions, 3.5% fraud).</dd>
+      <dt>What</dt><dd>Sign in to Kaggle, complete phone verification, accept the competition rules at <span class="mono">kaggle.com/competitions/ieee-fraud-detection/rules</span>, put <span class="mono">train_transaction.csv</span> in <span class="mono">ml/data/public/</span>, then run <span class="mono">python ml/validate_public.py --dataset ieee</span>. The script is written and ready.</dd>
+      <dt>Done when</dt><dd>Results file written; precision-recall area, calibration error and recall at the alert budget reported, with the caveat that it checks method, not our measurements (its columns are anonymised).</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">3</span> Measure the last three rules one at a time <span class="chip part">3 of 6 done</span></h3>
+    <dl>
+      <dt>Why</dt><dd>The Blueprint requires every rule to be tested on its own and dropped if the data does not support it. Card testing (right 99.8% of the time), the payment-burst rule (D67) and the familiar-payee rule (D64) are done.</dd>
+      <dt>What</dt><dd>For "saved payee" (lowers risk): how often it fires on fraud, which would hide it. For "sanctioned destination" and "known mule destination" (override everything): seed test lists and confirm they fire on every listed destination and nowhere else.</dd>
+      <dt>Done when</dt><dd>Each of the three has a firing rate, a share of fraud it wrongly lowers or correctly catches, and a keep-or-drop recommendation logged in the decision log.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">4</span> Give the demo bank a longer memory <span class="chip part">cause found</span></h3>
+    <dl>
+      <dt>Why</dt><dd>The payment-burst rule now fires only on payments to a destination new to the bank. The demo bank remembers about 3 days, so a third of its payments look "new" and the rule fires about 50 times a day, 5 of them on fraud; in the 30-day training data it fires about 34 times a day (D67d).</dd>
+      <dt>What</dt><dd>Lengthen the demo profile's history (in <span class="mono">simulator/riskradar_sim/generate.py</span>) from 4 days towards 21–30, and measure how long the demo rebuild then takes.</dd>
+      <dt>Done when</dt><dd>On a rebuilt demo the rule fires at most about 35 times a day, the whole system stays within 120 alerts a day, and the rebuild time is written in the README.</dd>
+    </dl>
+  </div>
+
+  <div class="task">
+    <h3><span class="n">5</span> Support the team's alert-budget decision <span class="chip part">evidence ready</span></h3>
+    <dl>
+      <dt>Why</dt><dd>With the new rule, a smaller budget cuts false alarms sharply: 120 a day gives about 75 false alarms, 75 a day about 33, 60 a day about 20. The cost is account takeover never seen before: 0.777 at 120, 0.703 at 75, 0.658 at 60 (D67c).</dd>
+      <dt>What</dt><dd>Walk the team through the trade-off; once they choose, re-run <span class="mono">ml/evaluate_system.py</span> at the chosen budget and confirm the figures quoted in the Blueprint.</dd>
+      <dt>Done when</dt><dd>The team's choice is logged as a decision and every document quotes the figures for that budget.</dd>
+    </dl>
+  </div>
+
+  <h2>Rules Ire works under</h2>
+  <ul>
+    <li><strong>Detection never reads the simulator.</strong> Rules and model see only the payment and its measurements, never a generator setting; a test enforces this.</li>
+    <li><strong>Publish the held-out number,</strong> never the flattering one from fraud the model has already seen.</li>
+    <li><strong>Count incidents, not transactions,</strong> and never report accuracy: at 0.3% fraud, "never fraud" scores 99.7%.</li>
+    <li><strong>Never train on someone else's column</strong> named risk, score, rate or fraud unless the code that made it can be read (D10f).</li>
+    <li><strong>Log every change</strong> to what the numbers mean in the decision log, with its evidence, before quoting it.</li>
+  </ul>
+
+  <footer>
+    Sources: <span class="mono">ml/artifacts/system-evaluation.json</span>, <span class="mono">calibration.json</span>,
+    <span class="mono">own-corpus-audit.json</span>, <span class="mono">public-validation-paysim.json</span>,
+    <span class="mono">budget-sweep-gated.json</span>; <span class="mono">docs/validation-plan.md</span>; decisions D56–D68 in
+    <span class="mono">docs/decisions.md</span>. Companion: Risk Radar Blueprint.
+  </footer>
+</div>
+</body>
+</html>
