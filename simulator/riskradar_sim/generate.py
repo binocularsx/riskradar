@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .engine import TYPOLOGIES, Event, disbursement_burst, legitimate_event
+from . import ids
 from .population import Customer, build_population
 
 
@@ -42,6 +43,8 @@ class SimulationConfig:
     # incidents — each emitting 8-25 events (D23).
     fraud_incidents_per_day: int = 9
     seed: int = 20260909
+    # D68: pin the end of the world so two runs build the same timeline.
+    end: datetime | None = None
 
     @classmethod
     def profile(cls, name: str) -> "SimulationConfig":
@@ -99,7 +102,8 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
     feature that looks backwards from ``occurred_at``.
     """
     rng = random.Random(config.seed)
-    end = datetime.now(timezone.utc)
+    ids.reseed(config.seed)  # D68: same seed, same customers, accounts and payees
+    end = config.end or datetime.now(timezone.utc)
     start = (end - timedelta(days=config.days)).replace(minute=0, second=0, microsecond=0)
 
     customers = build_population(rng, n_customers=config.n_customers, now=start)

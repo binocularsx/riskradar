@@ -19,9 +19,9 @@ and the held-out evaluation would be worthless.
 from __future__ import annotations
 
 import random
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from .ids import hex_id
 
 # Nigerian realism reference (D10e: the rejected dataset is retained only for
 # this). None of these values is read by detection code.
@@ -142,7 +142,7 @@ def build_population(
     customers: list[Customer] = []
 
     for _ in range(n_customers):
-        cid = f"CIF{uuid.uuid4().hex[:12].upper()}"
+        cid = f"CIF{hex_id(12).upper()}"
         name = f"{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}"
         region = rng.choices(IP_REGIONS, IP_REGION_WEIGHTS)[0]
 
@@ -165,7 +165,7 @@ def build_population(
             )[0]
             accounts.append(
                 Account(
-                    account_id=f"ACC{uuid.uuid4().hex[:12].upper()}",
+                    account_id=f"ACC{hex_id(12).upper()}",
                     product_type=product,
                     origin_sol_id=rng.choice(SOL_IDS),
                     opened_at=now - timedelta(days=age_days),
@@ -173,7 +173,7 @@ def build_population(
                 )
             )
 
-        devices = [f"DEV{uuid.uuid4().hex[:12]}" for _ in range(rng.choices([1, 2, 3], [0.62, 0.30, 0.08])[0])]
+        devices = [f"DEV{hex_id(12)}" for _ in range(rng.choices([1, 2, 3], [0.62, 0.30, 0.08])[0])]
 
         archetype = rng.choices(ARCHETYPES, ARCHETYPE_WEIGHTS)[0]
         # Traders and shop owners know far more payees than a salaried person.
@@ -183,16 +183,16 @@ def build_population(
             "small_business": rng.randint(5, 12),
             "trader": rng.randint(8, 20),
         }[archetype]
-        payees = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(n_payees)]
+        payees = [f"BEN{hex_id(12).upper()}" for _ in range(n_payees)]
 
         # Staff and suppliers paid in a batch. This is the legitimate source of
         # "many different people within the hour" — the behaviour that used to
         # belong to mule fan-out alone.
         payout_group: list[str] = []
         if archetype == "small_business":
-            payout_group = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(rng.randint(5, 16))]
+            payout_group = [f"BEN{hex_id(12).upper()}" for _ in range(rng.randint(5, 16))]
         elif archetype == "trader":
-            payout_group = [f"BEN{uuid.uuid4().hex[:12].upper()}" for _ in range(rng.randint(8, 25))]
+            payout_group = [f"BEN{hex_id(12).upper()}" for _ in range(rng.randint(8, 25))]
 
         start = rng.randint(5, 9)
         customers.append(

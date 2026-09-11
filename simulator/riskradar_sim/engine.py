@@ -37,12 +37,12 @@ costume, and a model trained on it learns the wrong thing.
 from __future__ import annotations
 
 import random
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterator
 
 from .population import IP_REGIONS, MERCHANT_CATEGORIES, Account, Customer
+from .ids import hex_id
 
 # Channel mix for ordinary retail activity in this market.
 CHANNELS = ["MOBILE_APP", "USSD", "WEB", "POS", "ATM", "AGENT", "BRANCH"]
@@ -104,7 +104,7 @@ def _base_payload(
     merchant_category: str | None = None,
 ) -> dict:
     return {
-        "transaction_ref": f"TX{uuid.uuid4().hex[:20].upper()}",
+        "transaction_ref": f"TX{hex_id(20).upper()}",
         "occurred_at": when.isoformat(),
         "amount_minor": amount_minor,
         "currency": "NGN",
@@ -165,7 +165,7 @@ def legitimate_event(
         if rng.random() > customer.new_payee_rate and customer.known_beneficiaries:
             beneficiary = rng.choice(customer.known_beneficiaries)
         else:
-            beneficiary = f"BEN{uuid.uuid4().hex[:12].upper()}"
+            beneficiary = f"BEN{hex_id(12).upper()}"
             customer.known_beneficiaries.append(beneficiary)
 
     # Ordinary friction: cards get declined, transfers time out, people mistype
@@ -263,8 +263,8 @@ def account_takeover(
     without a customer-level subject this single incident would open one case per
     account.
     """
-    incident = f"ATO-{uuid.uuid4().hex[:10]}"
-    attacker_device = f"DEV{uuid.uuid4().hex[:12]}"
+    incident = f"ATO-{hex_id(10)}"
+    attacker_device = f"DEV{hex_id(12)}"
     attacker_region = rng.choice([r for r in IP_REGIONS if r != customer.home_region])
     now = start
 
@@ -302,7 +302,7 @@ def account_takeover(
         if recruited_pool and rng.random() < 0.40:
             mule_accounts.append(rng.choice(recruited_pool))
         else:
-            mule_accounts.append(f"BEN{uuid.uuid4().hex[:12].upper()}")
+            mule_accounts.append(f"BEN{hex_id(12).upper()}")
     escalation = rng.uniform(1.15, 1.55)
     naira = rng.uniform(40_000, 180_000)
 
@@ -362,7 +362,7 @@ def mule_fanout(
     perfectly recognisable to a human reading the timeline; it is simply no
     longer separable on a single column.
     """
-    incident = f"MULE-{uuid.uuid4().hex[:10]}"
+    incident = f"MULE-{hex_id(10)}"
     account = customer.primary
     device = rng.choice(customer.devices)
     now = start
@@ -376,7 +376,7 @@ def mule_fanout(
         if pool and rng.random() < 0.42:
             destinations.append(rng.choice(pool))       # a recruited real account
         else:
-            destinations.append(f"BEN{uuid.uuid4().hex[:12].upper()}")
+            destinations.append(f"BEN{hex_id(12).upper()}")
 
     # How this particular network behaves. Some split small to stay quiet,
     # some move fewer, larger sums.
@@ -434,7 +434,7 @@ def card_testing(
     authorisation never posts to a ledger. It is representable here only because
     the canonical event carries ``auth_result`` (D21).
     """
-    incident = f"CARD-{uuid.uuid4().hex[:10]}"
+    incident = f"CARD-{hex_id(10)}"
     account = rng.choice(customer.accounts)
     now = start
     region = rng.choice(IP_REGIONS)

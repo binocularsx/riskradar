@@ -72,8 +72,11 @@ def cmd_history(args: argparse.Namespace) -> None:
     config = SimulationConfig.profile(args.profile)
     if args.seed is not None:
         config.seed = args.seed
+    # D68: a shared anchor lets a later run rebuild exactly the same timeline.
+    anchor = datetime.fromisoformat(args.anchor) if args.anchor else datetime.now(timezone.utc)
+    config.end = anchor
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=args.alerting_tail_hours)
+    cutoff = anchor - timedelta(hours=args.alerting_tail_hours)
     counters = {"history": 0, "live": 0, "duplicates": 0, "rejected": 0}
     # The truth about the alerting window, kept on this machine only. It never
     # travels to the API (labels are not part of the ingestion contract); the
@@ -106,6 +109,10 @@ def cmd_history(args: argparse.Namespace) -> None:
 
         for event in generate(config):
             is_history = datetime.fromisoformat(event.payload["occurred_at"]) < cutoff
+            if not is_history and args.skip_tail:
+                # History only: the alerting window is posted by a later run
+                # with the same seed and anchor, after thresholds are derived.
+                continue
             if is_history and args.only_tail:
                 # The caller already loaded history in an earlier pass and just
                 # wants the recent alerting window. Generating the earlier days
@@ -264,6 +271,14 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument(
         "--only-tail", action="store_true",
         help="skip the older history entirely; post only the alerting window",
+    )
+    p.add_argument(
+        "--skip-tail", action="store_true",
+        help="post only the history before the alerting window",
+    )
+    p.add_argument(
+        "--anchor", default=None,
+        help="ISO time the simulated world ends at; share it between runs",
     )
     p.add_argument(
         "--labels-out", default=None,

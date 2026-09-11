@@ -182,10 +182,14 @@ def stage_data(args: argparse.Namespace) -> None:
 
     print("[1/5] loading history with alerting OFF")
     print("      (baselines need history; nobody needs paging about last week)")
+    # D68: one anchor and one seed for both runs, so the alerting window is the
+    # same bank carrying on, not a new one. History stops where it begins.
+    anchor = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     run(
         [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed),
          "history", "--profile", "demo", "--batch-size", "500",
-         "--alerting-tail-hours", "0"],
+         "--alerting-tail-hours", str(args.alerting_hours), "--skip-tail",
+         "--anchor", anchor],
         cwd=sim,
     )
     wait_for_drain("history")
@@ -196,10 +200,10 @@ def stage_data(args: argparse.Namespace) -> None:
     print("\n[3/5] replaying the last hours with alerting ON")
     print("      whatever case count falls out is what the budget implies")
     run(
-        [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed + 1),
+        [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed),
          "history", "--profile", "demo", "--batch-size", "300",
          "--alerting-tail-hours", str(args.alerting_hours), "--only-tail",
-         "--labels-out", str(LABELS)],
+         "--labels-out", str(LABELS), "--anchor", anchor],
         cwd=sim,
     )
     wait_for_drain("alerting window")
