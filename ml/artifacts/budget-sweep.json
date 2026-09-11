@@ -1,0 +1,62 @@
+[
+  {
+    "budget": 120,
+    "alerts_day": 120.0,
+    "false_alarms_day": 78.3,
+    "false_alarm_share": 0.653,
+    "caught": {
+      "ACCOUNT_TAKEOVER": "50/50 [0.93,1.00]",
+      "MULE_FANOUT": "50/53 [0.85,0.98]",
+      "CARD_TESTING": "47/47 [0.92,1.00]"
+    },
+    "threshold": 0.0882
+  },
+  {
+    "budget": 90,
+    "alerts_day": 90.0,
+    "false_alarms_day": 52.8,
+    "false_alarm_share": 0.587,
+    "caught": {
+      "ACCOUNT_TAKEOVER": "49/50 [0.90,1.00]",
+      "MULE_FANOUT": "39/53 [0.60,0.84]",
+      "CARD_TESTING": "47/47 [0.92,1.00]"
+    },
+    "threshold": 0.3077
+  },
+  {
+    "budget": 60,
+    "alerts_day": 67.3,
+    "false_alarms_day": 46.1,
+    "false_alarm_share": 0.685,
+    "caught": {
+      "ACCOUNT_TAKEOVER": "0/50 [0.00,0.07]",
+      "MULE_FANOUT": "25/53 [0.34,0.60]",
+      "CARD_TESTING": "46/47 [0.89,1.00]"
+    },
+    "threshold": null
+  },
+  {
+    "budget": 45,
+    "alerts_day": 67.3,
+    "false_alarms_day": 46.1,
+    "false_alarm_share": 0.685,
+    "caught": {
+      "ACCOUNT_TAKEOVER": "0/50 [0.00,0.07]",
+      "MULE_FANOUT": "25/53 [0.34,0.60]",
+      "CARD_TESTING": "46/47 [0.89,1.00]"
+    },
+    "threshold": null
+  },
+  {
+    "budget": 30,
+    "alerts_day": 67.3,
+    "false_alarms_day": 46.1,
+    "false_alarm_share": 0.685,
+    "caught": {
+      "ACCOUNT_TAKEOVER": "0/50 [0.00,0.07]",
+      "MULE_FANOUT": "25/53 [0.34,0.60]",
+      "CARD_TESTING": "46/47 [0.89,1.00]"
+    },
+    "threshold": null
+  }
+]
