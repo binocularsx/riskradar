@@ -331,7 +331,12 @@ def main() -> None:
     parser.add_argument("--stage", choices=["schema", "data"], required=True)
     parser.add_argument("--seed", type=int, default=20260909)
     parser.add_argument(
-        "--alerting-hours", type=float, default=9.0,
+        # 24, not 9. A window that ends at "now" and covers only nine hours is
+        # overnight whenever the demo is rebuilt early in the morning — the
+        # simulated customers are asleep, and the desk comes out almost empty
+        # (observed: 1 open case). A full day always contains a waking day, and
+        # at a 120/day budget it is exactly one day of the team's work.
+        "--alerting-hours", type=float, default=24.0,
         help="how much recent traffic is allowed to raise alerts",
     )
     args = parser.parse_args()
