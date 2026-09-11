@@ -218,7 +218,15 @@ def main() -> None:
     args = parser.parse_args()
 
     print(f"loading corpus {args.corpus}")
-    corpus: Corpus = load_corpus(REPO_ROOT / args.corpus, limit=args.limit)
+    if args.limit:
+        corpus: Corpus = load_corpus(REPO_ROOT / args.corpus, limit=args.limit)
+    else:
+        # Reuse the cached feature matrix when it matches the current feature
+        # spec; recomputing 2.45m rows costs ~30 minutes for identical numbers.
+        # Imported here because evaluate.py imports this module.
+        from evaluate import load_or_build
+
+        corpus = load_or_build(REPO_ROOT / args.corpus, rebuild=False)
 
     days = (max(corpus.occurred_at) - min(corpus.occurred_at)).total_seconds() / 86400.0
     print(f"  span {days:.1f} days, base rate {100 * corpus.y.mean():.3f}%")

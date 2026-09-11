@@ -123,7 +123,7 @@ def _stamp_account_context(conn: Any, payload: dict[str, Any]) -> dict[str, Any]
             }
         )
     # An unknown account is left unstamped rather than defaulted. The feature
-    # package reports NEVER_SEEN for age and dormancy, which is honest: we do not
+    # package reports NOT_APPLICABLE (-1) for age and dormancy, which is honest: we do not
     # know when this account opened, and inventing "today" would make every
     # unknown account look brand new and therefore suspicious.
     return payload

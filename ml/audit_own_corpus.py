@@ -39,9 +39,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from sklearn.metrics import roc_auc_score  # noqa: E402
 
-from riskradar.features.spec import FEATURE_NAMES, NEVER_SEEN_DAYS  # noqa: E402
-
-NEVER_SEEN = NEVER_SEEN_DAYS
+from riskradar.features.spec import FEATURE_NAMES, NOT_APPLICABLE  # noqa: E402
 
 CORPUS = REPO_ROOT / "ml" / "data" / "corpus.features.npz"
 
@@ -93,7 +91,7 @@ def audit(X: np.ndarray, y: np.ndarray, label: str) -> list[dict]:
         # Where a feature is undefined for a whole typology it is reported as
         # structural and excluded from the pass/fail gate, rather than being
         # silently dropped.
-        structural = bool(np.mean(fraud_v >= NEVER_SEEN) >= 0.95)
+        structural = bool(np.mean(fraud_v == NOT_APPLICABLE) >= 0.95)
 
         lo, hi = float(fraud_v.min()), float(fraud_v.max())
         below = float(np.sum((y == 0) & (v < lo)))

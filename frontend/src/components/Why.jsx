@@ -66,7 +66,7 @@ const READINGS = [
   },
   {
     key: 'days_since_account_activity',
-    unusual: (v) => v >= 21 && v < 900,
+    unusual: (v) => v >= 21,
     weight: 80,
     text: (v) => `The account had been **quiet for ${Math.round(v)} days** before this.`,
     meaning: 'Dormant, then suddenly active, is the classic takeover pattern.',
@@ -80,9 +80,10 @@ const READINGS = [
   },
   {
     key: 'beneficiary_first_seen_days',
-    unusual: (v) => v >= 900,
+    // 0 means brand new; -1 means there is no destination at all (card, cash).
+    unusual: (v) => v >= 0 && v < 1,
     weight: 70,
-    text: () => 'The destination account has **never been seen anywhere in the bank\'s traffic**.',
+    text: () => 'The destination account **first appeared in the bank\'s traffic within the last day**.',
     meaning: 'Brand-new receiving accounts are what mule networks are built from.',
   },
   {
@@ -94,7 +95,7 @@ const READINGS = [
   },
   {
     key: 'account_age_days',
-    unusual: (v) => v < 45,
+    unusual: (v) => v >= 0 && v < 45,
     weight: 55,
     text: (v) => `The account itself is only **${Math.round(v)} days old**.`,
     meaning: 'Very new accounts have no behaviour to compare against.',
@@ -124,19 +125,22 @@ function Rich({ children }) {
  * true, and together plainly confusing. The peak reading is the honest
  * case-level answer: *at its worst, this is what the account was doing.*
  */
+// For these, a SMALLER number is the more suspicious one: a brand-new payee,
+// a brand-new account. Everything else peaks at its maximum.
+const SMALLER_IS_WORSE = new Set(['beneficiary_first_seen_days', 'account_age_days'])
+
 function peakAcross(alerts) {
   if (!alerts?.length) return null
   const peak = {}
   for (const a of alerts) {
     for (const [k, v] of Object.entries(a.features || {})) {
       const n = Number(v)
-      if (!Number.isFinite(n)) continue
-      // NEVER_SEEN is a sentinel, not a large value — do not let it win a max.
-      const isSentinel = n >= 999
+      // -1 means "does not apply" (no payee on a card payment). It is not a
+      // reading, so it never competes with one.
+      if (!Number.isFinite(n) || n < 0) continue
       const current = peak[k]
       if (current === undefined) { peak[k] = n; continue }
-      if (isSentinel && current < 999) continue
-      peak[k] = Math.max(current, n)
+      peak[k] = SMALLER_IS_WORSE.has(k) ? Math.min(current, n) : Math.max(current, n)
     }
   }
   return peak
@@ -255,12 +259,11 @@ export function VersusNormal({ alerts, features, amountMinor }) {
     },
     {
       label: 'Account last used',
-      now: Number(features.days_since_account_activity) >= 900
+      now: Number(features.days_since_account_activity) < 0
         ? 'unknown'
         : `${Math.round(Number(features.days_since_account_activity))} days ago`,
       normal: 'active accounts are used weekly',
-      off: Number(features.days_since_account_activity) >= 21
-        && Number(features.days_since_account_activity) < 900,
+      off: Number(features.days_since_account_activity) >= 21,
     },
   ]
 

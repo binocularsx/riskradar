@@ -38,7 +38,7 @@ from __future__ import annotations
 import math
 from datetime import timedelta
 
-from .spec import FEATURE_NAMES, NEVER_SEEN_DAYS
+from .spec import FEATURE_NAMES, NOT_APPLICABLE, RATIO_CAP
 from .types import HistoryBundle, PriorTx, TxView
 
 
@@ -93,7 +93,7 @@ def amount_ratio_to_account_p95_30d(tx: TxView, h: HistoryBundle) -> float:
         # No approved history. Ratio is undefined, not infinite — a brand-new
         # account is handled by account_age_days, not by a fabricated spike.
         return 0.0
-    return round(tx.amount_minor / p95, 6)
+    return round(min(tx.amount_minor / p95, RATIO_CAP), 6)
 
 
 def txn_count_1h_account(tx: TxView, h: HistoryBundle) -> float:
@@ -115,7 +115,7 @@ def approved_value_ratio_24h_vs_daily_mean_30d(tx: TxView, h: HistoryBundle) -> 
     daily_mean_minor = sum(p.amount_minor for p in month) / 30.0
     if daily_mean_minor <= 0:
         return 0.0
-    return round(today_minor / daily_mean_minor, 6)
+    return round(min(today_minor / daily_mean_minor, RATIO_CAP), 6)
 
 
 def failed_attempts_1h_account(tx: TxView, h: HistoryBundle) -> float:
@@ -143,9 +143,16 @@ def distinct_beneficiaries_1h_account(tx: TxView, h: HistoryBundle) -> float:
 
 
 def beneficiary_is_new_to_account(tx: TxView, h: HistoryBundle) -> float:
-    """Has this account ever paid this destination before?"""
+    """Has this account ever paid this destination before?
+
+    D64: a payment with no beneficiary - every card and cash payment - used to
+    return 0.0, "paid before". That told the established-payee rule these were
+    familiar destinations, and it suppressed risk on 93.9% of card-testing fraud.
+    There is no destination to be new or familiar, so the answer is "not
+    applicable".
+    """
     if not tx.beneficiary_token:
-        return 0.0
+        return NOT_APPLICABLE
     priors = _within(h.account, tx, 24 * 90)
     return 0.0 if any(p.beneficiary_token == tx.beneficiary_token for p in priors) else 1.0
 
@@ -158,8 +165,12 @@ def beneficiary_first_seen_days(tx: TxView, h: HistoryBundle) -> float:
     another institution and we could never know its open date (§9.1). This is the
     honest version of the same signal, and it works for both rails.
     """
-    if not tx.beneficiary_token or h.beneficiary_first_seen_at is None:
-        return NEVER_SEEN_DAYS
+    if not tx.beneficiary_token:
+        return NOT_APPLICABLE
+    if h.beneficiary_first_seen_at is None:
+        # Present, and never seen before: brand new. Version 1.0.0 returned 999
+        # here, which read as a long-standing payee - the opposite of the truth.
+        return 0.0
     delta = tx.occurred_at - h.beneficiary_first_seen_at
     return round(max(0.0, delta.total_seconds() / 86400.0), 6)
 
@@ -184,7 +195,7 @@ def account_age_days(tx: TxView, _h: HistoryBundle) -> float:
     correct: an age column would change every night and silently rewrite history.
     """
     if tx.account_opened_at is None:
-        return NEVER_SEEN_DAYS
+        return NOT_APPLICABLE
     delta = tx.occurred_at - tx.account_opened_at
     return round(max(0.0, delta.total_seconds() / 86400.0), 6)
 
@@ -192,7 +203,7 @@ def account_age_days(tx: TxView, _h: HistoryBundle) -> float:
 def days_since_account_activity(tx: TxView, _h: HistoryBundle) -> float:
     """D20b. Dormant-then-active is the account-takeover shape."""
     if tx.last_activity_at is None:
-        return NEVER_SEEN_DAYS
+        return NOT_APPLICABLE
     delta = tx.occurred_at - tx.last_activity_at
     return round(max(0.0, delta.total_seconds() / 86400.0), 6)
 

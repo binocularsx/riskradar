@@ -18,7 +18,7 @@ from __future__ import annotations
 
 # Bumped whenever the meaning of any feature changes. Every decision record
 # stores the version that produced it, so a decision is reproducible (G4).
-FEATURE_SPEC_VERSION = "1.0.0"
+FEATURE_SPEC_VERSION = "1.1.0"  # D64: markers, ratio caps
 
 # D25 cut this from ~15 to 12 to pay for the identity work in D19a/D22.
 FEATURE_NAMES: tuple[str, ...] = (
@@ -42,7 +42,23 @@ ACCOUNT_HISTORY_DAYS = 30
 SUBJECT_HISTORY_DAYS = 30
 BENEFICIARY_LOOKBACK_DAYS = 90
 
-# Sentinel for "we have never seen this before". A large finite number rather
-# than NaN: tree models split on it cleanly and it survives JSON round-tripping
-# into the decision's feature snapshot.
-NEVER_SEEN_DAYS = 999.0
+# D64. "This does not apply" - no beneficiary on a card payment, no opening
+# date on an account we know nothing about.
+#
+# Version 1.0.0 used 999.0 for this, and it was wrong twice over. Real account
+# ages reach 2,629 days, so 999 sat *inside* the valid range and read as a
+# 2.7-year-old account. And for beneficiaries it read as "first seen 999 days
+# ago" - a long-standing, trusted payee - the opposite of the truth. Combined
+# with a second bug, that let the rule that *lowers* risk fire on 93.9% of
+# card-testing fraud.
+#
+# -1 is outside every real range (days and counts are never negative), so no
+# threshold rule can mistake it for a value, and trees still split on it
+# cleanly. A beneficiary that exists but has never been seen before is not
+# "not applicable" - it is brand new, and gets 0.
+NOT_APPLICABLE = -1.0
+
+# D64. Ratios are capped. "100 times your usual" is already as extreme as the
+# signal gets; uncapped values reached 14,045 and 421,388, which made the
+# explanation bars meaningless and would break any drift statistic.
+RATIO_CAP = 100.0

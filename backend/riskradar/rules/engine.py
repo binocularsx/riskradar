@@ -225,6 +225,11 @@ def established_payee_normal(ctx: RuleContext, params: dict[str, Any]) -> Signal
     min_age = float(params.get("min_beneficiary_age_days", 60))
     max_ratio = float(params.get("max_amount_ratio", 1.0))
 
+    # D64: no payee, no "established payee". The feature fix already makes this
+    # unreachable; the guard means a future feature bug cannot quietly bring
+    # back suppression on card and cash payments.
+    if not ctx.tx.beneficiary_token:
+        return None
     if float(ctx.features.get("beneficiary_is_new_to_account", 1.0)) != 0.0:
         return None
     age = float(ctx.features.get("beneficiary_first_seen_days", 0.0))
