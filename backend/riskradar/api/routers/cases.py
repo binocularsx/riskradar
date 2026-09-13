@@ -254,9 +254,23 @@ def case_detail(
                (SELECT display_name FROM users WHERE id = actor_user_id) AS actor
           FROM audit_log
          WHERE object_type = 'case' AND object_id = %s
+           AND action <> 'CASE_VIEWED'
          ORDER BY occurred_at
         """,
         (str(case_id),),
+    )
+
+    # D69k (base PRD FR-408): who looked at a customer's case is recorded, not
+    # only who changed it. A fraud desk can read anyone's payments, so reading
+    # is the access worth proving afterwards. Appended last, because the append
+    # takes the record's lock until this request commits.
+    chain.append(
+        conn,
+        actor_user_id=user["id"],
+        action="CASE_VIEWED",
+        object_type="case",
+        object_id=case_id,
+        payload={"alerts": len(alerts), "timeline_rows": len(timeline)},
     )
 
     return {

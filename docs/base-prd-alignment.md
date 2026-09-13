@@ -1,0 +1,248 @@
+# Risk Radar against the Enterprise Base PRD
+
+**Date:** 2026-09-13 · **Decisions:** D69–D69k in [decisions.md](decisions.md) · **Our PRD:** [PRD.md](PRD.md) §18
+
+The *Base PRD — Enterprise Fraud Intelligence Platform* is a reusable checklist for
+what a bank, fintech or switch should demand of a complete fraud platform. This
+document holds Risk Radar up against every numbered requirement in it and says,
+plainly, where we stand.
+
+## What it means for the project, in five points
+
+1. **It is a frame, not our scope.** The base PRD describes a platform a bank buys or
+   builds over twelve months. Risk Radar is a five-week, advisory, first version on
+   invented data (D1, D3, D4, D16). We use its requirement numbers so our work can be
+   traced into a bank's own evaluation, and we do not widen scope to chase all of it.
+2. **We disagree with it in two places, on purpose.** It asks the system to *block or
+   hold* payments before they complete (FR-301, FR-310, FR-311), and to blend rules
+   and models into *one weighted score* (FR-210). Risk Radar advises and never blocks
+   (D7), and keeps the rules, the model and the decision separate (D11). Both stay, and
+   the reasons are below (D69a, D69b).
+3. **We built what it ranks highest and we could do honestly now.** It says the first
+   question that ends a vendor conversation is *"show me false positives by rule, not in
+   aggregate."* That now exists (D69d), with an owner, a reason and a review date on
+   every rule (D69e), median time to resolve a case (D69f), and a permanent record of
+   who opened each case (D69k).
+4. **Its Nigerian requirements expose our largest gaps.** The regulator's clocks for
+   authorised-push-payment scams, screening money *coming in* as well as going out, and
+   events that are not payments (logins, new devices, SIM changes) are where a Nigerian
+   bank would find Risk Radar short (D69g, D69h).
+5. **It tells us which half of the market we are.** Its recommended default is
+   *hybrid*: buy the blocking, orchestration and case-workflow platform; build the
+   local fraud models on top, because vendors are *"weak at your fraud."* Risk Radar's
+   strongest work (the Nigerian event model, three local fraud patterns, testing on
+   fraud hidden from training) is exactly the half it says to build (D69j).
+
+## Coverage at a glance
+
+Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base PRD
+(acceptance criteria are shown in the tables but not counted).
+
+| Status | Count | Meaning |
+|---|---|---|
+| Met | 12 | Built and tested, 4 of them added for this review |
+| Partly | 40 | Some of it built; the missing part is named |
+| Not built | 35 | Absent; on the roadmap or waiting on a bank |
+| Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
+| Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
+| Not applicable | 3 | Assumes a live bank deployment |
+
+In short: Risk Radar fully meets about one requirement in eight and partly meets
+four in ten. That is the expected shape for a five-week first version of a platform
+the base PRD itself says takes twelve months, and it is why the five points above name
+the few gaps that matter most rather than all of them.
+
+---
+
+## 2. Objectives
+
+| ID | Objective | Status | Where Risk Radar stands |
+|---|---|---|---|
+| O1 | Stop fraud before settlement | Rejected for v1 | Advisory only (D7). We return ALLOW / MONITOR / REVIEW / HOLD beside every score as a seam for a bank to enforce. |
+| O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Not yet reduced on live outcomes. |
+| O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are not scored. |
+| O4 | Regulatory clocks met automatically | Not built | Only our own response clocks per severity. See D69g. |
+| O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve now measured (D69f). Cost per case not measured. |
+| O6 | Every decision defensible | Met | Every decision stores its rules' signals with evidence, the policy trace, feature attributions and the versions that produced it (D7a). |
+
+## 5.1 Data ingestion (FR-1xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-101 | Real-time events from every payment rail | Partly | One API accepts card, transfer, cash and wallet across NIP, NEFT, RTGS, card scheme, in-bank and ATM rails. Cheques absent; no live rail connected. |
+| FR-102 | Non-payment events: logins, resets, device binding, new payee, limit and SIM changes | Not built | The largest detection gap for account takeover (D69h). |
+| FR-103 | Device intelligence | Partly | Hashed device fingerprint and coarse region. No emulator, rooting or tampering signals. |
+| FR-104 | Behavioural biometrics | Not built | — |
+| FR-105 | Identity bureaus and registries | Not built | Needs a bank (D3). |
+| FR-106 | Rolling profiles per customer, account, device, payee, merchant, agent, IP | Partly | Account 30 days, customer 30 days, destination 90 days (feature spec 1.1.0). No merchant, agent or IP profiles. |
+| FR-107 | Streaming and batch, with replay for backtesting | Met | Batch endpoint; replayed history is scored without raising alerts (D8d). |
+| FR-108 | Data-quality monitoring | Partly | Invalid payloads go to a dead-letter table (FR-003); both event and arrival times are stored, so lateness is measurable. No automatic alerting. |
+| FR-109 | External threat intelligence feeds | Partly | Sanctioned and known-mule lists, managed by hand. No external feed. |
+
+## 5.2 Detection (FR-2xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-201 | Rules engine | Partly | Six rules including payment bursts and card testing (D25, D67). Amount, location and time-of-day rules not written; dormancy is a model input, not a rule. |
+| FR-202 | Supervised model on labelled outcomes | Partly | Calibrated gradient boosting (D60–D61), trained on simulator labels. Analyst outcomes are recorded as future labels (D13c) but not yet trained on. |
+| FR-203 | Unsupervised anomaly detection for novel patterns | Not built | Our own evidence argues for it: the model alone caught 0 of 194 card-testing incidents it had never seen (D69h). |
+| FR-204 | Graph and link analysis for rings and mules | Not built | Roadmap (D16). |
+| FR-205 | Scoring against the individual's own baseline | Met | Amount against the account's usual largest, today against a normal day, new device for this customer, new payee for this account. |
+| FR-206 | Session modelling to catch takeover in progress | Not built | Needs FR-102. |
+| FR-207 | Scam (APP) detection | Partly | First-time payee, unusual amount and bursts are measured. No session or "coached customer" signals; no dedicated scam pattern. |
+| FR-208 | Synthetic identity at onboarding | Not built | No onboarding events. |
+| FR-209 | Screening money coming in, not only going out | Not built | Only outgoing payments are scored (D69h). |
+| FR-210 | One weighted score with visible contributions | Rejected for v1 | Conflicts with D11. Its intent, visible contribution per component, is met by separate outputs and the policy trace (D69b). |
+| Accept. | A documented detection path and owner per top fraud type | Partly | Three fraud types, each with a measured path (D63–D67). |
+
+## 5.3 Decisioning (FR-3xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-301 | Approve / step-up / hold / decline before authorisation | Rejected for v1 | D7. Our four decision types map onto these, but nothing is enforced. |
+| FR-302 | Risk-based step-up authentication | Rejected for v1 | Requires enforcement. |
+| FR-303 | Policy per channel, product, segment and amount | Not built | One threshold set for all traffic. |
+| FR-304 | Business users change rules without a deployment | Partly | Enable, disable, retune and re-grade rules from the admin screen, versioned. A new kind of rule still needs code. |
+| FR-305 | Shadow mode on live traffic | Not built | Designed, not built (D16). A bank pilot should begin in shadow mode. |
+| FR-306 | Champion–challenger routing | Not built | — |
+| FR-307 | Threshold simulation with projected alert volume | Partly | `scripts/derive_thresholds.py` projects alerts a day and false alarms before publishing (D61b, D67c). Not on the admin screen. |
+| FR-308 | Versioning, maker–checker approval, rollback | Partly | Every change is a new audited version. No second approver; rollback is republishing an earlier version. |
+| FR-309 | Defined degraded mode | Partly | If the model fails the system runs on rules alone and raises an alarm (FR-017). Not configurable per channel. |
+| FR-310 | Action API: block card, freeze account, hold funds | Rejected for v1 | D7. |
+| FR-311 | Cooling-off delay on risky first-time transfers | Rejected for v1 | D7; enforcement. |
+
+## 5.4 Case management (FR-4xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-401 | Cases created with context assembled | Met | Timeline, account baseline, signals with evidence, attributions and a recommendation (FR-024). |
+| FR-402 | Risk-ranked queues and routing | Partly | Ranked by severity, money and lateness; "take next case" assigns it. No routing by skill or segment. |
+| FR-403 | Related alerts merged into one case | Partly | By customer within 24 hours (D13a, D19). Not across a ring of customers. |
+| FR-404 | In-case actions | Partly | Escalate, note, record outcome, assign, close. Block, refund and contact are advice to the analyst, not system actions (D7). |
+| FR-405 | Link-analysis view in the case | Not built | — |
+| FR-406 | Outcome labels feed model training | Partly | Recorded as labels (D13c); not yet used to retrain. |
+| FR-407 | Response clocks with breach alerting, mapped to regulatory clocks | Partly | Clocks per severity with a past-due state. No escalation when breached; not regulatory clocks; set in code (D69g). |
+| FR-408 | Tamper-evident record of decisions, overrides and data access | Met | Hash-chained record the application cannot edit, with a check endpoint. Case views are now recorded too (D69k). |
+| FR-409 | Evidence exchange with other banks | Not built | The hashed identifier is designed to travel (D9d). |
+| FR-410 | Customer message templates | Not built | — |
+| Accept. | Decide without opening another system | Met | For the three fraud types in scope. |
+
+## 5.5 Model and rule governance (FR-5xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-501 | Model registry | Partly | Version, artefact hash, feature-spec version, metrics, training and promotion dates, who promoted it. Training-data lineage is a simulator seed, not a snapshot. |
+| FR-502 | Drift monitoring | Not built | Training medians are stored with each model; no live comparison (D16). |
+| FR-503 | Retraining with a human approval gate | Partly | Retraining script and a promotion endpoint a person must call. Not scheduled. |
+| FR-504 | Rules inventory: owner, reason, approval, next review | Met | Built (D69e). |
+| FR-505 | False-positive rate per rule and per model | Met | Built (D69d), with 95% ranges and a thin-evidence flag. |
+| FR-506 | Dated tuning log with data, impact and sign-off | Partly | Every change is recorded with old and new values and now its reason; large changes are logged with evidence in decisions.md. No sign-off step. |
+| FR-507 | Flag rules with no owner or no firing | Met | Built (D69e). It found both risk-lowering rules silent in the demo (D69i). |
+| FR-508 | Bias testing on declined populations | Not built | No demographic data; nothing is declined. |
+| Accept. | Reproduce a decision from 18 months ago | Met | Each decision stores the rule, threshold, model and feature-spec versions that produced it (D7a). |
+
+## 5.6 Reporting (FR-6xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-601 | Executive loss dashboard | Not built | Money at risk is shown; loss, recovery and chargebacks need a bank. |
+| FR-602 | Operational dashboard | Met | Alerts against capacity, backlog, waiting times, workload per analyst, past-due cases, time to resolve. |
+| FR-603 | Detection performance per rule, model and fraud type | Partly | Per rule and model live (D69d); per fraud type offline in the held-out evaluation. Value saved not measured. |
+| FR-604 | Regulator-format exports | Not built | Needs a bank (D28). |
+| FR-605 | Ad-hoc query and export | Partly | Transaction search; no export. |
+| FR-606 | Board pack | Not built | — |
+
+## 5.7 Intelligence sharing (FR-7xx)
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| FR-701 | Industry watchlists in near real time | Partly | Lists exist; loaded by hand. |
+| FR-702 | Cross-institution signals | Not built | — |
+| FR-703 | Negative list with expiry, review and appeal | Partly | Add and remove, recorded. No expiry, review or appeal. |
+| FR-704 | Law-enforcement request API | Not built | — |
+
+## 5.8 Customer controls (FR-8xx)
+
+FR-801 to FR-805 (self-service limits, MFA on control changes, in-app fraud reports,
+"this wasn't me", in-flow scam warnings) are **out of scope**: they live in the bank's
+mobile and web channels, not in a fraud engine. One of them matters to us:
+**FR-803**, a customer's fraud report, is what starts the regulator's refund clock, so
+it is the event Risk Radar would need to receive (D69g).
+
+## 6. Non-functional
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| NFR-01 | p99 ≤ 300 ms, p50 ≤ 100 ms end to end | Partly | The scoring work itself is p50 14 ms, p95 23 ms. End to end, including the queue, it is p50 310 ms and p99 1,581 ms at 50 payments a second (qa-report). The target is for inline blocking; ours is asynchronous by design (D69c). |
+| NFR-02 | Throughput with headroom for 3× peaks | Partly | A 5× burst (250 a second for 60 seconds) lost nothing. Latency during the burst was not claimed. |
+| NFR-03 | 99.99% availability | Not applicable | One local machine (D26). Degraded mode is defined. |
+| NFR-04 | 100% of transactions scored | Met | Every accepted payment is queued and gets one decision; tested. |
+| NFR-05 | Reason codes on every decision | Met | See O6. |
+| NFR-06 | Data residency | Not applicable | Local only, invented data. |
+| NFR-07 | Security | Partly | Roles with separation of duties, hashed identifiers, two-step sign-in, Argon2 passwords, cookie sessions. No encryption at rest configured; no penetration test. |
+| NFR-08 | Retention | Partly | Policy set (D27); the record is never deleted. |
+| NFR-09 | Recovery point and time | Not built | — |
+| NFR-10 | First channel live in 90 days | Not applicable | No bank. |
+| NFR-11 | New data source in two weeks | Partly | One documented event contract; a new source maps to it. |
+| NFR-12 | Observability | Partly | Latency, queue depth, rule firings and active model exposed. Score distribution not exposed. |
+
+## 7.1 Nigeria (CBN and NIBSS)
+
+The clock values below are as the base PRD states them, from secondary sources.
+**Confirm each against the CBN circular before building anything on it.**
+
+| ID | Requirement | Status | Where Risk Radar stands |
+|---|---|---|---|
+| REG-NG-01 | Real-time fraud monitoring on all e-channels | Partly | That is what Risk Radar is, on invented data and advisory. |
+| REG-NG-02 | Identity checks at online opening and reactivation | Not built | Dormant-account reactivation is a model input, not an identity check. |
+| REG-NG-03 | BVN and NIN validation | Not built | The design already keeps BVN-level identity as a one-way hash (D19). |
+| REG-NG-04 | BVN watchlist, including the 24-hour temporary flag | Not built | Our lists work on destination accounts, not BVNs, and have no expiry (D69g). |
+| REG-NG-05 | Scam clocks: notify the other bank in 30 minutes, investigate in 14 working days, reimburse in 48 hours, refund in 16 working days | Not built | The most important regulatory gap (D69g). |
+| REG-NG-06 | Customer reporting window | Not built | — |
+| REG-NG-07 | NIBSS fraud reporting | Not built | Needs a bank (D28). |
+| REG-NG-08 | Controls on fraud proceeds received | Not built | See FR-209. |
+| REG-NG-09 | Fraud desk workflow and forum reporting | Partly | The desk workflow is built; forum reporting is not. |
+| REG-NG-10 | Customer opt-out of instant transfers | Out of scope | A channel control. |
+
+## 8. Integrations
+
+| ID | Integration | Status | Where Risk Radar stands |
+|---|---|---|---|
+| INT-01 | Core banking | Partly | Designed: account facts stamped at intake (D20, D22, core-banking-reference.md). Not connected. |
+| INT-02 | Card switch | Partly | Designed as the event source, the only place card declines are visible (D20). Not connected. |
+| INT-03 | Instant payments, both legs | Partly | Sending leg only. |
+| INT-04 | Digital channels with session and device context | Partly | Device and region only. |
+| INT-05 | Identity bureaus | Not built | — |
+| INT-06 | Contact centre | Not built | — |
+| INT-07 | Case workflow | Met | Native. |
+| INT-08 | Data lake | Not built | PostgreSQL and local corpus files. |
+| INT-09 | Security monitoring (SIEM) | Not built | Information security works inside Risk Radar. |
+| INT-10 | Customer notifications | Not built | Live alerts reach the dashboard only. |
+| INT-11 | Sanctions screening | Partly | A sanctioned-destination list that overrides everything (D11a). |
+
+---
+
+## The four questions that end sales conversations
+
+| Question | Our answer today |
+|---|---|
+| Show me false positives **by rule** | **Yes.** `GET /v1/metrics/detection` and the Analytics screen. The demo's figures are thin (36 decided cases) and say so. |
+| Show me a decision explained to an analyst in under 10 seconds | **Yes in design:** the recommendation and "why this was flagged" sit at the top of every case. Not yet timed with real analysts. |
+| Show me p99 latency at 3× peak | **No.** p99 is 1,581 ms at 1×. At 5× we proved zero loss, not latency. |
+| Show me which channel is live in month three | **Not applicable.** No bank. |
+
+## Phase plan and success metrics
+
+On the base PRD's phase plan, Risk Radar is **Phase 1 on invented data**: transfers
+and mobile scored, rules plus a first model, case management live, a false-alarm rate
+measured. Phase 0, a baseline from the bank's own history, cannot happen without a bank.
+
+| Base PRD metric | Risk Radar today |
+|---|---|
+| Fraud detection rate (by value) | Offline only: 0.892 of incidents on fraud hidden from training; 65% of fraud value on PaySim |
+| Fraud loss in basis points | Not applicable without real losses |
+| False-decline rate | Not applicable: nothing is declined. Closest measure: false-alarm rate per rule and model |
+| Alert-to-case precision | Measured from analyst outcomes (D69d) |
+| Mean time to resolution | Measured: median 116 minutes on the demo's 36 closed cases (D69f) |
+| Regulatory deadline adherence | Not built (D69g) |
+| Recovery rate, cost per case | Not measured |

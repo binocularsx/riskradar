@@ -67,6 +67,18 @@ RULES = [
     ),
 ]
 
+# D69e: the rules inventory. Every rule has an owner, a reason and a review date
+# (base PRD FR-504). Kept beside RULES so a new rule cannot be added without one.
+RULE_GOVERNANCE = {
+    "VELOCITY_BURST_1H": ("Chidera", "D67: a burst of 5+ payments in an hour to a destination new to the bank; 10+ with no destination. Speed alone was mostly traders.", "2026-09-11"),
+    "CARD_TESTING_PROBES": ("Chidera", "D21, D62b: refused small card attempts before a large one. Right 99.8% of the time.", "2026-09-09"),
+    "SANCTIONED_BENEFICIARY": ("Chidera", "D11a: a sanctioned destination is not a matter of probability.", "2026-09-09"),
+    "KNOWN_MULE_BENEFICIARY": ("Chidera", "D11a: a destination an analyst confirmed as fraudulent.", "2026-09-09"),
+    "PRE_REGISTERED_BENEFICIARY": ("Chidera", "D11a: the customer set this payee up on purpose; the main false-alarm control.", "2026-09-09"),
+    "ESTABLISHED_PAYEE_NORMAL": ("Chidera", "D64: a long-standing payee receiving a normal amount; never fires without a payee.", "2026-09-11"),
+}
+assert set(RULE_GOVERNANCE) == {code for code, *_ in RULES}, "every rule needs an owner (D69e)"
+
 # D11d/D24: these are placeholders until the calibrated model exists, at which
 # point scripts/derive_thresholds.py solves them backwards from the 120/day
 # alert budget against a held-out scored sample. Written down, versioned, and
@@ -136,12 +148,17 @@ def main() -> None:
                 )
                 ruleset_id = cur.fetchone()["id"]
                 for code, power, severity, params in RULES:
+                    owner, rationale, approved_at = RULE_GOVERNANCE[code]
                     cur.execute(
                         """
-                        INSERT INTO rule_configs (ruleset_id, code, power, severity, enabled, params)
-                        VALUES (%s, %s, %s, %s, true, %s)
+                        INSERT INTO rule_configs (ruleset_id, code, power, severity, enabled, params,
+                                                  owner, rationale, approved_by, approved_at,
+                                                  next_review_at)
+                        VALUES (%s, %s, %s, %s, true, %s, %s, %s, 'team decision log',
+                                %s::timestamptz, %s::timestamptz + interval '90 days')
                         """,
-                        (ruleset_id, code, power, severity, json.dumps(params)),
+                        (ruleset_id, code, power, severity, json.dumps(params),
+                         owner, rationale, approved_at, approved_at),
                     )
 
             # --- threshold set v1 ------------------------------------------

@@ -63,7 +63,7 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
 <body>
 <div class="wrap">
 
-  <div class="kicker">Risk Radar · work deliverables · backend and database · 11 September 2026</div>
+  <div class="kicker">Risk Radar · work deliverables · backend and database · updated 13 September 2026</div>
   <h1>Chidera's Deliverables</h1>
   <p class="lede">What Chidera owns, what is finished, what is still to do, and the number
   that says each item is done. The endpoints Paul's dashboard depends on are in the
@@ -93,8 +93,11 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
       <tr><td>Advice</td><td>Every case has an action, steps and a reason</td><td class="v">100%</td><td class="v">100%</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Advice</td><td>How often analysts follow the advice</td><td class="v">reported weekly</td><td class="v">recorded, not reported</td><td><span class="chip not">not yet</span></td></tr>
       <tr><td>Advice</td><td>Bank's own procedure loaded</td><td class="v">yes</td><td class="v">our playbook, replaceable</td><td><span class="chip part">partly</span></td></tr>
-      <tr><td>Dashboard</td><td>Endpoints the full dashboard needs</td><td class="v">all</td><td class="v">five gaps listed</td><td><span class="chip part">partly</span></td></tr>
-      <tr><td>Quality</td><td>Automated tests, against a real database</td><td class="v">all pass</td><td class="v">91 pass</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Dashboard</td><td>Endpoints the full dashboard needs</td><td class="v">all</td><td class="v">four gaps listed</td><td><span class="chip part">partly</span></td></tr>
+      <tr><td>Governance</td><td>False alarms per rule and per model (base PRD FR-505)</td><td class="v">reported</td><td class="v">built; demo evidence thin</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Governance</td><td>Every rule has an owner, reason and review date (FR-504)</td><td class="v">all</td><td class="v">all six</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Record</td><td>Who opened each case is recorded (FR-408)</td><td class="v">every view</td><td class="v">every view</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Quality</td><td>Automated tests, against a real database</td><td class="v">all pass</td><td class="v">103 pass</td><td><span class="chip met">met</span></td></tr>
     </tbody>
   </table>
 
@@ -108,16 +111,17 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
     <li><strong>Recommendation engine.</strong> One action, numbered steps and a reason for every case, from a written playbook; the analyst's choice of whether they followed it is saved with every outcome.</li>
     <li><strong>Sign-in, roles and the record.</strong> Four roles, server-side sessions in a cookie scripts cannot read, two-step sign-in, and a permanent record where every entry is chained to the last; a check endpoint proves nothing was altered.</li>
     <li><strong>Live alerts.</strong> A stream that replays anything missed after a dropped connection, so the dashboard never loses an alert.</li>
+    <li><strong>Governance from the base PRD review (D69).</strong> False alarms per rule and per model with 95% ranges; a rules inventory with owners, reasons, review dates and flags for rules with no owner, an overdue review or no firing; median time to resolve; and a record of every case view.</li>
     <li><strong>Demo builder.</strong> Rebuilds a believable desk in about ten minutes; outcomes follow the simulator's truth (D66a) and the live day continues the same bank (D68).</li>
   </ul>
 
   <h2>Still to do</h2>
 
   <div class="task">
-    <h3><span class="n">1</span> Close the five API gaps the full dashboard needs <span class="chip part">agreed with Paul</span></h3>
+    <h3><span class="n">1</span> Close the four API gaps the full dashboard needs <span class="chip part">agreed with Paul</span></h3>
     <dl>
       <dt>Why</dt><dd>The shareable Risk Radar Desk design has views the current API cannot fully feed. Each gap, with its proposed endpoint, is in the <em>Dashboard API Contract</em>.</dd>
-      <dt>What</dt><dd>Advice-followed rate on the operations metrics; the model's evaluation figures for the administrator; an "escalated to" filter for information security; dormancy on worklist items; "turned into alerts" counts per rule.</dd>
+      <dt>What</dt><dd>Advice-followed rate on the operations metrics; the model's evaluation figures for the administrator; an "escalated to" filter for information security; dormancy on worklist items. ("Turned into alerts" per rule is done.)</dd>
       <dt>Done when</dt><dd>Each field exists, has a test, and Paul confirms the screen reads it with no workaround.</dd>
     </dl>
   </div>
@@ -158,6 +162,15 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
     </dl>
   </div>
 
+  <div class="task">
+    <h3><span class="n">6</span> Prepare the Nigerian regulatory clocks <span class="chip not">design only</span></h3>
+    <dl>
+      <dt>Why</dt><dd>The enterprise base PRD's largest Nigerian gap: scam-refund clocks (notify the receiving bank in 30 minutes, refund within 16 working days of first report, as that PRD states them) and a BVN watchlist with a 24-hour temporary flag (D69g).</dd>
+      <dt>What</dt><dd>Confirm the clock values against the CBN circular with Kanyinsola; then design clocks as versioned configuration rather than code, with a case field for the customer's first report time.</dd>
+      <dt>Done when</dt><dd>A reviewed design with confirmed values and their source is in the decision log. Building it waits for scope agreement.</dd>
+    </dl>
+  </div>
+
   <h2>Rules Chidera works under</h2>
   <ul>
     <li><strong>Advisory only.</strong> Nothing Risk Radar does blocks, holds or reverses a payment.</li>
@@ -170,7 +183,7 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
   <footer>
     Sources: <span class="mono">docs/qa-report.md</span> (NFR-001, NFR-002), <span class="mono">backend/riskradar/api/</span>,
     <span class="mono">backend/riskradar/security/rbac.py</span>, decisions D9–D68 in <span class="mono">docs/decisions.md</span>.
-    Companions: Dashboard API Contract, Ire's Deliverables, Risk Radar Blueprint.
+    Companions: Dashboard API Contract, Ire's Deliverables, Risk Radar Blueprint, base-prd-alignment.md.
   </footer>
 </div>
 </body>

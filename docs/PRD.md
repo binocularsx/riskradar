@@ -2,8 +2,8 @@
 
 **Product:** Risk Intelligence — Real-Time Transaction Fraud Detection System
 **Group:** RiskRadar
-**Version:** 1.2
-**Date:** 2026-09-09
+**Version:** 1.3
+**Date:** 2026-09-13
 **Owner:** Kanyinsola (PM & Documentation Lead)
 **Status:** **Built and measured.** Scope frozen after Week 1; all open questions closed. §17 records settled parameters and the figures they were verified against. Results in [qa-report.md](qa-report.md).
 
@@ -14,6 +14,8 @@
 This PRD supersedes the scope sections of the *Note of Concept* and the *Implementation Plan* wherever they conflict. Every design decision below is recorded with its rationale in [decisions.md](decisions.md).
 
 Three specific corrections to the earlier documents are marked **[CORRECTION]** inline.
+
+**v1.3 amendments (2026-09-13).** Risk Radar was mapped against a reusable *Enterprise Fraud Intelligence Platform* base PRD (§18, [base-prd-alignment.md](base-prd-alignment.md), decisions **D69–D69k**). Four requirements were added and built: FR-025, FR-035, FR-043, FR-044. Two base requirements are rejected for v1 because they conflict with D7 and D11. **No scope grew.**
 
 **v1.1 amendments (2026-09-09).** Learning that the target bank runs a Finacle core banking system prompted a review of the identity model and the assumed event source. Two design defects were found and corrected — see §6.1, §6.2 and the new §9.1, recorded as decisions **D18–D20**. **No scope changed.** Supporting detail is in [core-banking-reference.md](core-banking-reference.md).
 
@@ -245,6 +247,7 @@ OPEN --> UNDER_REVIEW --> { CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE } --
 | FR-021 | Alerts correlate into cases by subject within the correlation window | Must |
 | FR-022 | Analysts can open, review, annotate, escalate and set outcomes per the state machine and their role | Must |
 | FR-023 | Every state transition is audited with actor, timestamp, from-state and to-state | Must |
+| FR-025 | Opening a case is recorded in the audit log with the viewer and time; views are kept out of the case's own history panel [v1.3, base FR-408] | Must |
 | FR-024 | Case detail shows all correlated alerts, triggered signals with evidence, model attributions, the customer's behavioural baseline, and **the subject's full transaction timeline across the correlation window — alerted and un-alerted alike** [v1.2] | Must |
 
 ### 7.4 Dashboard
@@ -256,6 +259,7 @@ OPEN --> UNDER_REVIEW --> { CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE } --
 | FR-032 | Transaction volume is presented as aggregates and charts on a fixed interval, plus a searchable table — **not** a live feed of every transaction | Must |
 | FR-033 | Queue is sortable by score and filterable by risk level, channel and state | Must |
 | FR-034 | Alert volume, case outcomes and model metrics are shown **within the FR-032 aggregate charts — no separate metrics screen** [v1.2] | Should |
+| FR-035 | The operations view shows median and mean time from opening to closing a case, over the last 7 days [v1.3, base §10] | Should |
 
 ### 7.5 Administration
 
@@ -264,6 +268,8 @@ OPEN --> UNDER_REVIEW --> { CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE } --
 | FR-040 | ADMIN can enable/disable rules and change thresholds without a code change | Must |
 | FR-041 | Every threshold or rule change is audited with actor, old value and new value | Must |
 | FR-042 | Threshold sets are versioned; decisions record the version that applied | Must |
+| FR-043 | Every rule carries an owner, rationale, approval date and next-review date, kept across versions; rules with no owner, an overdue review, or no firing in 30 days are flagged. A change may carry its reason, which restarts a 90-day review [v1.3, base FR-504, FR-507] | Must |
+| FR-044 | False-alarm rate is reported **per rule and for the model alone**, from analyst outcomes, with 95% ranges and a thin-evidence flag [v1.3, base FR-505] | Must |
 
 ---
 
@@ -520,6 +526,11 @@ Carried forward from the Implementation Plan, re-rated after this review.
 | OIDC / bank SSO | Bank engagement |
 | NDPA retention schedule and lawful-basis assessment | **Before any real data is ingested** |
 | CBN / NIBSS / NFIU reporting | Bank engagement |
+| Nigerian scam-refund clocks and BVN watchlist (base REG-NG-04/05/06), as versioned configuration | Clock values confirmed against the CBN circular (D69g) |
+| Non-payment events: login, device binding, new payee, SIM change (base FR-102) | Event contract extended with the channel team (D69h) |
+| Screening incoming payments for mule proceeds (base FR-209, REG-NG-08) | Receiving-leg feed from the switch (D69h) |
+| Unsupervised anomaly layer as a novelty safety net (base FR-203) | Held-out evaluation arm shows it adds recall inside the budget (D69h) |
+| Maker–checker approval on rule and threshold changes (base FR-308) | Before any bank pilot |
 
 ---
 
@@ -559,6 +570,7 @@ The synthetic world the system is tuned against. Every threshold, every budget a
 | **Alert budget** | **120 alerts/day** |
 | Implied alert rate | **0.12%** of transactions |
 | Expected mix at budget | ~60 alerts on true incidents, ~60 false positives — ~50% incident-level precision |
+| **Measured on the demo, 2026-09-13** | Far below that expectation: of 36 decided cases, 2 were confirmed fraud. The demo has about 3 fraud incidents a day and its familiar-payee rule cannot fire on 3 days of history (D69i), so the budget is spent mostly on false alarms. Per-rule figures are thin (FR-044) and a smaller budget is the team's open choice (D67c) |
 | Headline recall metric | **Incident-level**, per §12.3 |
 
 ### 17.4 Hosting
@@ -566,3 +578,16 @@ The synthetic world the system is tuned against. Every threshold, every budget a
 **Local only.** Docker Compose on a single machine, with a seeded database snapshot committed as a demo fixture. Not a fallback — the primary and only path.
 
 *Why:* the Implementation Plan rates hosting or internet failure during the defence as Medium/High, and its contingency plan already requires a fully local path to exist. Once that path exists and is rehearsed, a cloud deployment adds a second thing to fail on the day and proves nothing the local run does not. Committing to local **deletes** the risk instead of mitigating it, and buys back the Week 5 time that deployment would have consumed.
+
+---
+
+## 18. Alignment with the enterprise base PRD [v1.3]
+
+A reusable *Base PRD — Enterprise Fraud Intelligence Platform* sets out what a bank, fintech or switch should demand of a full fraud platform. Every one of its 102 numbered requirements is mapped, with evidence, in [base-prd-alignment.md](base-prd-alignment.md). The result: **12 met, 40 partly, 35 not built, 6 rejected for v1, 6 out of scope, 3 not applicable.**
+
+- **Adopted as a traceability frame, not as scope** (D69). Its requirement IDs let this work be traced into a bank's evaluation; D1, D3, D4 and D16 are unchanged.
+- **Rejected for v1:** blocking or holding payments before authorisation (base FR-301, FR-302, FR-310, FR-311) because Risk Radar is advisory (D7, D69a); and one weighted score across rules and model (base FR-210) because it destroys calibration (D11, D69b).
+- **Not adopted for v1:** the p99 ≤ 300 ms latency target, which is for inline blocking. Our scoring step fits it (p95 23 ms); the asynchronous queue does not, by design (D69c).
+- **Built in response:** FR-025, FR-035, FR-043 and FR-044 above (D69d, D69e, D69f, D69k).
+- **Largest remaining gaps**, now on the roadmap in §16: Nigerian regulatory clocks and the BVN watchlist (D69g); non-payment events, incoming-payment screening and an unsupervised safety net (D69h).
+- **Positioning** (D69j): the base PRD recommends a hybrid, buying the decisioning and case platform and building local fraud models on top. Risk Radar's strongest work is that second half.

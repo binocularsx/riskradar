@@ -64,7 +64,7 @@ footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 10px;
 <body>
 <div class="wrap">
 
-  <div class="kicker">Risk Radar · shared between Chidera (backend) and Paul (frontend) · 11 September 2026</div>
+  <div class="kicker">Risk Radar · shared between Chidera (backend) and Paul (frontend) · updated 13 September 2026</div>
   <h1>Dashboard API Contract</h1>
   <p class="lede">Every endpoint the dashboard calls, what each role may call, and the exact
   fields that come back — so the screens Paul builds and the server Chidera runs match,
@@ -127,7 +127,7 @@ footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 10px;
       <tbody>
         <tr><td class="ep"><b>GET</b> /v1/worklist</td><td class="f">scope = all | mine | unassigned | breaching; risk_level?; limit ≤ 200 (default 60)</td><td class="f">items[]: id, customer_name, risk_level, exposure_minor, attempted_minor, alert_count, distinct_beneficiaries, declined_count, new_device, channels[], signal_codes[], state, assignee_id, assignee_name, escalated_to, opened_at, last_alert_at, age_minutes, sla_state (OK | DUE | BREACHED), sla_remaining_minutes (negative = overdue), priority, recommendation { action, because, urgency: now | soon | routine, disposition_hint }<br>summary: open_cases, total_exposure_minor, breaching, due_soon, unassigned, mine · total</td></tr>
         <tr><td class="ep"><b>POST</b> /v1/worklist/next</td><td class="f">—</td><td class="f">{ case, resumed } — the highest-priority case, now assigned to the caller; 409 if taken in the same instant</td></tr>
-        <tr><td class="ep"><b>GET</b> /v1/cases/{id}</td><td class="f">—</td><td class="f">alerts[]: id, risk_level, amount_minor, channel, auth_result, occurred_at, signals[], features{12}, policy_trace[], attributions{}, rule_only_mode, model_name, model_version, ruleset_version, threshold_version, feature_spec_version<br>timeline[]: occurred_at, amount_minor, channel, auth_result, alerted<br>baseline[]: account_token, product_type, txn_30d, approved_value_30d_minor · notes[] · history[]</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/cases/{id}</td><td class="f">—</td><td class="f">Opening a case writes CASE_VIEWED to the permanent record; views are left out of history[].<br>alerts[]: id, risk_level, amount_minor, channel, auth_result, occurred_at, signals[], features{12}, policy_trace[], attributions{}, rule_only_mode, model_name, model_version, ruleset_version, threshold_version, feature_spec_version<br>timeline[]: occurred_at, amount_minor, channel, auth_result, alerted<br>baseline[]: account_token, product_type, txn_30d, approved_value_30d_minor · notes[] · history[]</td></tr>
         <tr><td class="ep"><b>POST</b> /v1/cases/{id}/disposition</td><td class="f">{ outcome: CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE, note?, close, followed_recommendation }</td><td class="f">{ case_id, outcome, closed, steps[] } — closed is true only if the caller may close; otherwise the case waits for a lead. steps lists the state changes made</td></tr>
         <tr><td class="ep"><b>POST</b> /v1/cases/{id}/review</td><td class="f">—</td><td class="f">take an unassigned case ("Take this case")</td></tr>
         <tr><td class="ep"><b>POST</b> /v1/cases/{id}/notes</td><td class="f">{ body } (1–4,000 characters)</td><td class="f">the updated case</td></tr>
@@ -144,7 +144,8 @@ footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 10px;
     <table>
       <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
       <tbody>
-        <tr><td class="ep"><b>GET</b> /v1/metrics/operations</td><td class="f">—</td><td class="f">backlog[]: risk_level, cases, exposure_minor, avg_age_minutes · ageing[]: bucket (under 30m … over 24h), cases · analysts[]: display_name, role, open_cases, closed_24h · outcomes[]: outcome, n · decided · false_positive_rate · sla_minutes { CRITICAL 15, HIGH 30, MEDIUM 240, LOW 1440 }</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/metrics/operations</td><td class="f">—</td><td class="f">backlog[]: risk_level, cases, exposure_minor, avg_age_minutes · ageing[]: bucket (under 30m … over 24h), cases · analysts[]: display_name, role, open_cases, closed_24h · outcomes[]: outcome, n · decided · false_positive_rate · sla_minutes { CRITICAL 15, HIGH 30, MEDIUM 240, LOW 1440 } · resolution { closed_7d, median_minutes, mean_minutes }</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/metrics/detection</td><td class="f">days = 1 … 365 (default 30)</td><td class="f">window_days · decided_cases · min_decided_for_evidence (30)<br>by_driver[]: driver (a rule code, or MODEL), cases, confirmed_fraud, false_positive, inconclusive, precision, precision_ci95 [low, high], false_alarm_rate, enough_evidence — noisiest first<br>rules[]: code, power, fired, on_alerts, and for SUPPRESS rules lowered_risk_on_confirmed_fraud_customers</td></tr>
         <tr><td class="ep"><b>GET</b> /v1/metrics/overview</td><td class="f">hours = 1 … 720 (default 24)</td><td class="f">alert_volume[]: bucket (hour), risk_level, alerts · alert_budget { per_day, last_24h, utilisation } · transaction_volume[]: bucket, transactions, approved, declined · risk_mix[] · case_outcomes[] · signal_frequency[]: code, power, n · latency { p95_ms, scored, rule_only } · queue { depth, oldest_seconds } · active_model</td></tr>
         <tr><td class="ep"><b>POST</b> /v1/cases/{id}/assign</td><td class="f">{ assignee_id | null }</td><td class="f">the updated case</td></tr>
         <tr><td class="ep"><b>POST</b> /v1/cases/{id}/close</td><td class="f">—</td><td class="f">the closed case (signs off an analyst's outcome)</td></tr>
@@ -173,13 +174,14 @@ footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 10px;
     <table>
       <thead><tr><th>Endpoint</th><th>Send</th><th>Fields the screen reads</th></tr></thead>
       <tbody>
-        <tr><td class="ep"><b>GET</b> · <b>PATCH</b> /v1/admin/rules[/{code}]</td><td class="f">{ enabled?, params?, severity? }</td><td class="f">the active ruleset's version, and each rule's code, power, severity, enabled, params — every change makes a new audited ruleset version</td></tr>
+        <tr><td class="ep"><b>GET</b> · <b>PATCH</b> /v1/admin/rules[/{code}]</td><td class="f">{ enabled?, params?, severity?, rationale?, owner? }</td><td class="f">the active ruleset's version, and each rule's code, power, severity, enabled, params, owner, rationale, approved_by, approved_at, next_review_at, fired_30d, and the flags orphaned, review_overdue, dormant. A change with a rationale restarts the 90-day review; every change makes a new audited ruleset version</td></tr>
         <tr><td class="ep"><b>GET</b> · <b>POST</b> /v1/admin/thresholds</td><td class="f">{ p_monitor, p_review, p_hold, alert_min_level = MEDIUM, notes? }</td><td class="f">the active set and its history</td></tr>
         <tr><td class="ep"><b>GET</b> · <b>POST</b> · <b>DELETE</b> /v1/admin/lists</td><td class="f">kind = SANCTIONED | KNOWN_MULE | ALLOWLIST; { kind, beneficiary_account_id, account_id?, note? }</td><td class="f">list entries (tokens, never readable numbers)</td></tr>
         <tr><td class="ep"><b>GET</b> /v1/admin/models · <b>POST</b> /models/promote</td><td class="f">{ model_version_id, comparison? }</td><td class="f">versions, calibration, metrics, which is active</td></tr>
         <tr><td class="ep"><b>GET</b> · <b>POST</b> /v1/admin/users · <b>POST</b> /api-keys</td><td class="f">—</td><td class="f">accounts and simulator keys</td></tr>
         <tr><td class="ep"><b>GET</b> /v1/admin/audit · /audit/verify</td><td class="f">object_type?, object_id?</td><td class="f">the permanent record, and whether its chain is intact</td></tr>
         <tr><td class="ep"><b>GET</b> /v1/metrics/overview</td><td class="f">hours</td><td class="f">signal_frequency, latency, queue, alert_budget</td></tr>
+        <tr><td class="ep"><b>GET</b> /v1/metrics/detection</td><td class="f">days</td><td class="f">false alarms by rule and by the model alone, as in the ops lead view</td></tr>
       </tbody>
     </table>
   </div>
@@ -213,7 +215,8 @@ footer { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 10px;
       <tr><td>2</td><td>Admin: "who catches what" and the calibration chart</td><td>held in the model's evaluation file; shape not fixed in the API</td><td class="f">GET /v1/admin/models/{id}/evaluation → per_type[], calibration_bins[]</td><td>Chidera</td></tr>
       <tr><td>3</td><td>InfoSec: their queue without filtering in the browser</td><td>escalated_to on items, no filter</td><td class="f">GET /v1/worklist?escalated_to=INFOSEC</td><td>Chidera</td></tr>
       <tr><td>4</td><td>InfoSec: dormant accounts visible in the list</td><td>only inside case detail</td><td class="f">worklist item → dormant_days</td><td>Chidera</td></tr>
-      <tr><td>5</td><td>Admin: rule fired vs turned into an alert</td><td>signal_frequency has n only</td><td class="f">signal_frequency[] → on_alerts</td><td>Chidera</td></tr>
+      <tr><td>5</td><td>Admin: rule fired vs turned into an alert</td><td>available</td><td class="f">GET /v1/metrics/detection → rules[].on_alerts</td><td>Chidera <span class="chip met">done</span></td></tr>
+      <tr><td>7</td><td>Admin and lead: false alarms per rule and model; rule owners and review dates</td><td>available</td><td class="f">GET /v1/metrics/detection · GET /v1/admin/rules (D69d, D69e)</td><td>Chidera <span class="chip met">done</span></td></tr>
       <tr><td>6</td><td>Ops lead: alerts per hour against capacity</td><td>available (alert_volume + alert_budget)</td><td class="f">— chart built on Operations</td><td>Paul <span class="chip met">done</span></td></tr>
     </tbody>
   </table>

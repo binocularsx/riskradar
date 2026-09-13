@@ -439,6 +439,22 @@ def operations(
     decided = sum(int(o["n"]) for o in outcomes) or 1
     false_positives = sum(int(o["n"]) for o in outcomes if o["outcome"] == "FALSE_POSITIVE")
 
+    # D69f (base PRD §10, O5): time to resolve, from opening to closing. The
+    # median, because one case left over a weekend would drag a mean around.
+    resolution = _rows(
+        conn,
+        """
+        SELECT count(*) AS closed_7d,
+               percentile_disc(0.5) WITHIN GROUP (
+                   ORDER BY EXTRACT(EPOCH FROM (closed_at - opened_at)) / 60.0) AS median_minutes,
+               round(avg(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 60.0)) AS mean_minutes
+          FROM cases
+         WHERE state = 'CLOSED' AND closed_at > now() - interval '7 days'
+        """,
+    )[0]
+    if resolution["median_minutes"] is not None:
+        resolution["median_minutes"] = round(float(resolution["median_minutes"]))
+
     return {
         "backlog": backlog,
         "ageing": ageing,
@@ -447,4 +463,5 @@ def operations(
         "false_positive_rate": round(false_positives / decided, 3),
         "decided": decided,
         "sla_minutes": triage.SLA_MINUTES,
+        "resolution": resolution,
     }

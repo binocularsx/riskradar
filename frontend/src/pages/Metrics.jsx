@@ -22,6 +22,58 @@ function hour(value) {
   return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
+const DRIVER_NAME = {
+  MODEL: 'The model alone',
+  VELOCITY_BURST_1H: 'Burst of payments to a new destination',
+  CARD_TESTING_PROBES: 'Card-testing probes',
+  SANCTIONED_BENEFICIARY: 'Sanctioned destination',
+  KNOWN_MULE_BENEFICIARY: 'Known mule destination',
+}
+
+/**
+ * False alarms per rule and per model, from analyst outcomes (D69d, base PRD
+ * FR-505). An aggregate rate hides the one rule that is drowning the desk.
+ */
+function FalseAlarmsByDriver({ detection }) {
+  const rows = detection.by_driver
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h2>False alarms by rule and by model</h2>
+      <p className="dim" style={{ fontSize: 12, marginTop: -6 }}>
+        Decided cases in the last {detection.window_days} days, by what put them in front of an
+        analyst. A case where two rules fired counts for both; "can't tell" is left out of the rate.
+      </p>
+      {rows.length ? (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Raised by</th><th className="num">Cases</th><th className="num">Fraud</th>
+                  <th className="num">False alarm</th><th className="num">Can't tell</th>
+                  <th className="num">Right</th><th>95% range</th><th>Evidence</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.driver}>
+                  <td>{DRIVER_NAME[r.driver] || r.driver}</td>
+                  <td className="num">{r.cases}</td>
+                  <td className="num">{r.confirmed_fraud}</td>
+                  <td className="num">{r.false_positive}</td>
+                  <td className="num">{r.inconclusive}</td>
+                  <td className="num">{r.precision == null ? '—' : `${Math.round(r.precision * 100)}%`}</td>
+                  <td className="mono dim">{r.precision_ci95 ? `${Math.round(r.precision_ci95[0] * 100)}–${Math.round(r.precision_ci95[1] * 100)}%` : '—'}</td>
+                  <td>{r.enough_evidence
+                    ? <span className="muted">enough</span>
+                    : <span className="risk risk-MEDIUM">thin — under {detection.min_decided_for_evidence} cases</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <Empty>No decided cases in this window.</Empty>}
+    </div>
+  )
+}
+
 /**
  * Aggregates (FR-032, FR-034).
  *
@@ -32,6 +84,7 @@ function hour(value) {
 export default function Metrics() {
   const [hours, setHours] = useState(24)
   const [data, setData] = useState(null)
+  const [detection, setDetection] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
@@ -39,6 +92,7 @@ export default function Metrics() {
     api.overview(hours)
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(e.message))
+    api.detection(30).then((d) => !cancelled && setDetection(d)).catch(() => {})
     const timer = setInterval(() => {
       api.overview(hours).then((d) => !cancelled && setData(d)).catch(() => {})
     }, 15000)  // a fixed refresh interval, not a socket (D14b)
@@ -208,6 +262,8 @@ export default function Metrics() {
           </p>
         </div>
       </div>
+
+      {detection && <FalseAlarmsByDriver detection={detection} />}
 
       <div className="card" style={{ marginTop: 16 }}>
         <h2>Decision mix</h2>

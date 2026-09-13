@@ -148,6 +148,19 @@ export default function Operations() {
           <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>of {decided} decided cases</div>
         </div>
         <div className="deskstat" style={{ minWidth: 0 }}>
+          <div className="badge">⧗</div>
+          <div className="k">Time to resolve</div>
+          <div className="v">
+            {data.resolution?.median_minutes == null ? '—'
+              : data.resolution.median_minutes >= 60
+                ? `${Math.floor(data.resolution.median_minutes / 60)}h ${data.resolution.median_minutes % 60}m`
+                : `${data.resolution.median_minutes}m`}
+          </div>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
+            median, {data.resolution?.closed_7d ?? 0} cases closed in 7 days
+          </div>
+        </div>
+        <div className="deskstat" style={{ minWidth: 0 }}>
           <div className="badge">◷</div>
           <div className="k">Oldest work</div>
           <div className="v" style={{ fontSize: 22 }}>

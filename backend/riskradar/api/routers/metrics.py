@@ -16,6 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
+from ...cases import performance
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 
@@ -152,6 +153,90 @@ def overview(
             "utilisation": round(today / budget, 3) if budget else None,
         },
         "active_model": model[0] if model else None,
+    }
+
+
+@router.get("/metrics/detection")
+def detection(
+    days: int = Query(30, ge=1, le=365),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """False alarms per rule and per model, from analyst outcomes (D69d).
+
+    Base PRD FR-505: an aggregate false-positive rate hides the one rule that is
+    drowning the desk. ``by_driver`` answers "which rule, or the model, put
+    cases in front of analysts, and how often were they right". ``rules``
+    answers, per rule, how often it fired and how often that became an alert;
+    for suppressing rules, how often it lowered risk on a customer who had a
+    confirmed fraud case within a day either side, which is the closest this
+    system can get to a missed-fraud count without labels on every payment.
+    """
+    window = f"{days} days"
+    alert_rows = _rows(
+        conn,
+        f"""
+        SELECT a.case_id, c.outcome, d.signals
+          FROM alerts a
+          JOIN cases c     ON c.id = a.case_id
+          JOIN decisions d ON d.id = a.decision_id
+         WHERE c.outcome IS NOT NULL
+           AND c.opened_at > now() - interval '{window}'
+        """,
+    )
+    decided_cases = len({r["case_id"] for r in alert_rows})
+
+    rules = _rows(
+        conn,
+        f"""
+        SELECT s->>'code' AS code, s->>'power' AS power,
+               count(*) AS fired,
+               count(*) FILTER (WHERE a.id IS NOT NULL) AS on_alerts
+          FROM decisions d
+          JOIN transactions t ON t.id = d.transaction_id
+          LEFT JOIN alerts a ON a.decision_id = d.id,
+               jsonb_array_elements(d.signals) s
+         WHERE d.decided_at > now() - interval '{window}'
+           -- Replayed history is scored but can never alert (D8d); counting it
+           -- would make a rule look as if it fired without consequence.
+           AND t.raise_alerts
+         GROUP BY 1, 2
+         ORDER BY fired DESC
+        """,
+    )
+    suppressed_on_fraud = {
+        r["code"]: int(r["n"])
+        for r in _rows(
+            conn,
+            f"""
+            SELECT s->>'code' AS code, count(*) AS n
+              FROM decisions d
+              JOIN transactions t ON t.id = d.transaction_id,
+                   jsonb_array_elements(d.signals) s
+             WHERE s->>'power' = 'SUPPRESS'
+               AND d.decided_at > now() - interval '{window}'
+               AND EXISTS (
+                   SELECT 1 FROM cases c
+                    WHERE c.subject_token = t.subject_token
+                      AND c.outcome = 'CONFIRMED_FRAUD'
+                      AND c.opened_at BETWEEN t.occurred_at - interval '24 hours'
+                                          AND t.occurred_at + interval '24 hours')
+             GROUP BY 1
+            """,
+        )
+    }
+    for rule in rules:
+        rule["fired"] = int(rule["fired"])
+        rule["on_alerts"] = int(rule["on_alerts"])
+        if rule["power"] == "SUPPRESS":
+            rule["lowered_risk_on_confirmed_fraud_customers"] = suppressed_on_fraud.get(rule["code"], 0)
+
+    return {
+        "window_days": days,
+        "decided_cases": decided_cases,
+        "min_decided_for_evidence": performance.MIN_DECIDED_FOR_EVIDENCE,
+        "by_driver": performance.by_driver(alert_rows),
+        "rules": rules,
     }
 
 

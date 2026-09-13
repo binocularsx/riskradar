@@ -201,6 +201,11 @@ class RuleUpdateIn(Strict):
     enabled: bool | None = None
     params: dict | None = None
     severity: RiskLevel | None = None
+    # D69e (base PRD FR-504, FR-506): why the change was made. When given it
+    # becomes the rule's rationale, restarts its 90-day review clock, and is
+    # written into the permanent record with the change.
+    rationale: Annotated[str | None, Field(max_length=2000)] = None
+    owner: Annotated[str | None, Field(max_length=200)] = None
 
 
 class ThresholdsIn(Strict):

@@ -53,22 +53,21 @@ function useAsync(fn, deps = []) {
 function Rules() {
   const { data, error, reload, setError } = useAsync(() => api.rules())
   const [busy, setBusy] = useState(false)
+  // D69e (base PRD FR-506): a change can carry its reason. Given, it becomes the
+  // rule's rationale and restarts its 90-day review clock.
+  const [reasons, setReasons] = useState({})
+  const reasonFor = (code) => (reasons[code] || '').trim() || undefined
 
-  async function toggle(rule) {
+  async function change(rule, patch) {
     setBusy(true)
     try {
-      await api.updateRule(rule.code, { enabled: !rule.enabled })
+      await api.updateRule(rule.code, { ...patch, rationale: reasonFor(rule.code) })
+      setReasons((r) => ({ ...r, [rule.code]: '' }))
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
-
-  async function retune(rule, params) {
-    setBusy(true)
-    try {
-      await api.updateRule(rule.code, { params })
-      reload()
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
-  }
+  const toggle = (rule) => change(rule, { enabled: !rule.enabled })
+  const retune = (rule, params) => change(rule, { params })
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
@@ -118,11 +117,45 @@ function Rules() {
                 </div>
               )}
               {!rule.enabled && <p className="dim" style={{ fontSize: 12 }}>Disabled — this rule emits no signal.</p>}
+              <RuleGovernance rule={rule} />
+              <input
+                style={{ marginTop: 8 }}
+                placeholder="Reason for your next change (recorded, and restarts the review clock)"
+                value={reasons[rule.code] || ''}
+                onChange={(e) => setReasons((r) => ({ ...r, [rule.code]: e.target.value }))}
+              />
             </div>
           ))}
         </div>
       ))}
     </>
+  )
+}
+
+/**
+ * Who owns the rule, why it exists, and whether it needs attention (D69e,
+ * base PRD FR-504 and FR-507). Every warning is written out in words.
+ */
+function RuleGovernance({ rule }) {
+  const warnings = [
+    rule.orphaned && 'No owner',
+    rule.review_overdue && 'Review overdue',
+    rule.dormant && 'Has not fired in 30 days',
+  ].filter(Boolean)
+  return (
+    <div style={{ marginTop: 8, fontSize: 12.5 }}>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <span className="muted">Owner <strong style={{ color: 'var(--text)' }}>{rule.owner || '—'}</strong></span>
+        <span className="dim">·</span>
+        <span className="muted">Approved {rule.approved_at ? when(rule.approved_at) : '—'} by {rule.approved_by || '—'}</span>
+        <span className="dim">·</span>
+        <span className="muted">Next review {rule.next_review_at ? when(rule.next_review_at) : '—'}</span>
+        <span className="dim">·</span>
+        <span className="muted">Fired {rule.fired_30d} times in 30 days</span>
+        {warnings.map((w) => <span key={w} className="risk risk-HIGH">{w}</span>)}
+      </div>
+      {rule.rationale && <div className="dim" style={{ marginTop: 4 }}>{rule.rationale}</div>}
+    </div>
   )
 }
 

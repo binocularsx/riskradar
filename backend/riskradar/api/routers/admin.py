@@ -13,6 +13,7 @@ work they shape.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +27,9 @@ from ..deps import get_conn, requires
 from ..schemas import ListEntryIn, PromoteModelIn, RuleUpdateIn, ThresholdsIn
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
+
+# D69e: a rule changed with a stated reason is due for review again in 90 days.
+REVIEW_INTERVAL = timedelta(days=90)
 
 
 def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
@@ -50,11 +54,32 @@ def list_rules(
     rules = _rows(
         conn,
         """
-        SELECT id, code, power, severity, enabled, params
+        SELECT id, code, power, severity, enabled, params,
+               owner, rationale, approved_by, approved_at, next_review_at,
+               (next_review_at IS NULL OR next_review_at < now()) AS review_overdue
           FROM rule_configs WHERE ruleset_id = %s ORDER BY power, code
         """,
         (ruleset[0]["id"],),
     )
+    # D69e (base PRD FR-507): flag orphaned rules (no owner) and dormant ones
+    # (enabled, but silent for 30 days). A dormant rule is either guarding
+    # against something rare or broken; either way somebody should look.
+    fired = {
+        r["code"]: int(r["n"])
+        for r in _rows(
+            conn,
+            """
+            SELECT s->>'code' AS code, count(*) AS n
+              FROM decisions d, jsonb_array_elements(d.signals) s
+             WHERE d.decided_at > now() - interval '30 days'
+             GROUP BY 1
+            """,
+        )
+    }
+    for rule in rules:
+        rule["fired_30d"] = fired.get(rule["code"], 0)
+        rule["orphaned"] = not (rule.get("owner") or "").strip()
+        rule["dormant"] = bool(rule["enabled"]) and rule["fired_30d"] == 0
     return {"ruleset": ruleset[0], "rules": rules}
 
 
@@ -77,7 +102,11 @@ def update_rule(
         raise HTTPException(500, "no active ruleset")
     old = _rows(
         conn,
-        "SELECT code, power, severity, enabled, params FROM rule_configs WHERE ruleset_id = %s",
+        """
+        SELECT code, power, severity, enabled, params,
+               owner, rationale, approved_by, approved_at, next_review_at
+          FROM rule_configs WHERE ruleset_id = %s
+        """,
         (active[0]["id"],),
     )
     current = next((r for r in old if r["code"] == code), None)
@@ -103,6 +132,11 @@ def update_rule(
                 params = json.loads(params)
             enabled = rule["enabled"]
             severity = rule["severity"]
+            # Governance travels with every version (D69e), so an unchanged
+            # rule keeps its owner and review date across unrelated edits.
+            owner, rationale = rule["owner"], rule["rationale"]
+            approved_by, approved_at = rule["approved_by"], rule["approved_at"]
+            next_review_at = rule["next_review_at"]
             if rule["code"] == code:
                 if body.enabled is not None:
                     enabled = body.enabled
@@ -110,12 +144,21 @@ def update_rule(
                     params = body.params
                 if body.severity is not None:
                     severity = body.severity
+                if body.owner is not None:
+                    owner = body.owner
+                if body.rationale:
+                    rationale = body.rationale
+                    approved_by = user["email"]
+                    approved_at = datetime.now(timezone.utc)
+                    next_review_at = approved_at + REVIEW_INTERVAL
             cur.execute(
                 """
-                INSERT INTO rule_configs (ruleset_id, code, power, severity, enabled, params)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO rule_configs (ruleset_id, code, power, severity, enabled, params,
+                                          owner, rationale, approved_by, approved_at, next_review_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (new_id, rule["code"], rule["power"], severity, enabled, json.dumps(params or {})),
+                (new_id, rule["code"], rule["power"], severity, enabled, json.dumps(params or {}),
+                 owner, rationale, approved_by, approved_at, next_review_at),
             )
 
     chain.append(
@@ -136,7 +179,8 @@ def update_rule(
             },
             default=str,
         ),
-        payload={"new_ruleset_version": new_version},
+        payload={"new_ruleset_version": new_version, "rationale": body.rationale,
+                 "owner": body.owner},
     )
     return list_rules(user=user, conn=conn)
 
