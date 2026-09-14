@@ -80,8 +80,8 @@ RULE_GOVERNANCE = {
 assert set(RULE_GOVERNANCE) == {code for code, *_ in RULES}, "every rule needs an owner (D69e)"
 
 # D11d/D24: these are placeholders until the calibrated model exists, at which
-# point scripts/derive_thresholds.py solves them backwards from the 120/day
-# alert budget against a held-out scored sample. Written down, versioned, and
+# point scripts/derive_thresholds.py solves them backwards from the 75/day
+# alert budget (D76) against a held-out scored sample. Written down, versioned, and
 # replaced by measurement — never left at "80 sounds high".
 THRESHOLDS = {
     "p_monitor": 0.020,
@@ -93,7 +93,10 @@ THRESHOLDS = {
 
 CONFIG = {
     "correlation_window_hours": 24,   # D13a
-    "alert_budget_per_day": 120,      # D24 — 3 analysts x 40 reviewable alerts
+    # D76 (was 120, D24): 3 analysts x 25 alerts. 6.6 false alerts per incident
+    # against 15 at 120, and room in the day for the customer contact and
+    # regulatory clock work of D71 and D73.
+    "alert_budget_per_day": 75,
     "analyst_desk_size": 3,
 }
 

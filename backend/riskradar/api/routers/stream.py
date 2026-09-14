@@ -27,7 +27,7 @@ never learn it happened. Here, it reconnects and replays the gap from
 ``stream_events``.
 
 D14b: **alerts stream, transactions do not.** Alert volume is low by
-construction — 120 a day against the alert budget — while a live feed of every
+construction — 75 a day against the alert budget (D76) — while a live feed of every
 transaction would be a scrolling wall nobody can read.
 
 **Why this uses a synchronous connection on a worker thread.** psycopg's async

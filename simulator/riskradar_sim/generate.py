@@ -55,10 +55,15 @@ class SimulationConfig:
             # rate as the reference operating point** (D23).
             #
             # The earlier demo profile ran 1,200 transactions a day, which meant
-            # a 120/day alert budget implied a 10% alert rate and the queue
+            # a 120/day alert budget (then) implied a 10% alert rate and the queue
             # filled with thousands of cases. The volume, not the detection, was
             # what made the demo unreadable.
-            return cls(n_customers=1_500, days=4, transactions_per_day=12_000,
+            #
+            # D76: 30 days, not 4. The new-destination gate (D67) and the
+            # familiar-payee rule need weeks of memory; with 4 days the rules
+            # alone spent 69 of a 75/day budget on the demo bank and the model
+            # got almost nothing (D67d, D69i). 30 matches the training corpus.
+            return cls(n_customers=1_500, days=30, transactions_per_day=12_000,
                        fraud_incidents_per_day=3)
         if name == "training":
             # ~5 incidents/day x ~12 events x 30 days against 600,000 legitimate

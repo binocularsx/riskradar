@@ -23,7 +23,7 @@ const LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
 /**
  * Alerts raised each hour against what the team can review in an hour. The
  * dashed line is the budget every threshold was derived from (three analysts
- * at forty a day); bars above it turn orange and say so in the tooltip, so
+ * at twenty-five a day, D76); bars above it turn orange and say so in the tooltip, so
  * the overrun never relies on colour alone.
  */
 function AlertsVsCapacity({ overview }) {
@@ -277,8 +277,8 @@ export default function Operations() {
             </table>
           </div>
           <p className="dim" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
-            The alert budget assumes three analysts at forty reviewable alerts
-            each. If "open" climbs well past that, the thresholds need
+            The alert budget assumes three analysts at twenty-five reviewable
+            alerts each, leaving time for customer contact and regulatory clocks. If "open" climbs well past that, the thresholds need
             re-deriving — not the team working harder.
           </p>
         </div>

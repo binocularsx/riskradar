@@ -25,7 +25,7 @@ Every step is recorded in a trace that ships with the decision record, so
 Order of application, and why it is this order:
 
 1. **Band from the calibrated probability.** The thresholds are derived backwards
-   from the alert budget (D11d) — 120 alerts/day for a three-analyst desk — never
+   from the alert budget (D11d) — 75 alerts/day for a three-analyst desk (D76) — never
    from "80 sounds high".
 2. **Escalations raise the band.** One level each.
 3. **Suppressions lower it.** *After* escalation, deliberately: suppression is

@@ -123,7 +123,7 @@ def overview(
         conn,
         "SELECT value FROM app_config WHERE key = 'alert_budget_per_day'",
     )
-    budget = int(budget_row[0]["value"]) if budget_row else 120
+    budget = int(budget_row[0]["value"]) if budget_row else 75
     today = _rows(
         conn,
         "SELECT count(*) AS n FROM alerts WHERE raised_at > now() - interval '24 hours'",
@@ -273,7 +273,7 @@ def budget_menu(
     path = settings().artifact_dir / "budget-menu.json"
     menu = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     budget_row = _rows(conn, "SELECT value FROM app_config WHERE key = 'alert_budget_per_day'")
-    budget = int(budget_row[0]["value"]) if budget_row else 120
+    budget = int(budget_row[0]["value"]) if budget_row else 75
     return performance.budget_menu(menu, budget)
 
 

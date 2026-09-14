@@ -137,8 +137,8 @@ def budget_menu(menu: dict[str, Any] | None, current_budget: int) -> dict[str, A
     """The measured budget options, with today's setting marked (WP-09, D67c).
 
     ``menu`` is ``ml/artifacts/budget-menu.json`` or None when it has not been
-    produced. Display only: choosing a budget reopens D61b and is the team's
-    call, so nothing here changes the configured budget.
+    produced. Display only: the budget was chosen in D76, and nothing here
+    changes the configured one.
     """
     if not menu:
         return {"available": False, "current_budget_per_day": current_budget, "options": []}

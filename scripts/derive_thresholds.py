@@ -8,7 +8,7 @@ Never "80 sounds high". The arithmetic runs the other way:
    recent traffic.
 2. Work out the daily transaction volume that traffic implies.
 3. Find the probability at which alert volume equals the budget — analysts
-   multiplied by reviewable alerts per day (120/day, D24).
+   multiplied by reviewable alerts per day (75/day, D76).
 4. Place REVIEW and HOLD at tighter slices of the same budget, so the bands
    below them stay inside it.
 
@@ -50,7 +50,7 @@ def main() -> None:
             row = conn.execute(
                 "SELECT value FROM app_config WHERE key = 'alert_budget_per_day'"
             ).fetchone()
-            budget = int(row["value"]) if row else 120
+            budget = int(row["value"]) if row else 75
 
         rows = conn.execute(
             """

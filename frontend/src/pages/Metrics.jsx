@@ -122,8 +122,8 @@ function RatioScale({ options, band, strong }) {
  *
  * Counts of false alarms read as failure; the same system, reported as false
  * alerts per confirmed incident and share of fraud value detected, sits in the
- * band banks advertise. The menu is display only: choosing a budget reopens
- * D61b and is the team's call.
+ * band banks advertise. The menu is display only: the budget was chosen from it
+ * in D76 and lives in app_config.
  */
 function Benchmarks({ menu, live }) {
   const current = menu.options.find((o) => o.current)
@@ -216,7 +216,7 @@ function Benchmarks({ menu, live }) {
         incident recall with that fraud type hidden from training. Value detected counts money on
         alerted fraud payments only; the live desk cannot measure it, because the fraud it misses
         carries no label. The live ratio is a floor: alerts inside a confirmed case are never counted
-        as false. Every row is a business choice (D67c); changing the budget reopens D61b.
+        as false. Every row is a business choice; the desk runs at 75 a day (D76).
       </p>
     </div>
   )
@@ -328,7 +328,7 @@ export default function Metrics() {
         </div>
         <p className="dim" style={{ fontSize: 12, marginBottom: 0, marginTop: 8 }}>
           Every threshold in the system was derived backwards from this number —
-          three analysts at forty reviewable alerts each. Going over it does not
+          three analysts at twenty-five reviewable alerts each. Going over it does not
           mean more fraud; it means the desk cannot keep up.
         </p>
       </div>

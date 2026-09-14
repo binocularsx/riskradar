@@ -129,8 +129,8 @@ def test_an_unmeasured_budget_borrows_no_figures():
 
 
 def test_budget_menu_without_the_artifact():
-    m = budget_menu(None, 120)
-    assert m == {"available": False, "current_budget_per_day": 120, "options": []}
+    m = budget_menu(None, 75)
+    assert m == {"available": False, "current_budget_per_day": 75, "options": []}
 
 
 def test_budget_menu_endpoint(client):

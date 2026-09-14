@@ -18,7 +18,7 @@ order a real deployment would:
 1. Load history with alerting **off**. This gives every account a behavioural
    baseline and gives us a distribution of scores to reason about.
 2. **Derive the thresholds from that distribution** against the alert budget
-   (D11d) — 120 alerts a day for a three-analyst desk.
+   (D11d) — 75 alerts a day for a three-analyst desk (D76).
 3. *Then* run a short window with alerting on. The case count that falls out is
    whatever the budget implies, which is the whole point of having a budget.
 4. Work a few cases, so the operations view has outcomes in it and the desk does
@@ -383,7 +383,7 @@ def main() -> None:
         # overnight whenever the demo is rebuilt early in the morning — the
         # simulated customers are asleep, and the desk comes out almost empty
         # (observed: 1 open case). A full day always contains a waking day, and
-        # at a 120/day budget it is exactly one day of the team's work.
+        # it is exactly one day of the team's work at whatever the budget is.
         "--alerting-hours", type=float, default=24.0,
         help="how much recent traffic is allowed to raise alerts",
     )
