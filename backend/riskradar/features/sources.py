@@ -29,8 +29,14 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from .spec import ACCOUNT_HISTORY_DAYS, BENEFICIARY_LOOKBACK_DAYS, SUBJECT_HISTORY_DAYS
-from .types import HistoryBundle, PriorTx, TxView
+from .spec import (
+    ACCOUNT_HISTORY_DAYS,
+    BENEFICIARY_LOOKBACK_DAYS,
+    EVENT_LOOKBACK_HOURS,
+    FEATURE_EVENT_TYPES,
+    SUBJECT_HISTORY_DAYS,
+)
+from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
 _PRIOR_COLUMNS = "occurred_at, amount_minor, auth_result, beneficiary_token, device_token"
 
@@ -51,6 +57,18 @@ _SUBJECT_SQL = f"""
     SELECT {_PRIOR_COLUMNS}
       FROM transactions
      WHERE subject_token = %(subject)s
+       AND occurred_at <  %(now)s
+       AND occurred_at >= %(from)s
+"""
+
+# D77. Tokens only: detail was tokenised at the boundary.
+_EVENTS_SQL = """
+    SELECT occurred_at, event_type::text AS event_type, device_token,
+           detail->>'result' AS login_result, detail->>'binding' AS binding,
+           detail->>'beneficiary_token' AS beneficiary_token
+      FROM events
+     WHERE subject_token = %(subject)s
+       AND event_type::text = ANY(%(types)s)
        AND occurred_at <  %(now)s
        AND occurred_at >= %(from)s
 """
@@ -110,9 +128,36 @@ def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
             row = cur.fetchone()
             first_seen = row["first_seen"] if row else None
 
+        cur.execute(
+            _EVENTS_SQL,
+            {
+                "subject": tx.subject_token,
+                "types": sorted(FEATURE_EVENT_TYPES),
+                "now": tx.occurred_at,
+                "from": tx.occurred_at - timedelta(hours=EVENT_LOOKBACK_HOURS),
+            },
+        )
+        events = [event_from_row(r) for r in cur.fetchall()]
+
     return HistoryBundle(
-        account=account, subject=subject, beneficiary_first_seen_at=first_seen
+        account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events
     )
+
+
+def event_from_row(row: Any) -> PriorEvent:
+    """One shape for an event row, whichever path read it."""
+    return PriorEvent(
+        occurred_at=row["occurred_at"],
+        event_type=row["event_type"],
+        device_token=_none(row.get("device_token")),
+        login_result=_none(row.get("login_result")),
+        binding=_none(row.get("binding")),
+        beneficiary_token=_none(row.get("beneficiary_token")),
+    )
+
+
+def _none(value: Any) -> Any:
+    return value if _present(value) else None
 
 
 # ---------------------------------------------------------------------------
@@ -120,12 +165,13 @@ def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
 # ---------------------------------------------------------------------------
 
 
-def load_history_frame(frame: Any, tx: TxView) -> HistoryBundle:
+def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBundle:
     """Assemble history from a dataframe. Used by training and evaluation.
 
-    ``frame`` carries the same columns as ``transactions``. The windows come from
-    the same constants the SQL path uses, so a change to a lookback cannot apply
-    to one path and not the other.
+    ``frame`` carries the same columns as ``transactions``; ``events`` (D77) the
+    columns the events query returns plus ``subject_token``. The windows come
+    from the same constants the SQL path uses, so a change to a lookback cannot
+    apply to one path and not the other.
     """
     occurred = frame["occurred_at"]
     before = occurred < tx.occurred_at
@@ -160,11 +206,23 @@ def load_history_frame(frame: Any, tx: TxView) -> HistoryBundle:
         if bool(ben_mask.any()):
             first_seen = frame.loc[ben_mask, "occurred_at"].min()
 
+    prior_events: list[PriorEvent] = []
+    if events is not None and len(events):
+        eo = events["occurred_at"]
+        ev_mask = (
+            (events["subject_token"] == tx.subject_token)
+            & events["event_type"].isin(list(FEATURE_EVENT_TYPES))
+            & (eo < tx.occurred_at)
+            & (eo >= tx.occurred_at - timedelta(hours=EVENT_LOOKBACK_HOURS))
+        )
+        prior_events = [event_from_row(r) for r in events.loc[ev_mask].to_dict("records")]
+
     _ = BENEFICIARY_LOOKBACK_DAYS  # documented window; first-seen is unbounded by design
     return HistoryBundle(
         account=to_priors(account_mask),
         subject=to_priors(subject_mask),
         beneficiary_first_seen_at=first_seen,
+        events=prior_events,
     )
 
 

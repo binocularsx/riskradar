@@ -18,8 +18,12 @@ This measures both at the three budgets the team is choosing between (D67c):
 120 a day (today), 75 and 60. It re-runs the time-ordered test behind
 ``budget-sweep-gated.json`` — model trained on the oldest 75% of the corpus,
 scored on the newest 30 days with every fraud type present — and adds the fraud
-value, which that sweep did not record. It stops if the false alarms it
-measures disagree with the sweep, so the menu can never drift from D67c.
+value, which that sweep did not record. With ``--check-sweep`` it stops if the
+false alarms it measures disagree with the sweep; that check only means
+something on the pre-D77 corpus the sweep was run on.
+
+D77: the takeover sequence rule joins the offline rule mask, and
+``--without-events`` measures the same corpus without it.
 
 Held-out recall (fraud the model never saw) is carried over from
 ``system-evaluation*.json`` rather than re-measured: it needs one model per
@@ -32,6 +36,7 @@ suppressing rules and list rules are not modelled offline.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import sys
@@ -51,6 +56,7 @@ TYPES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
 ARTIFACTS = REPO_ROOT / "ml" / "artifacts"
 CORPUS = REPO_ROOT / "ml" / "data"
 HELD_OUT = {120: "system-evaluation.json", 75: "system-evaluation-75.json", 60: "system-evaluation-60.json"}
+HELD_OUT_WITHOUT_EVENTS = {b: f.replace(".json", "-without-events.json") for b, f in HELD_OUT.items()}
 FULL_SYSTEM_ARM = "rules + gradient boosting (ours)"
 # The sweep rounds to 0.1 a day; anything further apart is a different measurement.
 SWEEP_TOLERANCE = 0.2
@@ -64,8 +70,15 @@ def wilson(k: int, n: int, z: float = 1.96) -> list[float]:
     return [round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3)]
 
 
-def held_out(budget: int) -> dict:
-    evaluation = json.loads((ARTIFACTS / HELD_OUT[budget]).read_text(encoding="utf-8"))
+def held_out(budget: int, without_events: bool = False) -> dict | None:
+    name = (HELD_OUT_WITHOUT_EVENTS if without_events else HELD_OUT)[budget]
+    if not (ARTIFACTS / name).exists():
+        return None
+    evaluation = json.loads((ARTIFACTS / name).read_text(encoding="utf-8"))
+    if "feature_spec" not in evaluation:
+        # Written before D77, on the previous corpus. Its recall belongs to a
+        # different bank and must not sit in a row measured on this one.
+        return None
     out = {}
     for t in TYPES:
         arm = next(a for a in evaluation["per_typology"][t] if a["arm"] == FULL_SYSTEM_ARM)
@@ -74,8 +87,22 @@ def held_out(budget: int) -> dict:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check-sweep", action="store_true",
+                        help="stop unless false alarms match budget-sweep-gated.json (pre-D77 corpus only)")
+    parser.add_argument("--without-events", action="store_true", help="D77 ablation: no sequence rule")
+    parser.add_argument("--out", default=str(ARTIFACTS / "budget-menu.json"))
+    args = parser.parse_args()
+
     d = np.load(CORPUS / "corpus.features.npz", allow_pickle=True)
     X, y, typ, occ, inc = d["X"], d["y"].astype(int), d["typology"], d["occurred_at"], d["incident_id"]
+    names = list(FEATURE_NAMES)
+    if args.without_events:
+        # The model is trained without the event features too, not only the rule.
+        from evaluate_system import EVENT_FEATURES
+
+        keep = [j for j, n in enumerate(names) if n not in EVENT_FEATURES]
+        X, names = X[:, keep], [names[j] for j in keep]
 
     print("reading instruments and amounts ...", flush=True)
     inst, amount = [], []
@@ -95,12 +122,18 @@ def main() -> None:
     p = TimeSplitCalibratedBooster().fit(X[:cut], y[:cut], times=occ[:cut]).predict_proba(X[cut:])[:, 1]
 
     Xt, yt, tt, it, nt, at = X[cut:], y[cut:], typ[cut:], inc[cut:], inst[cut:], amount[cut:]
-    col = lambda name: Xt[:, FEATURE_NAMES.index(name)]  # noqa: E731
+    col = lambda name: Xt[:, names.index(name)]  # noqa: E731
     count, first_seen = col("txn_count_1h_account"), col("beneficiary_first_seen_days")
     card = (nt == "CARD") & (col("decline_rate_24h_account") >= 0.5) & (col("failed_attempts_1h_account") >= 3)
     # D67, as seeded: 5+ to a destination new to the bank within a day; 10+ with none.
     velocity = ((count >= 5) & (first_seen >= 0) & (first_seen < 1)) | ((count >= 10) & (first_seen < 0))
     rules = card | velocity
+    if not args.without_events and "device_bound_hours" in names:
+        # D77, as seeded: two precursors within 24 hours, then a destination new to the account.
+        precursors = (((col("device_bound_hours") >= 0) & (col("device_bound_hours") < 24)).astype(int)
+                      + (col("sim_changed_hours") < 24) + (col("credential_changed_hours") < 24)
+                      + (col("failed_logins_1h_subject") >= 3))
+        rules = rules | ((precursors >= 2) & (col("beneficiary_is_new_to_account") == 1))
 
     fraud = yt == 1
     totals = {t: len(set(it[tt == t])) for t in TYPES}
@@ -121,7 +154,7 @@ def main() -> None:
 
         false_day = float((system & ~fraud).sum()) / days
         expected = sweep[budget]["false_alarms_day"]
-        if abs(false_day - expected) > SWEEP_TOLERANCE:
+        if args.check_sweep and abs(false_day - expected) > SWEEP_TOLERANCE:
             raise SystemExit(f"budget {budget}: {false_day:.1f} false alarms a day, "
                              f"budget-sweep-gated.json says {expected}. Not the D67c measurement; stopping.")
 
@@ -141,7 +174,7 @@ def main() -> None:
                            for t in TYPES},
             "value_detection_rate": round(float(at[system & fraud].sum()) / fraud_value, 3),
             "value_in_caught_incidents": round(float(at[in_caught].sum()) / fraud_value, 3),
-            "held_out": held_out(budget),
+            "held_out": held_out(budget, args.without_events),
         })
 
     print(f"{'budget':>6}{'false/day':>10}{'ratio':>8}{'VDR':>7}{'VDR inc':>9}   seen ATO  MULE  CARD   held-out mean")
@@ -150,12 +183,13 @@ def main() -> None:
         print(f"{o['budget_per_day']:>6}{o['false_alerts_per_day']:>10}{o['false_alerts_per_incident']:>7}:1"
               f"{o['value_detection_rate']:>7}{o['value_in_caught_incidents']:>9}   "
               f"{s['ACCOUNT_TAKEOVER']['caught']:>7}{s['MULE_FANOUT']['caught']:>6}{s['CARD_TESTING']['caught']:>6}"
-              f"   {o['held_out']['mean']}")
+              f"   {o['held_out']['mean'] if o['held_out'] else '-'}")
 
-    out = ARTIFACTS / "budget-menu.json"
+    out = Path(args.out)
     out.write_text(json.dumps({
         "measured": "time-ordered test: train oldest 75%, score newest 30 days, every fraud type present; "
-                    "held-out recall from system-evaluation*.json",
+                    "held-out recall from system-evaluation*.json"
+                    + ("; without event features or the sequence rule (D77 ablation)" if args.without_events else ""),
         "test_days": round(days, 1),
         "fraud_value_minor": fraud_value,
         "benchmarks": {
@@ -166,7 +200,7 @@ def main() -> None:
         },
         "options": options,
     }, indent=2), encoding="utf-8")
-    print(f"\nwritten to {out.relative_to(REPO_ROOT)}")
+    print(f"\nwritten to {out}")
 
 
 if __name__ == "__main__":

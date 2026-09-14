@@ -40,9 +40,9 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 
 | Status | Count | Meaning |
 |---|---|---|
-| Met | 14 | Built and tested, 4 of them added for this review and 2 since (D71) |
+| Met | 15 | Built and tested, 4 of them added for this review and 3 since (D71, D77) |
 | Partly | 47 | Some of it built; the missing part is named |
-| Not built | 26 | Absent; on the roadmap or waiting on a bank |
+| Not built | 25 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -60,7 +60,7 @@ the few gaps that matter most rather than all of them.
 |---|---|---|---|
 | O1 | Stop fraud before settlement | Rejected for v1 | Advisory only (D7). We return ALLOW / MONITOR / REVIEW / HOLD beside every score as a seam for a bank to enforce. |
 | O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Now reported in the unit banks benchmark: 15:1 false alerts per incident at 120, 6.6:1 at 75, 4.1:1 at 60, on the Analytics screen (D70). Not yet reduced on live outcomes. |
-| O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are accepted and stored through one envelope (D72) but not yet scored. |
+| O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are accepted through one envelope (D72) and read by the features and rules that score payments (D77). |
 | O4 | Regulatory clocks met automatically | Partly | CBN scam clocks run on every reported case, from versioned configuration and a Nigerian working-day calendar; breaches are recorded and escalated (D71). Meeting them still takes the desk: nothing is notified or paid automatically. |
 | O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve now measured (D69f). Cost per case not measured. |
 | O6 | Every decision defensible | Met | Every decision stores its rules' signals with evidence, the policy trace, feature attributions and the versions that produced it (D7a). |
@@ -70,7 +70,7 @@ the few gaps that matter most rather than all of them.
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
 | FR-101 | Real-time events from every payment rail | Partly | One API accepts card, transfer, cash and wallet across NIP, NEFT, RTGS, card scheme, in-bank and ATM rails. Cheques absent; no live rail connected. |
-| FR-102 | Non-payment events: logins, resets, device binding, new payee, limit and SIM changes | Partly | Accepted, validated per type, tokenised and stored through `POST /v1/events` (D72): login, device binding, credential or MFA change, new payee, SIM change, limit change. Nothing is scored on them yet; that is WP-02 (D69h). |
+| FR-102 | Non-payment events: logins, resets, device binding, new payee, limit and SIM changes | Met | Accepted through `POST /v1/events` (D72) and read by five features and a takeover sequence rule (D77); unseen account takeover 0.726 to 0.986 at 75 alerts a day. Limit changes are stored, not yet read. |
 | FR-103 | Device intelligence | Partly | Hashed device fingerprint and coarse region. No emulator, rooting or tampering signals. |
 | FR-104 | Behavioural biometrics | Not built | — |
 | FR-105 | Identity bureaus and registries | Not built | Needs a bank (D3). The adapter seam exists (D75, INT-05); no bureau is connected. |
@@ -88,7 +88,7 @@ the few gaps that matter most rather than all of them.
 | FR-203 | Unsupervised anomaly detection for novel patterns | Not built | Our own evidence argues for it: the model alone caught 0 of 194 card-testing incidents it had never seen (D69h). |
 | FR-204 | Graph and link analysis for rings and mules | Not built | Roadmap (D16). |
 | FR-205 | Scoring against the individual's own baseline | Met | Amount against the account's usual largest, today against a normal day, new device for this customer, new payee for this account. |
-| FR-206 | Session modelling to catch takeover in progress | Not built | Needs FR-102. |
+| FR-206 | Session modelling to catch takeover in progress | Partly | Sequences inside a 72-hour window: failed logins, a new device bound, a SIM or credential change, then a payee enrolled and paid (D77). No explicit session identifier from the channel. |
 | FR-207 | Scam (APP) detection | Partly | First-time payee, unusual amount and bursts are measured. No session or "coached customer" signals; no dedicated scam pattern. |
 | FR-208 | Synthetic identity at onboarding | Not built | No onboarding events. |
 | FR-209 | Screening money coming in, not only going out | Not built | Only outgoing payments are scored (D69h). |

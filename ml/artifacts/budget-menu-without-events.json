@@ -1,5 +1,5 @@
 {
-  "measured": "time-ordered test: train oldest 75%, score newest 30 days, every fraud type present; held-out recall from system-evaluation*.json",
+  "measured": "time-ordered test: train oldest 75%, score newest 30 days, every fraud type present; held-out recall from system-evaluation*.json; without event features or the sequence rule (D77 ablation)",
   "test_days": 30.1,
   "fraud_value_minor": 25775879221,
   "benchmarks": {
@@ -23,9 +23,9 @@
     {
       "budget_per_day": 120,
       "alerts_per_day": 120.0,
-      "false_alerts_per_day": 68.0,
+      "false_alerts_per_day": 73.2,
       "incidents_per_day": 5.11,
-      "false_alerts_per_incident": 13.3,
+      "false_alerts_per_incident": 14.3,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
           "caught": 47,
@@ -52,41 +52,16 @@
           ]
         }
       },
-      "value_detection_rate": 0.907,
-      "value_in_caught_incidents": 0.997,
-      "held_out": {
-        "per_typology": {
-          "ACCOUNT_TAKEOVER": {
-            "recall": 0.986,
-            "ci95": [
-              0.959,
-              0.995
-            ]
-          },
-          "MULE_FANOUT": {
-            "recall": 0.914,
-            "ci95": [
-              0.865,
-              0.946
-            ]
-          },
-          "CARD_TESTING": {
-            "recall": 0.99,
-            "ci95": [
-              0.965,
-              0.997
-            ]
-          }
-        },
-        "mean": 0.963
-      }
+      "value_detection_rate": 0.85,
+      "value_in_caught_incidents": 0.996,
+      "held_out": null
     },
     {
       "budget_per_day": 75,
       "alerts_per_day": 75.0,
-      "false_alerts_per_day": 25.5,
+      "false_alerts_per_day": 31.0,
       "incidents_per_day": 5.11,
-      "false_alerts_per_incident": 5.0,
+      "false_alerts_per_incident": 6.1,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
           "caught": 47,
@@ -97,11 +72,11 @@
           ]
         },
         "MULE_FANOUT": {
-          "caught": 55,
+          "caught": 54,
           "incidents": 58,
           "ci95": [
-            0.859,
-            0.982
+            0.836,
+            0.973
           ]
         },
         "CARD_TESTING": {
@@ -113,22 +88,22 @@
           ]
         }
       },
-      "value_detection_rate": 0.867,
-      "value_in_caught_incidents": 0.997,
+      "value_detection_rate": 0.805,
+      "value_in_caught_incidents": 0.989,
       "held_out": {
         "per_typology": {
           "ACCOUNT_TAKEOVER": {
-            "recall": 0.986,
+            "recall": 0.726,
             "ci95": [
-              0.959,
-              0.995
+              0.663,
+              0.782
             ]
           },
           "MULE_FANOUT": {
-            "recall": 0.909,
+            "recall": 0.903,
             "ci95": [
-              0.859,
-              0.942
+              0.852,
+              0.938
             ]
           },
           "CARD_TESTING": {
@@ -139,15 +114,15 @@
             ]
           }
         },
-        "mean": 0.962
+        "mean": 0.873
       }
     },
     {
       "budget_per_day": 60,
       "alerts_per_day": 60.0,
-      "false_alerts_per_day": 12.8,
+      "false_alerts_per_day": 18.3,
       "incidents_per_day": 5.11,
-      "false_alerts_per_incident": 2.5,
+      "false_alerts_per_incident": 3.6,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
           "caught": 47,
@@ -174,34 +149,9 @@
           ]
         }
       },
-      "value_detection_rate": 0.816,
-      "value_in_caught_incidents": 0.993,
-      "held_out": {
-        "per_typology": {
-          "ACCOUNT_TAKEOVER": {
-            "recall": 0.986,
-            "ci95": [
-              0.959,
-              0.995
-            ]
-          },
-          "MULE_FANOUT": {
-            "recall": 0.909,
-            "ci95": [
-              0.859,
-              0.942
-            ]
-          },
-          "CARD_TESTING": {
-            "recall": 0.99,
-            "ci95": [
-              0.965,
-              0.997
-            ]
-          }
-        },
-        "mean": 0.962
-      }
+      "value_detection_rate": 0.761,
+      "value_in_caught_incidents": 0.988,
+      "held_out": null
     }
   ]
 }

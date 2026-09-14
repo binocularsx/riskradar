@@ -54,6 +54,22 @@ class PriorTx:
     device_token: str | None = None
 
 
+@dataclass(frozen=True)
+class PriorEvent:
+    """One earlier non-payment event for the same customer (D77).
+
+    Only the facts a feature reads: whether a login failed, which device was
+    bound, which payee was enrolled. Tokens, never raw identifiers.
+    """
+
+    occurred_at: datetime
+    event_type: str
+    device_token: str | None = None
+    login_result: str | None = None
+    binding: str | None = None
+    beneficiary_token: str | None = None
+
+
 @dataclass
 class HistoryBundle:
     """Everything the feature functions may look at, and nothing else.
@@ -72,3 +88,5 @@ class HistoryBundle:
     subject: list[PriorTx] = field(default_factory=list)
     # When this beneficiary was first seen anywhere in our traffic, or None.
     beneficiary_first_seen_at: datetime | None = None
+    # D77: the customer's non-payment events in the lookback window.
+    events: list[PriorEvent] = field(default_factory=list)

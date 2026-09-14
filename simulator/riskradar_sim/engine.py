@@ -67,6 +67,9 @@ class Event:
     is_fraud: bool = False
     typology: str | None = None
     incident_id: str | None = None
+    # D77: PAYMENT, or a non-payment event type from signals.py. Payments keep
+    # the canonical transaction payload; the others carry the event envelope.
+    kind: str = "PAYMENT"
 
 
 def _rails_for(channel: str, instrument: str, rng: random.Random) -> str:

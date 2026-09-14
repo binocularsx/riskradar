@@ -54,7 +54,7 @@ from riskradar.model.calibrated import TimeSplitCalibratedBooster  # noqa: E402
 from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION  # noqa: E402
 
 TYPOLOGIES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
-ALERT_BUDGET_PER_DAY = 120  # D24
+ALERT_BUDGET_PER_DAY = 75  # D76 (was 120, D24)
 
 
 def build_model() -> TimeSplitCalibratedBooster:
@@ -153,7 +153,8 @@ def train_final(corpus: Corpus, args, days: float) -> None:
         path = REPO_ROOT / "ml" / "artifacts" / name
         return json.loads(path.read_text()) if path.exists() else {}
 
-    system = evidence("system-evaluation.json")
+    # D76: the evidence is the held-out evaluation at the budget the desk runs.
+    system = evidence(f"system-evaluation-{ALERT_BUDGET_PER_DAY}.json") or evidence("system-evaluation.json")
     calibration = evidence("calibration.json")
     shipped_cal = next(
         (v for k, v in (calibration.get("variants") or {}).items() if "SHIPPED" in k), {}

@@ -20,8 +20,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
-from .spec import ACCOUNT_HISTORY_DAYS, SUBJECT_HISTORY_DAYS
-from .types import HistoryBundle, PriorTx, TxView
+from .spec import ACCOUNT_HISTORY_DAYS, EVENT_LOOKBACK_HOURS, FEATURE_EVENT_TYPES, SUBJECT_HISTORY_DAYS
+from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
 
 class PandasHistorySource:
@@ -31,7 +31,7 @@ class PandasHistorySource:
     evaluation and the fixture builder all share one path.
     """
 
-    def __init__(self, rows: Any) -> None:
+    def __init__(self, rows: Any, events: Any = None) -> None:
         self._account_times: dict[str, list[datetime]] = defaultdict(list)
         self._account_rows: dict[str, list[PriorTx]] = defaultdict(list)
         self._subject_times: dict[str, list[datetime]] = defaultdict(list)
@@ -59,6 +59,19 @@ class PandasHistorySource:
             self._subject_times[key] = [p.occurred_at for p in items]
         for key, times in self._beneficiary_first.items():
             times.sort()
+
+        # D77: the customer's non-payment events, indexed the same way.
+        self._event_times: dict[str, list[datetime]] = defaultdict(list)
+        self._event_rows: dict[str, list[PriorEvent]] = defaultdict(list)
+        if events is not None:
+            from .sources import event_from_row
+
+            for row in _iter_rows(events):
+                if row["event_type"] in FEATURE_EVENT_TYPES:
+                    self._event_rows[row["subject_token"]].append(event_from_row(row))
+            for key, items in self._event_rows.items():
+                items.sort(key=lambda e: e.occurred_at)
+                self._event_times[key] = [e.occurred_at for e in items]
 
     def _slice(
         self,
@@ -96,8 +109,14 @@ class PandasHistorySource:
             if times and times[0] < tx.occurred_at:
                 first_seen = times[0]
 
+        events = self._slice(
+            self._event_times.get(tx.subject_token, []),
+            self._event_rows.get(tx.subject_token, []),
+            tx.occurred_at - timedelta(hours=EVENT_LOOKBACK_HOURS),
+            tx.occurred_at,
+        )
         return HistoryBundle(
-            account=account, subject=subject, beneficiary_first_seen_at=first_seen
+            account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events
         )
 
 

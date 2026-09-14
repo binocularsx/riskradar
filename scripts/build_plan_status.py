@@ -23,7 +23,7 @@ STATUS = [
     ("WP-07", "A decision a bank can act on", "built", "14 Sep 2026", "D74 · migration 0010 · SHADOW v1"),
     ("WP-06b", "BVN identity and the industry watch-list", "built", "14 Sep 2026",
      "D75 · migration 0011 · Finacle and NIBSS adapters wait for connection"),
-    ("WP-02", "Signals before the money moves", "todo", "", "ready: WP-01 built"),
+    ("WP-02", "Signals before the money moves", "built", "14 Sep 2026", "D77 · unseen takeover 0.726 to 0.986 at 75/day"),
     ("WP-03", "Watch the money coming in", "todo", "", "ready: WP-01 built"),
     ("WP-04", "The second leg", "todo", "", "needs WP-03"),
     ("WP-08", "Spend the budget by tier", "todo", "", "ready: WP-06 built"),

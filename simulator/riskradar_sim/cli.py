@@ -26,6 +26,7 @@ import httpx
 from .engine import legitimate_event
 from .generate import SimulationConfig, generate, write_corpus
 from .identity import DEFAULT_CORE_FILE, CoreFile
+from .signals import EventLayer
 from .population import build_population
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
@@ -79,18 +80,36 @@ def cmd_history(args: argparse.Namespace) -> None:
     config.end = anchor
 
     cutoff = anchor - timedelta(hours=args.alerting_tail_hours)
-    counters = {"history": 0, "live": 0, "duplicates": 0, "rejected": 0}
+    counters = {"history": 0, "live": 0, "duplicates": 0, "rejected": 0, "events": 0}
     # The truth about the alerting window, kept on this machine only. It never
     # travels to the API (labels are not part of the ingestion contract); the
     # demo reset reads it so seeded outcomes follow what really happened.
     labels: list[dict] = []
     batches: dict[bool, list[dict]] = {True: [], False: []}
+    # D77: non-payment events, posted before the payments they precede.
+    event_batches: dict[bool, list[dict]] = {True: [], False: []}
     started = time.perf_counter()
 
     core = CoreFile(Path(args.core_file))
 
     with _client(args.base_url, args.api_key) as client:
+        def flush_events(is_history: bool) -> None:
+            batch = event_batches[is_history]
+            if not batch:
+                return
+            core.ensure([e["customer_id"] for e in batch])
+            response = client.post("/v1/events/batch", json={"events": batch, "is_replay": is_history,
+                                                             "raise_alerts": not is_history})
+            response.raise_for_status()
+            body = response.json()
+            counters["events"] += body["accepted"]
+            if body["errors"]:
+                print("  event errors:", body["errors"][:3], file=sys.stderr)
+            event_batches[is_history] = []
+
         def flush(is_history: bool) -> None:
+            # Events first: a payment's features read the events before it.
+            flush_events(is_history)
             batch = batches[is_history]
             if not batch:
                 return
@@ -113,7 +132,7 @@ def cmd_history(args: argparse.Namespace) -> None:
                 print("  errors:", body["errors"][:3], file=sys.stderr)
             batches[is_history] = []
 
-        for event in generate(config):
+        for event in generate(config, with_events=True):
             is_history = datetime.fromisoformat(event.payload["occurred_at"]) < cutoff
             if not is_history and args.skip_tail:
                 # History only: the alerting window is posted by a later run
@@ -123,6 +142,11 @@ def cmd_history(args: argparse.Namespace) -> None:
                 # The caller already loaded history in an earlier pass and just
                 # wants the recent alerting window. Generating the earlier days
                 # and throwing them away costs minutes for nothing.
+                continue
+            if event.kind != "PAYMENT":
+                event_batches[is_history].append(event.payload)
+                if len(event_batches[is_history]) >= args.batch_size:
+                    flush_events(is_history)
                 continue
             batches[is_history].append(event.payload)
             if not is_history and args.labels_out:
@@ -138,6 +162,8 @@ def cmd_history(args: argparse.Namespace) -> None:
                       end="", flush=True)
         flush(True)
         flush(False)
+        flush_events(True)
+        flush_events(False)
 
     if args.labels_out:
         out = Path(args.labels_out)
@@ -171,6 +197,7 @@ def cmd_stream(args: argparse.Namespace) -> None:
 
     # D75: the whole live population is known to the simulated core up front.
     CoreFile().ensure([c.customer_id for c in customers])
+    layer = EventLayer(args.seed if args.seed is not None else int(time.time()), customers)
 
     interval = 1.0 / max(args.rate, 0.01)
     sent = 0
@@ -183,8 +210,12 @@ def cmd_stream(args: argparse.Namespace) -> None:
                 if rng.random() < args.incident_probability:
                     typology = args.typology or rng.choice(list(TYPOLOGIES))
                     victim = rng.choice(customers)
-                    for event in TYPOLOGIES[typology](rng, victim, now):
-                        client.post("/v1/transactions", json=event.payload)
+                    incident = list(TYPOLOGIES[typology](rng, victim, now))
+                    # D77: the takeover's prelude (logins, device, payees) goes first.
+                    for event in sorted(layer.around(incident) + incident,
+                                        key=lambda e: e.payload["occurred_at"]):
+                        path = "/v1/transactions" if event.kind == "PAYMENT" else "/v1/events"
+                        client.post(path, json=event.payload)
                         sent += 1
                         time.sleep(interval / 3)
                     incidents += 1
@@ -194,6 +225,8 @@ def cmd_stream(args: argparse.Namespace) -> None:
                     account = rng.choice(customer.accounts)
                     event = legitimate_event(rng, customer, account, now)
                     account.last_activity_at = now
+                    for extra in layer.around([event]):
+                        client.post("/v1/events", json=extra.payload)
                     client.post("/v1/transactions", json=event.payload)
                     sent += 1
 

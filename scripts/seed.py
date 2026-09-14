@@ -43,13 +43,18 @@ USERS = [
 
 SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
 
-# D25: six rules, two of each power. Every rule *power* in D11a is retained,
+# D25: six rules, two of each power; D77 added a seventh, escalating. Every rule *power* in D11a is retained,
 # including suppression — the primary false-positive control, which had to be
 # built rather than deferred.
 RULES = [
     # D67: 5 or more in an hour AND the destination first appeared in the bank's
     # traffic within the last day. Speed alone (D62) was mostly traders.
     ("VELOCITY_BURST_1H", "ESCALATE", "HIGH", {"min_count": 5, "new_destination_days": 1, "no_destination_min_count": 10}),
+    # D77: a way in taken over (new device bound, SIM or credential changed,
+    # failed-login burst), then a payment to a destination new to the account.
+    # Two precursors, not one: 7 alerts a day at precision 0.96, against 44 a day
+    # at 0.23 for any single one (ml/artifacts/takeover-sequence.json).
+    ("ACCOUNT_TAKEOVER_SEQUENCE", "ESCALATE", "HIGH", {"within_hours": 24, "min_failed_logins": 3, "min_precursors": 2}),
     (
         "CARD_TESTING_PROBES",
         "ESCALATE",
@@ -71,6 +76,7 @@ RULES = [
 # (base PRD FR-504). Kept beside RULES so a new rule cannot be added without one.
 RULE_GOVERNANCE = {
     "VELOCITY_BURST_1H": ("Chidera", "D67: a burst of 5+ payments in an hour to a destination new to the bank; 10+ with no destination. Speed alone was mostly traders.", "2026-09-11"),
+    "ACCOUNT_TAKEOVER_SEQUENCE": ("Chidera", "D77: two takeover precursors within 24h (device bound, SIM or credential changed, failed logins), then a new destination. 7 alerts/day, precision 0.96.", "2026-09-14"),
     "CARD_TESTING_PROBES": ("Chidera", "D21, D62b: refused small card attempts before a large one. Right 99.8% of the time.", "2026-09-09"),
     "SANCTIONED_BENEFICIARY": ("Chidera", "D11a: a sanctioned destination is not a matter of probability.", "2026-09-09"),
     "KNOWN_MULE_BENEFICIARY": ("Chidera", "D11a: a destination an analyst confirmed as fraudulent.", "2026-09-09"),

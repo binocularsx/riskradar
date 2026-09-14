@@ -2,7 +2,7 @@
 
 Plain English
 -------------
-This file answers one question, twelve times: *is this transaction unusual for
+This file answers one question, seventeen times: *is this transaction unusual for
 this customer?*
 
 Each function takes the transaction being examined plus a list of that
@@ -38,8 +38,8 @@ from __future__ import annotations
 import math
 from datetime import timedelta
 
-from .spec import FEATURE_NAMES, NOT_APPLICABLE, RATIO_CAP
-from .types import HistoryBundle, PriorTx, TxView
+from .spec import EVENT_LOOKBACK_HOURS, FEATURE_NAMES, NOT_APPLICABLE, RATIO_CAP
+from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
 
 def _within(priors: list[PriorTx], tx: TxView, hours: float) -> list[PriorTx]:
@@ -209,6 +209,72 @@ def days_since_account_activity(tx: TxView, _h: HistoryBundle) -> float:
 
 
 # ---------------------------------------------------------------------------
+# D77: before the money moves
+# ---------------------------------------------------------------------------
+#
+# Account takeover is decided before the first transfer: a password guessed, a
+# SIM swapped, a new phone bound, a PIN changed, a mule enrolled as a payee.
+# These read the customer's events in the lookback window. "Hours since" caps at
+# the window, so "not recently" is one value, not the age of the data.
+
+
+def _events_before(h: HistoryBundle, tx: TxView, event_type: str) -> list[PriorEvent]:
+    cutoff = tx.occurred_at - timedelta(hours=EVENT_LOOKBACK_HOURS)
+    return [e for e in h.events
+            if e.event_type == event_type and cutoff <= e.occurred_at < tx.occurred_at]
+
+
+def _hours_since_latest(events: list[PriorEvent], tx: TxView) -> float:
+    if not events:
+        return float(EVENT_LOOKBACK_HOURS)
+    latest = max(e.occurred_at for e in events)
+    return round((tx.occurred_at - latest).total_seconds() / 3600.0, 6)
+
+
+def failed_logins_1h_subject(tx: TxView, h: HistoryBundle) -> float:
+    """Failed logins for this customer in the hour before. Guessing looks like this."""
+    cutoff = tx.occurred_at - timedelta(hours=1)
+    return float(sum(1 for e in _events_before(h, tx, "LOGIN")
+                     if e.login_result == "FAILED" and e.occurred_at >= cutoff))
+
+
+def device_bound_hours(tx: TxView, h: HistoryBundle) -> float:
+    """How recently the device making this payment was bound to the customer.
+
+    Not applicable without a device. A device bound long ago, or never bound in
+    the window, is simply "not recently": the cap.
+    """
+    if not tx.device_token:
+        return NOT_APPLICABLE
+    bound = [e for e in _events_before(h, tx, "DEVICE_BOUND")
+             if e.device_token == tx.device_token and e.binding == "BOUND"]
+    return _hours_since_latest(bound, tx)
+
+
+def credential_changed_hours(tx: TxView, h: HistoryBundle) -> float:
+    """How recently a password, PIN, MFA method, email or phone was changed."""
+    return _hours_since_latest(_events_before(h, tx, "CREDENTIAL_CHANGED"), tx)
+
+
+def sim_changed_hours(tx: TxView, h: HistoryBundle) -> float:
+    """How recently the customer's SIM changed. A SIM swap takes over the OTPs."""
+    return _hours_since_latest(_events_before(h, tx, "SIM_CHANGED"), tx)
+
+
+def payee_added_minutes(tx: TxView, h: HistoryBundle) -> float:
+    """Minutes since this payment's destination was enrolled as a payee.
+
+    Enrolled a minute before being paid is the takeover shape; enrolled on
+    Tuesday and paid on Friday is ordinary. Not applicable without a destination.
+    """
+    if not tx.beneficiary_token:
+        return NOT_APPLICABLE
+    added = [e for e in _events_before(h, tx, "PAYEE_ADDED")
+             if e.beneficiary_token == tx.beneficiary_token]
+    return round(_hours_since_latest(added, tx) * 60.0, 6)
+
+
+# ---------------------------------------------------------------------------
 # The vector
 # ---------------------------------------------------------------------------
 
@@ -225,6 +291,11 @@ _FUNCTIONS = {
     "device_is_new_to_subject": device_is_new_to_subject,
     "account_age_days": account_age_days,
     "days_since_account_activity": days_since_account_activity,
+    "failed_logins_1h_subject": failed_logins_1h_subject,
+    "device_bound_hours": device_bound_hours,
+    "credential_changed_hours": credential_changed_hours,
+    "sim_changed_hours": sim_changed_hours,
+    "payee_added_minutes": payee_added_minutes,
 }
 
 assert set(_FUNCTIONS) == set(FEATURE_NAMES), "feature registry disagrees with the spec"

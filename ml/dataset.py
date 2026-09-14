@@ -50,6 +50,49 @@ def _parse(ts: str | None) -> datetime | None:
     return datetime.fromisoformat(ts) if ts else None
 
 
+def events_file(corpus_path: Path) -> Path:
+    """``corpus.jsonl`` -> ``corpus.events.jsonl``, as the simulator writes it (D77)."""
+    return corpus_path.with_name(corpus_path.stem + ".events.jsonl")
+
+
+def load_events(corpus_path: Path) -> list[dict]:
+    """The corpus's non-payment events, shaped and tokenised as the events table holds them.
+
+    Same tokenisers as ingestion, and ``detail`` flattened to exactly the fields
+    the SQL loader selects, so the training path sees what serving sees (D15).
+    A corpus built before D77 has no events file; its event features are then
+    all "not recently", which is what a bank with no event feed would see.
+    """
+    path = events_file(corpus_path)
+    if not path.exists():
+        return []
+    from riskradar.features.spec import FEATURE_EVENT_TYPES
+
+    out = []
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            r = json.loads(line)
+            detail = r.get("detail") or {}
+            # Memory, not meaning: no feature reads a successful login or a
+            # limit change, so skipping them here gives identical features while
+            # keeping millions of rows out of memory. The SQL path reads them
+            # and ignores them; the equality test covers both.
+            if r["event_type"] not in FEATURE_EVENT_TYPES or (
+                    r["event_type"] == "LOGIN" and detail.get("result") != "FAILED"):
+                continue
+            ben = detail.get("beneficiary_account_id")
+            out.append({
+                "occurred_at": _parse(r["occurred_at"]),
+                "event_type": r["event_type"],
+                "subject_token": subject_token(r["customer_id"]),
+                "device_token": device_token(r["device_fingerprint"]) if r.get("device_fingerprint") else None,
+                "login_result": detail.get("result"),
+                "binding": detail.get("binding"),
+                "beneficiary_token": beneficiary_token(ben) if ben else None,
+            })
+    return out
+
+
 def load_corpus(path: Path, limit: int | None = None) -> Corpus:
     """Read JSONL, tokenise exactly as ingestion would, compute features.
 
@@ -87,8 +130,12 @@ def load_corpus(path: Path, limit: int | None = None) -> Corpus:
             }
         )
 
+    events = load_events(path)
+    print(f"  loaded {len(events)} non-payment events")
+
     print("  building history index ...")
-    source = PandasHistorySource(rows)
+    source = PandasHistorySource(rows, events)
+    del events
 
     print("  computing features ...")
     X = np.zeros((len(records), len(FEATURE_NAMES)), dtype=float)

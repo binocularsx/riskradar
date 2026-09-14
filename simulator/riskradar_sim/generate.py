@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .engine import TYPOLOGIES, Event, disbursement_burst, legitimate_event
+from .signals import EventLayer
 from . import ids
 from .population import Customer, build_population
 
@@ -91,7 +92,7 @@ def _active_hour(rng: random.Random, customer: Customer, day: datetime) -> datet
                        microsecond=0)
 
 
-def generate(config: SimulationConfig) -> Iterator[Event]:
+def generate(config: SimulationConfig, *, with_events: bool = False) -> Iterator[Event]:
     """Yield events in chronological order, ending at *now*.
 
     The first version looped ``range(days)`` from ``now - days``, so the last day
@@ -105,6 +106,10 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
     after it are dropped rather than invented — a simulator that emits
     transactions dated in the future would quietly corrupt every velocity
     feature that looks backwards from ``occurred_at``.
+
+    ``with_events`` (D77) adds logins, device bindings, credential and SIM
+    changes and payee enrolments around the payments, from the event layer's own
+    random stream. The payments are identical either way.
     """
     rng = random.Random(config.seed)
     ids.reseed(config.seed)  # D68: same seed, same customers, accounts and payees
@@ -132,6 +137,7 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
             recruited_pool.append(rng.choice(customer.known_beneficiaries))
 
     batch_payers = [c for c in customers if c.does_batch_payouts]
+    layer = EventLayer(config.seed, customers) if with_events else None
 
     # days + 1 because the window now includes today, partially.
     for day_index in range(config.days + 1):
@@ -185,8 +191,19 @@ def generate(config: SimulationConfig) -> Iterator[Event]:
                 if datetime.fromisoformat(e.payload["occurred_at"]) <= end
             )
 
+        if layer is not None:
+            # Drawn after the day's payments, from the layer's own stream, so
+            # the payments above consumed exactly what they always did.
+            extra = layer.around(events) + layer.background(day, end)
+            events.extend(e for e in extra if datetime.fromisoformat(e.payload["occurred_at"]) <= end)
+
         events.sort(key=lambda e: e.payload["occurred_at"])
         yield from events
+
+
+def events_path(corpus_path: Path) -> Path:
+    """``corpus.jsonl`` -> ``corpus.events.jsonl`` (D77)."""
+    return corpus_path.with_name(corpus_path.stem + ".events.jsonl")
 
 
 def write_corpus(config: SimulationConfig, out_path: Path) -> dict[str, int]:
@@ -194,14 +211,28 @@ def write_corpus(config: SimulationConfig, out_path: Path) -> dict[str, int]:
 
     Labels live **only** in this file. They are not part of the ingestion
     contract and never travel to the API.
+
+    Payments go to ``out_path`` exactly as before; non-payment events (D77) to
+    a sibling ``.events.jsonl``, so the payment file stays byte-identical to a
+    corpus built before events existed.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    counts = {"total": 0, "fraud": 0}
+    counts = {"total": 0, "fraud": 0, "events": 0, "fraud_events": 0}
     typologies: dict[str, int] = {}
     incidents: set[str] = set()
 
-    with out_path.open("w", encoding="utf-8") as fh:
-        for event in generate(config):
+    with out_path.open("w", encoding="utf-8") as fh, \
+            events_path(out_path).open("w", encoding="utf-8") as efh:
+        for event in generate(config, with_events=True):
+            if event.kind != "PAYMENT":
+                record = dict(event.payload)
+                record["is_fraud"] = event.is_fraud
+                record["typology"] = event.typology
+                record["incident_id"] = event.incident_id
+                efh.write(json.dumps(record) + "\n")
+                counts["events"] += 1
+                counts["fraud_events"] += int(event.is_fraud)
+                continue
             record = dict(event.payload)
             record["is_fraud"] = event.is_fraud
             record["typology"] = event.typology

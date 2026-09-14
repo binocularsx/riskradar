@@ -194,3 +194,55 @@ def test_signals_are_facts_never_points():
         d = s.as_dict()
         assert set(d) == {"code", "power", "severity", "evidence"}
         assert "score" not in d and "points" not in d and "weight" not in d
+
+
+# ---------------------------------------------------------------- D77
+
+
+SEQUENCE = {"ACCOUNT_TAKEOVER_SEQUENCE": {"enabled": True, "params": {"within_hours": 24, "min_failed_logins": 3}}}
+SEQUENCE_AS_SEEDED = {"ACCOUNT_TAKEOVER_SEQUENCE": {"enabled": True,
+                      "params": {"within_hours": 24, "min_failed_logins": 3, "min_precursors": 2}}}
+
+
+def quiet(**over) -> dict[str, float]:
+    """No precursor anywhere: the lookback caps."""
+    f = features()
+    f.update({"failed_logins_1h_subject": 0.0, "device_bound_hours": 72.0, "credential_changed_hours": 72.0,
+              "sim_changed_hours": 72.0, "payee_added_minutes": 4320.0})
+    f.update(over)
+    return f
+
+
+def fired(f: dict[str, float]):
+    return [s for s in evaluate(RuleContext(tx=tx(), features=f), SEQUENCE)
+            if s.code == "ACCOUNT_TAKEOVER_SEQUENCE"]
+
+
+def test_takeover_sequence_needs_a_precursor_and_a_new_destination():
+    assert not fired(quiet())
+    for precursor in ({"device_bound_hours": 0.5}, {"sim_changed_hours": 3.0},
+                      {"credential_changed_hours": 23.9}, {"failed_logins_1h_subject": 3.0}):
+        f = quiet()
+        f.update(precursor)
+        signal = fired(f)
+        assert signal and set(signal[0].evidence["precursors"]) == set(precursor)
+        f["beneficiary_is_new_to_account"] = 0.0  # a payee this account already pays
+        assert not fired(f)
+
+
+def test_takeover_sequence_ignores_old_or_absent_signals():
+    f = quiet(device_bound_hours=-1.0)  # no device on the payment
+    f.update({"credential_changed_hours": 24.0, "failed_logins_1h_subject": 2.0})
+    assert not fired(f)
+    f["beneficiary_is_new_to_account"] = -1.0  # no destination at all
+    f["sim_changed_hours"] = 1.0
+    assert not fired(f)
+
+
+def test_as_seeded_one_precursor_is_not_enough():
+    """D77: a single SIM change before a new payee is ordinary; two signals are the sequence."""
+    one = quiet(sim_changed_hours=2.0)
+    two = quiet(sim_changed_hours=2.0, device_bound_hours=1.0)
+    ctx = lambda f: RuleContext(tx=tx(), features=f)  # noqa: E731
+    assert not evaluate(ctx(one), SEQUENCE_AS_SEEDED)
+    assert [s.code for s in evaluate(ctx(two), SEQUENCE_AS_SEEDED)] == ["ACCOUNT_TAKEOVER_SEQUENCE"]

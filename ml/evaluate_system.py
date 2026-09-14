@@ -68,6 +68,13 @@ from riskradar.policy.engine import Thresholds, apply as apply_policy  # noqa: E
 from riskradar.rules.engine import RuleContext, evaluate as evaluate_rules  # noqa: E402
 from train import ALERT_BUDGET_PER_DAY, TYPOLOGIES, build_model  # noqa: E402
 
+# D77. The features read from non-payment events. ``--without-events`` removes
+# them and the rule built on them, so the same corpus measures the system as it
+# was before WP-02.
+EVENT_FEATURES = ("failed_logins_1h_subject", "device_bound_hours", "credential_changed_hours",
+                  "sim_changed_hours", "payee_added_minutes")
+EVENT_RULES = ("ACCOUNT_TAKEOVER_SEQUENCE",)
+
 # The cheapest thing that could possibly work, used as the floor everything else
 # has to clear. Chosen before seeing any result: it is the single feature with
 # the most obvious operational meaning.
@@ -77,6 +84,7 @@ BASELINE_FEATURE = "txn_count_1h_account"
 # evaluation measures the rules that actually ship.
 RULE_CONFIGS = {
     "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5, "new_destination_days": 1, "no_destination_min_count": 10}},  # D67
+    "ACCOUNT_TAKEOVER_SEQUENCE": {"enabled": True, "params": {"within_hours": 24, "min_failed_logins": 3, "min_precursors": 2}},  # D77
     "CARD_TESTING_PROBES": {
         "enabled": True,
         "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3},
@@ -128,20 +136,21 @@ def _minimal_tx(instrument: str) -> TxView:
     )
 
 
-def compute_signals(X: np.ndarray, instruments: np.ndarray) -> list:
+def compute_signals(X: np.ndarray, instruments: np.ndarray, names=FEATURE_NAMES, configs=None) -> list:
     """Evaluate the rules once for a whole test set.
 
     The rules read features and instrument, never the model's probability — so
     the signals are identical across every arm that uses the same rows. Computing
     them once and reusing them is what keeps six arms as cheap as the old two.
     """
+    configs = configs or RULE_CONFIGS
     out = []
     for i in range(len(X)):
-        features = {name: float(X[i, j]) for j, name in enumerate(FEATURE_NAMES)}
+        features = {name: float(X[i, j]) for j, name in enumerate(names)}
         out.append(
             evaluate_rules(
                 RuleContext(tx=_minimal_tx(instruments[i]), features=features),
-                RULE_CONFIGS,
+                configs,
             )
         )
         if i and i % 150_000 == 0:
@@ -177,18 +186,30 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--corpus", default="ml/data/corpus.jsonl")
     parser.add_argument("--out", default="ml/artifacts/system-evaluation.json")
+    parser.add_argument("--budget", type=int, default=ALERT_BUDGET_PER_DAY, help="alerts a day (D76: 75)")
+    parser.add_argument("--without-events", action="store_true",
+                        help="D77 ablation: drop the event features and the rule built on them")
     args = parser.parse_args()
+    budget = args.budget
 
     corpus = load_or_build(REPO_ROOT / args.corpus, rebuild=False)
+    names = list(FEATURE_NAMES)
+    configs = dict(RULE_CONFIGS)
+    if args.without_events:
+        keep = [j for j, n in enumerate(names) if n not in EVENT_FEATURES]
+        corpus.X = corpus.X[:, keep]
+        names = [names[j] for j in keep]
+        configs = {k: v for k, v in configs.items() if k not in EVENT_RULES}
+        print(f"  without events: {len(names)} features, rules {sorted(configs)}")
     span_days = (max(corpus.occurred_at) - min(corpus.occurred_at)).total_seconds() / 86400.0
 
     # The card-testing rule gates on instrument == CARD. Recovering that from the
     # cached matrix is not possible, so it is approximated from the decline
     # signature the typology produces. Stated plainly because it is the one place
     # this offline evaluation is not the live path.
-    card_like = corpus.X[:, FEATURE_NAMES.index("decline_rate_24h_account")] > 0.0
+    card_like = corpus.X[:, names.index("decline_rate_24h_account")] > 0.0
     instruments = np.where(card_like, "CARD", "ACCOUNT_TRANSFER")
-    baseline_col = FEATURE_NAMES.index(BASELINE_FEATURE)
+    baseline_col = names.index(BASELINE_FEATURE)
 
     results: dict = {}
     for held_out in TYPOLOGIES:
@@ -215,7 +236,7 @@ def main() -> None:
         p_one = Xte[:, baseline_col].astype(float)
 
         print("   evaluating rules (once, reused by every arm) …")
-        signals = compute_signals(Xte, instruments[test_idx])
+        signals = compute_signals(Xte, instruments[test_idx], names, configs)
 
         arms: list[dict] = []
 
@@ -225,14 +246,14 @@ def main() -> None:
                          alert_min_level="MEDIUM")
         arms.append(score(y, decide(np.zeros(len(y)), signals, off), ids, "rules only"))
 
-        t_one = threshold_for_alert_budget(p_one, budget_per_day=ALERT_BUDGET_PER_DAY,
+        t_one = threshold_for_alert_budget(p_one, budget_per_day=budget,
                                            days=test_days)
         arms.append(score(y, p_one >= t_one, ids, f"one feature ({BASELINE_FEATURE})"))
 
         # --- model-only arms ------------------------------------------------
         thresholds_by_arm = {}
         for label, p in (("logistic regression", p_lr), ("gradient boosting (ours)", p_gbm)):
-            t = threshold_for_alert_budget(p, budget_per_day=ALERT_BUDGET_PER_DAY,
+            t = threshold_for_alert_budget(p, budget_per_day=budget,
                                            days=test_days)
             thresholds_by_arm[label] = t
             arms.append(score(y, p >= t, ids, label))
@@ -315,7 +336,10 @@ def main() -> None:
         )
 
     report = {
-        "alert_budget_per_day": ALERT_BUDGET_PER_DAY,
+        "alert_budget_per_day": budget,
+        "feature_spec": "without event features (D77 ablation)" if args.without_events else "1.2.0",
+        "features": names,
+        "rules": sorted(configs),
         "incidents_per_typology": {t: arms[0]["incidents"] for t, arms in results.items()},
         "per_typology": results,
         "mean_incident_recall": means,

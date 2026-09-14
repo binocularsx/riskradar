@@ -18,7 +18,7 @@ from __future__ import annotations
 
 # Bumped whenever the meaning of any feature changes. Every decision record
 # stores the version that produced it, so a decision is reproducible (G4).
-FEATURE_SPEC_VERSION = "1.1.0"  # D64: markers, ratio caps
+FEATURE_SPEC_VERSION = "1.2.0"  # D77: signals before the money moves
 
 # D25 cut this from ~15 to 12 to pay for the identity work in D19a/D22.
 FEATURE_NAMES: tuple[str, ...] = (
@@ -34,6 +34,13 @@ FEATURE_NAMES: tuple[str, ...] = (
     "device_is_new_to_subject",
     "account_age_days",
     "days_since_account_activity",
+    # D77 (WP-02): what happened to the customer before this payment. Read from
+    # events, not transactions; account takeover announces itself here.
+    "failed_logins_1h_subject",
+    "device_bound_hours",
+    "credential_changed_hours",
+    "sim_changed_hours",
+    "payee_added_minutes",
 )
 
 # Lookback windows the history loaders must honour. Both data-access paths read
@@ -41,6 +48,12 @@ FEATURE_NAMES: tuple[str, ...] = (
 ACCOUNT_HISTORY_DAYS = 30
 SUBJECT_HISTORY_DAYS = 30
 BENEFICIARY_LOOKBACK_DAYS = 90
+
+# D77. Non-payment events are read for the customer over this window. The
+# "how long ago" features cap at it: a device bound a month ago and a device
+# bound three days ago are both simply "not recently", and an uncapped value
+# would teach the model the age of the simulation rather than the customer.
+EVENT_LOOKBACK_HOURS = 72
 
 # D64. "This does not apply" - no beneficiary on a card payment, no opening
 # date on an account we know nothing about.
@@ -63,7 +76,8 @@ NOT_APPLICABLE = -1.0
 # explanation bars meaningless and would break any drift statistic.
 RATIO_CAP = 100.0
 
-# D72. The event types this package scores. Every other type is accepted at the
-# boundary and stored as an event, but no feature reads it until WP-02 adds its
-# detectors; a type joins this set in the same change that adds its features.
+# D72, D77. A decision is made on a payment: that is where money is at risk and
+# where the alert budget is spent. The other types are read by features, as
+# history before the payment, but do not get a decision of their own.
 SCORED_EVENT_TYPES = frozenset({"PAYMENT"})
+FEATURE_EVENT_TYPES = frozenset({"LOGIN", "DEVICE_BOUND", "CREDENTIAL_CHANGED", "PAYEE_ADDED", "SIM_CHANGED"})

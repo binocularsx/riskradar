@@ -31,6 +31,7 @@ Six rules (D25), two of each power:
 Code                         Power      Catches
 ===========================  =========  ==============================================
 VELOCITY_BURST_1H            ESCALATE   ATO extraction, mule fan-out speed
+ACCOUNT_TAKEOVER_SEQUENCE    ESCALATE   A way in taken over, then a new destination (D77)
 CARD_TESTING_PROBES          ESCALATE   Authorisation probing — decline-heavy by nature
 SANCTIONED_BENEFICIARY       OVERRIDE   Some things are not probabilistic
 KNOWN_MULE_BENEFICIARY       OVERRIDE   Destination confirmed fraudulent by an analyst
@@ -147,6 +148,48 @@ def velocity_burst_1h(ctx: RuleContext, params: dict[str, Any]) -> Signal | None
         power="ESCALATE",
         severity=params.get("severity", "HIGH"),
         evidence=evidence,
+    )
+
+
+@rule("ACCOUNT_TAKEOVER_SEQUENCE")
+def account_takeover_sequence(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """Money to a new destination, shortly after someone took over the way in (D77).
+
+    Account takeover is decided before the first transfer. The attacker guesses
+    the password or swaps the SIM, binds their own phone, changes the PIN, then
+    pays someone the owner has never paid. Any one of those precursors happens
+    to ordinary customers all the time; followed within hours by a payment to a
+    destination new to the account, it is the takeover sequence.
+
+    Every precursor is a feature read from events, so the evidence shows exactly
+    which ones were present. Without a destination, or to a payee the account
+    has paid before, the rule stays silent: the owner's own habits are not the
+    attack.
+    """
+    if float(ctx.features.get("beneficiary_is_new_to_account", 0.0)) != 1.0:
+        return None
+    within = float(params.get("within_hours", 24))
+    min_failed = int(params.get("min_failed_logins", 3))
+
+    precursors: dict[str, float] = {}
+    device = float(ctx.features.get("device_bound_hours", -1.0))
+    if 0 <= device < within:
+        precursors["device_bound_hours"] = round(device, 2)
+    for name in ("sim_changed_hours", "credential_changed_hours"):
+        hours = float(ctx.features.get(name, within))
+        if 0 <= hours < within:
+            precursors[name] = round(hours, 2)
+    failed = int(ctx.features.get("failed_logins_1h_subject", 0))
+    if failed >= min_failed:
+        precursors["failed_logins_1h_subject"] = failed
+    if len(precursors) < int(params.get("min_precursors", 1)):
+        return None
+    return Signal(
+        code="ACCOUNT_TAKEOVER_SEQUENCE",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"precursors": precursors, "within_hours": within, "min_failed_logins": min_failed,
+                  "payee_added_minutes": round(float(ctx.features.get("payee_added_minutes", -1.0)), 1)},
     )
 
 
@@ -281,6 +324,7 @@ def established_payee_normal(ctx: RuleContext, params: dict[str, Any]) -> Signal
 
 ALL_RULE_CODES: tuple[str, ...] = (
     "VELOCITY_BURST_1H",
+    "ACCOUNT_TAKEOVER_SEQUENCE",
     "CARD_TESTING_PROBES",
     "SANCTIONED_BENEFICIARY",
     "KNOWN_MULE_BENEFICIARY",
