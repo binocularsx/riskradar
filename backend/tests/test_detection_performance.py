@@ -6,7 +6,7 @@ from one rule to another without any number looking wrong.
 
 from __future__ import annotations
 
-from riskradar.cases.performance import MODEL, by_driver, wilson
+from riskradar.cases.performance import MODEL, alert_ratio, budget_menu, by_driver, wilson
 
 from conftest import login
 
@@ -77,10 +77,82 @@ def test_wilson_interval():
     assert low < 0.9 < high and high <= 1.0
 
 
+def case(outcome, alerts, value=0):
+    return {"outcome": outcome, "alerts": alerts, "alerted_value_minor": value}
+
+
+def test_ratio_counts_alerts_on_false_cases_against_confirmed_incidents():
+    """WP-09: the unit banks benchmark is false alerts per confirmed incident."""
+    r = alert_ratio([case("FALSE_POSITIVE", 20), case("FALSE_POSITIVE", 10),
+                     case("CONFIRMED_FRAUD", 4, 500_000), case("CONFIRMED_FRAUD", 1, 250_000)])
+    assert r["false_alerts"] == 30 and r["confirmed_incidents"] == 2
+    assert r["false_alerts_per_incident"] == 15.0
+    assert r["confirmed_fraud_value_minor"] == 750_000
+
+
+def test_ratio_is_a_floor_inconclusive_sits_on_neither_side():
+    # Alerts inside a confirmed case are never counted as false, and "can't
+    # tell" neither adds false alerts nor counts as an incident.
+    r = alert_ratio([case("CONFIRMED_FRAUD", 9), case("INCONCLUSIVE", 50)])
+    assert r["false_alerts"] == 0 and r["confirmed_incidents"] == 1
+    assert r["inconclusive_cases"] == 1 and r["false_alerts_per_incident"] == 0.0
+
+
+def test_ratio_without_confirmed_fraud_is_not_a_number():
+    r = alert_ratio([case("FALSE_POSITIVE", 97)])
+    assert r["false_alerts_per_incident"] is None
+    assert r["enough_evidence"] is False
+
+
+def test_three_incidents_cannot_set_a_rate():
+    """D66d: the demo day's 32 to 1 came from three incidents."""
+    r = alert_ratio([case("FALSE_POSITIVE", 97)] + [case("CONFIRMED_FRAUD", 1)] * 3)
+    assert r["false_alerts_per_incident"] == 32.3
+    assert r["enough_evidence"] is False
+
+
+MENU = {"measured": "time-ordered test", "test_days": 30.1, "benchmarks": {},
+        "options": [{"budget_per_day": b} for b in (120, 75, 60)]}
+
+
+def test_budget_menu_marks_todays_budget_and_changes_nothing():
+    m = budget_menu(MENU, 75)
+    assert m["available"] and m["current_is_measured"]
+    assert [o["current"] for o in m["options"]] == [False, True, False]
+    assert "current" not in MENU["options"][1]  # the artifact is not mutated
+
+
+def test_an_unmeasured_budget_borrows_no_figures():
+    m = budget_menu(MENU, 90)
+    assert m["current_is_measured"] is False
+    assert not any(o["current"] for o in m["options"])
+
+
+def test_budget_menu_without_the_artifact():
+    m = budget_menu(None, 120)
+    assert m == {"available": False, "current_budget_per_day": 120, "options": []}
+
+
+def test_budget_menu_endpoint(client):
+    login(client, "lead@riskradar.local", "OpsLead#2026")
+    body = client.get("/v1/metrics/budget-menu").json()
+    assert {"available", "current_budget_per_day", "options"} <= set(body)
+    for option in body["options"]:
+        assert {"budget_per_day", "false_alerts_per_incident", "value_detection_rate",
+                "seen_fraud", "held_out", "current"} <= set(option)
+
+
+def test_budget_menu_is_not_for_analysts(client):
+    login(client, "analyst@riskradar.local", "Analyst#2026")
+    assert client.get("/v1/metrics/budget-menu").status_code == 403
+
+
 def test_detection_endpoint_for_the_lead(client):
     login(client, "lead@riskradar.local", "OpsLead#2026")
     body = client.get("/v1/metrics/detection?days=30").json()
-    assert {"window_days", "by_driver", "rules", "decided_cases"} <= set(body)
+    assert {"window_days", "by_driver", "rules", "decided_cases", "ratio"} <= set(body)
+    assert {"false_alerts", "confirmed_incidents", "false_alerts_per_incident",
+            "enough_evidence"} <= set(body["ratio"])
     for rule in body["rules"]:
         assert {"code", "power", "fired", "on_alerts"} <= set(rule)
 

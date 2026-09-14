@@ -59,7 +59,7 @@ the few gaps that matter most rather than all of them.
 | ID | Objective | Status | Where Risk Radar stands |
 |---|---|---|---|
 | O1 | Stop fraud before settlement | Rejected for v1 | Advisory only (D7). We return ALLOW / MONITOR / REVIEW / HOLD beside every score as a seam for a bank to enforce. |
-| O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Not yet reduced on live outcomes. |
+| O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Now reported in the unit banks benchmark: 15:1 false alerts per incident at 120, 6.6:1 at 75, 4.1:1 at 60, on the Analytics screen (D70). Not yet reduced on live outcomes. |
 | O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are not scored. |
 | O4 | Regulatory clocks met automatically | Not built | Only our own response clocks per severity. See D69g. |
 | O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve now measured (D69f). Cost per case not measured. |
@@ -147,7 +147,7 @@ the few gaps that matter most rather than all of them.
 |---|---|---|---|
 | FR-601 | Executive loss dashboard | Not built | Money at risk is shown; loss, recovery and chargebacks need a bank. |
 | FR-602 | Operational dashboard | Met | Alerts against capacity, backlog, waiting times, workload per analyst, past-due cases, time to resolve. |
-| FR-603 | Detection performance per rule, model and fraud type | Partly | Per rule and model live (D69d); per fraud type offline in the held-out evaluation. Value saved not measured. |
+| FR-603 | Detection performance per rule, model and fraud type | Partly | Per rule and model live (D69d); per fraud type offline in the held-out evaluation. False alerts per confirmed incident live and offline; share of fraud value detected offline, per budget (D70). Money recovered needs a bank. |
 | FR-604 | Regulator-format exports | Not built | Needs a bank (D28). |
 | FR-605 | Ad-hoc query and export | Partly | Transaction search; no export. |
 | FR-606 | Board pack | Not built | — |

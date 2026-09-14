@@ -68,6 +68,7 @@ export const api = {
   // aggregates
   overview: (hours) => get(`/v1/metrics/overview?hours=${hours}`),
   detection: (days = 30) => get(`/v1/metrics/detection?days=${days}`),
+  budgetMenu: () => get('/v1/metrics/budget-menu'),
   searchTransactions: (params) => get(`/v1/transactions/search?${new URLSearchParams(params)}`),
 
   // administration

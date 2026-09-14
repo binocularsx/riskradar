@@ -12,11 +12,13 @@ separate metrics page was one of the compensating cuts.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
 from ...cases import performance
+from ...config import settings
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 
@@ -231,13 +233,48 @@ def detection(
         if rule["power"] == "SUPPRESS":
             rule["lowered_risk_on_confirmed_fraud_customers"] = suppressed_on_fraud.get(rule["code"], 0)
 
+    case_rows = _rows(
+        conn,
+        f"""
+        SELECT c.id, c.outcome::text AS outcome,
+               count(a.id) AS alerts,
+               coalesce(sum(t.amount_minor), 0) AS alerted_value_minor
+          FROM cases c
+          JOIN alerts a       ON a.case_id = c.id
+          JOIN transactions t ON t.id = a.transaction_id
+         WHERE c.outcome IS NOT NULL
+           AND c.opened_at > now() - interval '{window}'
+         GROUP BY c.id, c.outcome
+        """,
+    )
+
     return {
         "window_days": days,
         "decided_cases": decided_cases,
         "min_decided_for_evidence": performance.MIN_DECIDED_FOR_EVIDENCE,
         "by_driver": performance.by_driver(alert_rows),
         "rules": rules,
+        # WP-09: the unit banks benchmark, not a raw count of false alarms.
+        "ratio": performance.alert_ratio(case_rows),
     }
+
+
+@router.get("/metrics/budget-menu")
+def budget_menu(
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """What each alert budget buys, as measured offline (WP-09, D67c).
+
+    The figures come from ``ml/budget_menu.py``, not from live traffic: the
+    fraud a live system misses carries no label, so recall and value detection
+    can only be measured where the truth is known. Read-only by design.
+    """
+    path = settings().artifact_dir / "budget-menu.json"
+    menu = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    budget_row = _rows(conn, "SELECT value FROM app_config WHERE key = 'alert_budget_per_day'")
+    budget = int(budget_row[0]["value"]) if budget_row else 120
+    return performance.budget_menu(menu, budget)
 
 
 @router.get("/transactions/search")
