@@ -336,6 +336,28 @@ def _aware(v: datetime | None) -> datetime | None:
     return v
 
 
+class DirectiveAckIn(Strict):
+    """What the bank did with a directive (WP-07, D74). Recorded once."""
+
+    action_taken: Literal["APPLIED", "NOT_APPLIED", "SHADOW_RECORDED"]
+    taken_at: IsoDatetime
+    reason: Annotated[str | None, Field(max_length=500)] = None
+
+    @field_validator("taken_at")
+    @classmethod
+    def _require_timezone(cls, v: datetime) -> datetime:
+        return _aware(v)
+
+
+class EnforcementPolicyIn(Strict):
+    mode: Literal["SHADOW", "LIVE"]
+    ttl_seconds: Annotated[int, Field(ge=5, le=3600)]
+    fail_open_action: Literal["APPROVE", "APPROVE_AND_MONITOR"] = "APPROVE"
+    policy_text: Annotated[str, Field(min_length=20, max_length=8000)]
+    signed_by: Annotated[str | None, Field(min_length=3, max_length=200)] = None
+    signed_at: IsoDatetime | None = None
+
+
 class WatchlistPlaceIn(Strict):
     """A temporary watch-list flag on the case's customer (WP-06, D73)."""
 

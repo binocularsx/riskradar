@@ -51,6 +51,7 @@ from ..features import compute_features, load_history_sql, to_vector
 from ..features.spec import FEATURE_SPEC_VERSION
 from ..features.types import TxView
 from ..model import registry
+from ..policy import directives
 from ..policy.engine import Thresholds, apply as apply_policy
 from ..rules.engine import RuleContext, evaluate as evaluate_rules
 
@@ -338,6 +339,13 @@ def score_transaction(
         )
         dec_row = cur.fetchone()
         decision_id = int(dec_row["id"] if isinstance(dec_row, dict) else dec_row[0])
+
+    # --- directive (WP-07, D74): the decision in a form a switch can act on --
+    # Same transaction as the decision. Replayed history gets none: nobody can
+    # act on an instruction about a payment from last month.
+    if not row["is_replay"]:
+        directives.issue(conn, decision_id=decision_id, transaction_id=transaction_id,
+                         decision=result.decision)
 
     outcome: dict[str, Any] = {
         "transaction_id": transaction_id,

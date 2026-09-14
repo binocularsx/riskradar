@@ -20,7 +20,7 @@ STATUS = [
     ("WP-05", "Clocks the regulator sets", "built", "14 Sep 2026", "D71 · migration 0007 · run_clocks.py"),
     ("WP-01", "One event, not one transaction", "built", "14 Sep 2026", "D72 · migration 0008 · /v1/events"),
     ("WP-06", "The twenty-four hour flag", "built", "14 Sep 2026", "D73 · migration 0009 · BVN link open (D73c)"),
-    ("WP-07", "A decision a bank can act on", "todo", "", ""),
+    ("WP-07", "A decision a bank can act on", "built", "14 Sep 2026", "D74 · migration 0010 · SHADOW v1"),
     ("WP-02", "Signals before the money moves", "todo", "", "ready: WP-01 built"),
     ("WP-03", "Watch the money coming in", "todo", "", "ready: WP-01 built"),
     ("WP-04", "The second leg", "todo", "", "needs WP-03"),

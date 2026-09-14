@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from ..config import settings
 from ..db import close_pool, pool
 from ..security.tokens import hash_api_key
-from .routers import admin, auth, cases, ingest, metrics, stream, triage
+from .routers import admin, auth, cases, directives, ingest, metrics, stream, triage
 
 log = logging.getLogger("riskradar.api")
 
@@ -54,6 +54,8 @@ app.add_middleware(
 
 app.include_router(ingest.router)
 app.include_router(ingest.events_router)
+app.include_router(directives.router)
+app.include_router(directives.admin_router)
 app.include_router(auth.router)
 app.include_router(cases.router)
 app.include_router(triage.router)

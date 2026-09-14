@@ -90,6 +90,8 @@ export const api = {
   lists: (kind) => get(`/v1/admin/lists${kind ? `?kind=${kind}` : ''}`),
   addListEntry: (data) => post('/v1/admin/lists', data),
   removeListEntry: (id) => del(`/v1/admin/lists/${id}`),
+  enforcementPolicy: () => get('/v1/admin/enforcement-policy'),
+  directiveMetrics: (days = 7) => get(`/v1/metrics/directives?days=${days}`),
   audit: (params) => get(`/v1/admin/audit?${new URLSearchParams(params || {})}`),
   verifyAudit: () => get('/v1/admin/audit/verify'),
 }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, when } from '../lib/api'
 import { Banner, Empty } from '../components/ui'
 
-const TABS = ['Rules', 'Thresholds', 'Models', 'Lists', 'Audit']
+const TABS = ['Rules', 'Thresholds', 'Models', 'Lists', 'Enforcement', 'Audit']
 
 /**
  * Administration (FR-040 to FR-042).
@@ -33,6 +33,7 @@ export default function Admin() {
       {tab === 'Thresholds' && <Thresholds />}
       {tab === 'Models' && <Models />}
       {tab === 'Lists' && <Lists />}
+      {tab === 'Enforcement' && <Enforcement />}
       {tab === 'Audit' && <Audit />}
     </>
   )
@@ -46,6 +47,68 @@ function useAsync(fn, deps = []) {
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
   return { data, error, reload: load, setError }
+}
+
+/* ------------------------------------------------------------ enforcement */
+
+/**
+ * WP-07 (D74): the directive contract a bank would wire in. Read-only here on
+ * purpose: publishing a policy is an API call with a signature attached, and
+ * LIVE is refused by the database without one (D69a).
+ */
+function Enforcement() {
+  const { data, error } = useAsync(() => Promise.all([api.enforcementPolicy(), api.directiveMetrics(7)]))
+  if (error) return <Banner kind="error">{error}</Banner>
+  if (!data) return <p className="muted">Loading…</p>
+  const [policy, metrics] = data
+  const active = policy.active
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="between">
+          <h2 style={{ margin: 0 }}>Enforcement policy v{active?.version ?? '—'}</h2>
+          <span className={`pill ${active?.mode === 'LIVE' ? 'override' : ''}`}>{active?.mode ?? 'none'}</span>
+        </div>
+        {active && (
+          <>
+            <p className="dim" style={{ fontSize: 12.5 }}>
+              A directive may be acted on for {active.ttl_seconds} seconds after it is issued. Late, expired or
+              missing: {active.fail_open_action.replace(/_/g, ' ').toLowerCase()} (fail open).
+              {active.signed_by ? ` Signed by ${active.signed_by}, ${when(active.signed_at)}.` : ' Not signed: LIVE is unavailable.'}
+            </p>
+            <p style={{ fontSize: 13, whiteSpace: 'pre-wrap', marginBottom: 0 }}>{active.policy_text}</p>
+          </>
+        )}
+      </div>
+      <div className="card">
+        <h2>Directives, last {metrics.window_days} days</h2>
+        {metrics.by_action.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Action</th><th>Mode</th><th className="num">Issued</th><th className="num">Delivered</th>
+                    <th className="num">In time</th><th className="num">Acknowledged</th></tr>
+              </thead>
+              <tbody>
+                {metrics.by_action.map((r) => (
+                  <tr key={`${r.action}-${r.mode}`}>
+                    <td className="mono">{r.action}</td><td>{r.mode}</td>
+                    <td className="num">{r.issued}</td><td className="num">{r.delivered}</td>
+                    <td className="num">{r.delivered_in_time}</td><td className="num">{r.acknowledged}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <Empty>No directives issued in this window. They are written for live, not replayed, payments.</Empty>}
+        <p className="dim" style={{ fontSize: 11.5, marginBottom: 0 }}>
+          Median time to first delivery {metrics.timing.median_seconds_to_delivery ?? '—'}s ·
+          p95 {metrics.timing.p95_seconds_to_delivery ?? '—'}s. Risk Radar never enforces a directive; the bank does,
+          and only under a signed LIVE policy.
+        </p>
+      </div>
+    </>
+  )
 }
 
 /* ------------------------------------------------------------------ rules */

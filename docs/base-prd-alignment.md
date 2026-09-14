@@ -41,8 +41,8 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 | Status | Count | Meaning |
 |---|---|---|
 | Met | 14 | Built and tested, 4 of them added for this review and 2 since (D71) |
-| Partly | 43 | Some of it built; the missing part is named |
-| Not built | 30 | Absent; on the roadmap or waiting on a bank |
+| Partly | 44 | Some of it built; the missing part is named |
+| Not built | 29 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -99,11 +99,11 @@ the few gaps that matter most rather than all of them.
 
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
-| FR-301 | Approve / step-up / hold / decline before authorisation | Rejected for v1 | D7. Our four decision types map onto these, but nothing is enforced. |
+| FR-301 | Approve / step-up / hold / decline before authorisation | Rejected for v1 | D7. The seam is now a contract: a directive per decision with a TTL, a signed fail-open policy and a delivery record (D74). Nothing is enforced. |
 | FR-302 | Risk-based step-up authentication | Rejected for v1 | Requires enforcement. |
 | FR-303 | Policy per channel, product, segment and amount | Not built | One threshold set for all traffic. |
 | FR-304 | Business users change rules without a deployment | Partly | Enable, disable, retune and re-grade rules from the admin screen, versioned. A new kind of rule still needs code. |
-| FR-305 | Shadow mode on live traffic | Not built | Designed, not built (D16). A bank pilot should begin in shadow mode. |
+| FR-305 | Shadow mode on live traffic | Partly | Built as a contract (D74): every live decision issues a SHADOW directive with a TTL and fail-open action; delivery and the bank's acknowledgement are recorded and measured. No bank traffic yet. |
 | FR-306 | Champion–challenger routing | Not built | — |
 | FR-307 | Threshold simulation with projected alert volume | Partly | `scripts/derive_thresholds.py` projects alerts a day and false alarms before publishing (D61b, D67c). Not on the admin screen. |
 | FR-308 | Versioning, maker–checker approval, rollback | Partly | Every change is a new audited version. No second approver; rollback is republishing an earlier version. |
