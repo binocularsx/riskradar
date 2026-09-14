@@ -181,6 +181,23 @@ So the boundary stamps and the interior never looks up. A mutable `accounts` dim
 
 *(Nigerian practice bands accounts as inactive and then dormant at roughly six and twelve months without customer-induced activity. Confirm the current CBN figures before quoting them; the design does not depend on the exact boundary, only on deriving it from `last_activity_at`.)*
 
+### 6.1a Event envelope [v1.2, D72]
+
+A payment is one event type among several. Account takeover announces itself **before** the money moves: a login from a new device, a changed PIN, a newly enrolled payee, a SIM swap, a raised transfer limit. None of these is a transaction, and §6.1 cannot express them. Every event now shares one envelope:
+
+| Field | Type | Notes |
+|---|---|---|
+| `event_ref` | string | Caller-supplied idempotency key, **unique across every type**. A payment's is its `transaction_ref` |
+| `event_type` | enum | `PAYMENT` / `LOGIN` / `DEVICE_BOUND` / `CREDENTIAL_CHANGED` / `PAYEE_ADDED` / `SIM_CHANGED` / `LIMIT_CHANGED` |
+| `occurred_at` | timestamptz | As §6.1: every detector uses this, never `ingested_at` |
+| `subject_token` | string | The customer, tokenised at the boundary |
+| `account_token` | string | Nullable; required for `PAYEE_ADDED` and `LIMIT_CHANGED` |
+| `device_token` | string | Nullable; required for `DEVICE_BOUND` |
+| `ip_region`, `channel` | | Channel-layer fields, as §6.1 |
+| `detail` | object | Type-specific facts, validated per type and tokenised (`PAYEE_ADDED` stores a `beneficiary_token`, `SIM_CHANGED` an `msisdn_token`). Empty for a payment |
+
+**Why the payment columns did not move into `detail`:** the feature package, the model and every stored decision read `transactions` as typed columns, and §12.5's train/serve equality is proven against them. The envelope is the spine; a payment's envelope row links to its `transactions` row and is written in the same database transaction. Nothing about payment scoring changes. `POST /v1/events` accepts any type (a payment as `{event_type: PAYMENT, payment: <§6.1 event>}`); `POST /v1/transactions` stays as the payment-only door. Only `PAYMENT` is scored today (`riskradar.features.spec.SCORED_EVENT_TYPES`); the other types are stored for the detectors of WP-02.
+
 ### 6.2 Decision, Alert, Case
 
 **[CORRECTION]** The Note of Concept, the MVP table and the user stories use *alert* and *case* interchangeably across three different state vocabularies (four states, six verbs, and outcomes applied to alerts rather than cases). They are different objects and the difference is load-bearing.

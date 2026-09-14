@@ -33,13 +33,36 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from ...security.tokens import account_token, beneficiary_token, device_token, subject_token
+from ...security.tokens import (
+    account_token,
+    beneficiary_token,
+    device_token,
+    msisdn_token,
+    subject_token,
+)
 from ..deps import get_conn, require_api_key
-from ..schemas import BatchAccepted, BatchIn, TransactionAccepted, TransactionIn
+from ..schemas import (
+    BatchAccepted,
+    BatchIn,
+    EventAccepted,
+    EventBatchAccepted,
+    EventBatchIn,
+    EventIn,
+    PaymentEventIn,
+    TransactionAccepted,
+    TransactionIn,
+)
 
 router = APIRouter(prefix="/v1/transactions", tags=["ingestion"])
+# WP-01 (D72): the general door. /v1/transactions stays as the payment-only
+# door every existing caller, the simulator included, already uses.
+events_router = APIRouter(prefix="/v1/events", tags=["ingestion"])
+
+
+class EventRefConflict(Exception):
+    """An idempotency reference already used by an event of a different type."""
 
 
 INSERT_SQL = """
@@ -63,6 +86,25 @@ INSERT_SQL = """
     ON CONFLICT (transaction_ref) DO NOTHING
     RETURNING id
 """
+
+EVENT_INSERT_SQL = """
+    INSERT INTO events (
+        event_ref, event_type, occurred_at, subject_token, account_token,
+        device_token, ip_region, channel, transaction_id, detail, is_replay
+    ) VALUES (
+        %(event_ref)s, %(event_type)s, %(occurred_at)s, %(subject_token)s, %(account_token)s,
+        %(device_token)s, %(ip_region)s, %(channel)s, %(transaction_id)s, %(detail)s, %(is_replay)s
+    )
+    ON CONFLICT (event_ref) DO NOTHING
+    RETURNING id
+"""
+
+
+def _existing_event_type(conn: Any, ref: str) -> str | None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT event_type::text AS t FROM events WHERE event_ref = %s", (ref,))
+        row = cur.fetchone()
+    return None if row is None else (row["t"] if isinstance(row, dict) else row[0])
 
 
 def _stamp_account_context(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -160,6 +202,10 @@ def _to_row(tx: TransactionIn, *, is_replay: bool, raise_alerts: bool) -> dict[s
 
 
 def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
+    # One reference names one event. A payment may not reuse a login's.
+    existing_type = _existing_event_type(conn, row["transaction_ref"])
+    if existing_type not in (None, "PAYMENT"):
+        raise EventRefConflict(f"event_ref already used by a {existing_type} event")
     row = _stamp_account_context(conn, row)
     with conn.cursor() as cur:
         cur.execute(INSERT_SQL, row)
@@ -186,6 +232,21 @@ def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
         # FR-005: same transaction. The queue row and the transaction row commit
         # together or not at all.
         cur.execute("INSERT INTO scoring_queue (transaction_id) VALUES (%s)", (tx_id,))
+        # D72: and its envelope, in the same transaction, so every payment is
+        # also an event from the moment it exists.
+        cur.execute(EVENT_INSERT_SQL, {
+            "event_ref": row["transaction_ref"],
+            "event_type": "PAYMENT",
+            "occurred_at": row["occurred_at"],
+            "subject_token": row["subject_token"],
+            "account_token": row["account_token"],
+            "device_token": row["device_token"],
+            "ip_region": row["ip_region"],
+            "channel": row["channel"],
+            "transaction_id": tx_id,
+            "detail": "{}",
+            "is_replay": row["is_replay"],
+        })
 
     return TransactionAccepted(
         transaction_ref=row["transaction_ref"],
@@ -202,7 +263,10 @@ def ingest_one(
     conn: Any = Depends(get_conn),
     api_key: dict = Depends(require_api_key),
 ) -> TransactionAccepted:
-    result = _persist(conn, _to_row(tx, is_replay=False, raise_alerts=True))
+    try:
+        result = _persist(conn, _to_row(tx, is_replay=False, raise_alerts=True))
+    except EventRefConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if result.status == "duplicate":
         response.status_code = status.HTTP_200_OK
     return result
@@ -223,13 +287,113 @@ def ingest_batch(
     errors: list[dict] = []
     for index, tx in enumerate(body.transactions):
         try:
-            results.append(
-                _persist(conn, _to_row(tx, is_replay=body.is_replay, raise_alerts=body.raise_alerts))
-            )
+            # A savepoint per item: a rejected one must not leave half its writes.
+            with conn.transaction():
+                results.append(
+                    _persist(conn, _to_row(tx, is_replay=body.is_replay, raise_alerts=body.raise_alerts))
+                )
         except Exception as exc:  # noqa: BLE001
             errors.append({"index": index, "transaction_ref": tx.transaction_ref, "error": str(exc)})
 
     return BatchAccepted(
+        accepted=sum(1 for r in results if r.status == "accepted"),
+        duplicates=sum(1 for r in results if r.status == "duplicate"),
+        rejected=len(errors),
+        results=results,
+        errors=errors,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Events (WP-01, D72)
+# ---------------------------------------------------------------------------
+
+
+def _detail(ev: Any) -> dict[str, Any]:
+    """The type-specific facts, tokenised exactly as a payment's identifiers are."""
+    detail = ev.detail.model_dump()
+    if ev.event_type == "PAYEE_ADDED":
+        detail["beneficiary_token"] = beneficiary_token(detail.pop("beneficiary_account_id"))
+    elif ev.event_type == "SIM_CHANGED":
+        detail["msisdn_token"] = msisdn_token(detail.pop("msisdn"))
+    return detail
+
+
+def _persist_event(conn: Any, ev: Any, *, is_replay: bool, raise_alerts: bool) -> EventAccepted:
+    if isinstance(ev, PaymentEventIn):
+        # The payment path, unchanged: tokenise, stamp, persist, enqueue, envelope.
+        tx = _persist(conn, _to_row(ev.payment, is_replay=is_replay, raise_alerts=raise_alerts))
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM events WHERE transaction_id = %s", (tx.transaction_id,))
+            row = cur.fetchone()
+        return EventAccepted(
+            event_ref=tx.transaction_ref, event_type="PAYMENT",
+            event_id=int(row["id"] if isinstance(row, dict) else row[0]),
+            status=tx.status, queued=tx.queued, transaction_id=tx.transaction_id,
+        )
+
+    with conn.cursor() as cur:
+        cur.execute(EVENT_INSERT_SQL, {
+            "event_ref": ev.event_ref,
+            "event_type": ev.event_type,
+            "occurred_at": ev.occurred_at,
+            # FR-004 for every type: raw identifiers stop here.
+            "subject_token": subject_token(ev.customer_id),
+            "account_token": account_token(ev.account_id) if ev.account_id else None,
+            "device_token": device_token(ev.device_fingerprint) if ev.device_fingerprint else None,
+            "ip_region": ev.ip_region,
+            "channel": ev.channel,
+            "transaction_id": None,
+            "detail": json.dumps(_detail(ev)),
+            "is_replay": is_replay,
+        })
+        inserted = cur.fetchone()
+        if inserted is None:
+            cur.execute("SELECT id, event_type::text AS t FROM events WHERE event_ref = %s", (ev.event_ref,))
+            existing = cur.fetchone()
+            if existing["t"] != ev.event_type:
+                raise EventRefConflict(f"event_ref already used by a {existing['t']} event")
+            return EventAccepted(event_ref=ev.event_ref, event_type=ev.event_type,
+                                 event_id=int(existing["id"]), status="duplicate", queued=False)
+    return EventAccepted(event_ref=ev.event_ref, event_type=ev.event_type,
+                         event_id=int(inserted["id"]), status="accepted", queued=False)
+
+
+@events_router.post("", response_model=EventAccepted, status_code=status.HTTP_202_ACCEPTED)
+def ingest_event(
+    event: EventIn,
+    response: Response,
+    conn: Any = Depends(get_conn),
+    api_key: dict = Depends(require_api_key),
+) -> EventAccepted:
+    """One event of any type. Payments are scored; the other types are stored
+    for the detectors WP-02 adds, and nothing is scored on them yet."""
+    try:
+        result = _persist_event(conn, event, is_replay=False, raise_alerts=True)
+    except EventRefConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    if result.status == "duplicate":
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@events_router.post("/batch", response_model=EventBatchAccepted, status_code=status.HTTP_202_ACCEPTED)
+def ingest_event_batch(
+    body: EventBatchIn,
+    conn: Any = Depends(get_conn),
+    api_key: dict = Depends(require_api_key),
+) -> EventBatchAccepted:
+    """FR-006 for every type: replay is idempotent and silent by default (D8d)."""
+    results: list[EventAccepted] = []
+    errors: list[dict] = []
+    for index, ev in enumerate(body.events):
+        ref = ev.payment.transaction_ref if isinstance(ev, PaymentEventIn) else ev.event_ref
+        try:
+            with conn.transaction():
+                results.append(_persist_event(conn, ev, is_replay=body.is_replay, raise_alerts=body.raise_alerts))
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"index": index, "event_ref": ref, "error": str(exc)})
+    return EventBatchAccepted(
         accepted=sum(1 for r in results if r.status == "accepted"),
         duplicates=sum(1 for r in results if r.status == "duplicate"),
         rejected=len(errors),

@@ -53,6 +53,7 @@ app.add_middleware(
 )
 
 app.include_router(ingest.router)
+app.include_router(ingest.events_router)
 app.include_router(auth.router)
 app.include_router(cases.router)
 app.include_router(triage.router)
@@ -92,7 +93,7 @@ async def validation_to_dead_letter(request: Request, exc: RequestValidationErro
     precisely why it stopped. Without this the failure mode is a 422 into the
     void and an integration that looks healthy while dropping transactions.
     """
-    if request.url.path.startswith("/v1/transactions"):
+    if request.url.path.startswith(("/v1/transactions", "/v1/events")):
         try:
             raw = await request.body()
             api_key_id = None

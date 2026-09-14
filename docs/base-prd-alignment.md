@@ -41,8 +41,8 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 | Status | Count | Meaning |
 |---|---|---|
 | Met | 14 | Built and tested, 4 of them added for this review and 2 since (D71) |
-| Partly | 41 | Some of it built; the missing part is named |
-| Not built | 32 | Absent; on the roadmap or waiting on a bank |
+| Partly | 42 | Some of it built; the missing part is named |
+| Not built | 31 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -60,7 +60,7 @@ the few gaps that matter most rather than all of them.
 |---|---|---|---|
 | O1 | Stop fraud before settlement | Rejected for v1 | Advisory only (D7). We return ALLOW / MONITOR / REVIEW / HOLD beside every score as a seam for a bank to enforce. |
 | O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Now reported in the unit banks benchmark: 15:1 false alerts per incident at 120, 6.6:1 at 75, 4.1:1 at 60, on the Analytics screen (D70). Not yet reduced on live outcomes. |
-| O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are not scored. |
+| O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are accepted and stored through one envelope (D72) but not yet scored. |
 | O4 | Regulatory clocks met automatically | Partly | CBN scam clocks run on every reported case, from versioned configuration and a Nigerian working-day calendar; breaches are recorded and escalated (D71). Meeting them still takes the desk: nothing is notified or paid automatically. |
 | O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve now measured (D69f). Cost per case not measured. |
 | O6 | Every decision defensible | Met | Every decision stores its rules' signals with evidence, the policy trace, feature attributions and the versions that produced it (D7a). |
@@ -70,7 +70,7 @@ the few gaps that matter most rather than all of them.
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
 | FR-101 | Real-time events from every payment rail | Partly | One API accepts card, transfer, cash and wallet across NIP, NEFT, RTGS, card scheme, in-bank and ATM rails. Cheques absent; no live rail connected. |
-| FR-102 | Non-payment events: logins, resets, device binding, new payee, limit and SIM changes | Not built | The largest detection gap for account takeover (D69h). |
+| FR-102 | Non-payment events: logins, resets, device binding, new payee, limit and SIM changes | Partly | Accepted, validated per type, tokenised and stored through `POST /v1/events` (D72): login, device binding, credential or MFA change, new payee, SIM change, limit change. Nothing is scored on them yet; that is WP-02 (D69h). |
 | FR-103 | Device intelligence | Partly | Hashed device fingerprint and coarse region. No emulator, rooting or tampering signals. |
 | FR-104 | Behavioural biometrics | Not built | — |
 | FR-105 | Identity bureaus and registries | Not built | Needs a bank (D3). |

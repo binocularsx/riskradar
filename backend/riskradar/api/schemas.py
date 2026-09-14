@@ -101,6 +101,142 @@ class TransactionIn(Strict):
         return v
 
 
+# ---------------------------------------------------------------------------
+# The event envelope (WP-01, D72)
+# ---------------------------------------------------------------------------
+#
+# A payment is one event type among several. Every non-payment event shares
+# the envelope below and adds a typed ``detail``; the discriminator is
+# ``event_type``, so a LOGIN carrying a SIM_CHANGED detail is refused rather
+# than stored with the wrong shape.
+
+EventType = Literal[
+    "PAYMENT", "LOGIN", "DEVICE_BOUND", "CREDENTIAL_CHANGED", "PAYEE_ADDED", "SIM_CHANGED", "LIMIT_CHANGED"
+]
+Ref = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class EnvelopeIn(Strict):
+    event_ref: Ref
+    occurred_at: IsoDatetime
+    customer_id: Annotated[str, Field(min_length=1, max_length=128)]
+    account_id: Annotated[str | None, Field(max_length=128)] = None
+    device_fingerprint: Annotated[str | None, Field(max_length=256)] = None
+    ip_region: Annotated[str | None, Field(max_length=64)] = None
+    channel: Channel | None = None
+
+    @field_validator("occurred_at")
+    @classmethod
+    def _require_timezone(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("occurred_at must include a timezone offset")
+        return v
+
+
+class LoginDetail(Strict):
+    # A failed-login burst is not an event of its own; it is many of these.
+    result: Literal["SUCCESS", "FAILED"]
+    method: Literal["PASSWORD", "PIN", "BIOMETRIC", "OTP"]
+    failure_reason: Literal["WRONG_CREDENTIAL", "LOCKED", "EXPIRED", "OTHER"] | None = None
+
+
+class DeviceBoundDetail(Strict):
+    binding: Literal["BOUND", "UNBOUND"]
+
+
+class CredentialChangedDetail(Strict):
+    credential: Literal["PASSWORD", "PIN", "MFA_METHOD", "EMAIL", "PHONE"]
+    initiated_by: Literal["CUSTOMER", "BRANCH", "CONTACT_CENTRE"]
+
+
+class PayeeAddedDetail(Strict):
+    # Raw at the boundary, tokenised before it is stored, like a payment's.
+    beneficiary_account_id: Annotated[str, Field(min_length=1, max_length=128)]
+    beneficiary_bank_code: Annotated[str | None, Field(max_length=16)] = None
+
+
+class SimChangedDetail(Strict):
+    msisdn: Annotated[str, Field(min_length=6, max_length=20)]
+    carrier: Annotated[str | None, Field(max_length=32)] = None
+
+
+class LimitChangedDetail(Strict):
+    limit: Literal["DAILY_TRANSFER", "SINGLE_TRANSFER", "CARD_DAILY"]
+    from_minor: Annotated[int, Field(ge=0)]
+    to_minor: Annotated[int, Field(ge=0)]
+
+
+class PaymentEventIn(Strict):
+    """A payment through the envelope: exactly the canonical transaction (§6.1)."""
+
+    event_type: Literal["PAYMENT"]
+    payment: TransactionIn
+
+
+class LoginEventIn(EnvelopeIn):
+    event_type: Literal["LOGIN"]
+    detail: LoginDetail
+
+
+class DeviceBoundEventIn(EnvelopeIn):
+    event_type: Literal["DEVICE_BOUND"]
+    device_fingerprint: Annotated[str, Field(min_length=1, max_length=256)]
+    detail: DeviceBoundDetail
+
+
+class CredentialChangedEventIn(EnvelopeIn):
+    event_type: Literal["CREDENTIAL_CHANGED"]
+    detail: CredentialChangedDetail
+
+
+class PayeeAddedEventIn(EnvelopeIn):
+    event_type: Literal["PAYEE_ADDED"]
+    account_id: Annotated[str, Field(min_length=1, max_length=128)]
+    detail: PayeeAddedDetail
+
+
+class SimChangedEventIn(EnvelopeIn):
+    event_type: Literal["SIM_CHANGED"]
+    detail: SimChangedDetail
+
+
+class LimitChangedEventIn(EnvelopeIn):
+    event_type: Literal["LIMIT_CHANGED"]
+    account_id: Annotated[str, Field(min_length=1, max_length=128)]
+    detail: LimitChangedDetail
+
+
+EventIn = Annotated[
+    PaymentEventIn | LoginEventIn | DeviceBoundEventIn | CredentialChangedEventIn
+    | PayeeAddedEventIn | SimChangedEventIn | LimitChangedEventIn,
+    Field(discriminator="event_type"),
+]
+
+
+class EventAccepted(BaseModel):
+    event_ref: str
+    event_type: EventType
+    event_id: int
+    status: Literal["accepted", "duplicate"]
+    # Only payments are scored today; WP-02 adds the other types.
+    queued: bool
+    transaction_id: int | None = None
+
+
+class EventBatchIn(Strict):
+    events: Annotated[list[EventIn], Field(min_length=1, max_length=1000)]
+    is_replay: bool = True
+    raise_alerts: bool = False
+
+
+class EventBatchAccepted(BaseModel):
+    accepted: int
+    duplicates: int
+    rejected: int
+    results: list[EventAccepted]
+    errors: list[dict]
+
+
 class TransactionAccepted(BaseModel):
     transaction_ref: str
     transaction_id: int

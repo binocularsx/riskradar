@@ -45,6 +45,7 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | FR-005 | Persist and enqueue in **one** database transaction | `ingest.py` → `_persist`; both writes share the request's connection | — |
 | FR-006 | Batch endpoint; replays do not alert unless asked | `ingest.py` → `ingest_batch`; defaults in `schemas.py` → `BatchIn` | D8d |
 | FR-007 | Versioned in the path, published as OpenAPI | `api/app.py`; every router carries a `/v1` prefix | — |
+| FR-102 (foundation) | Any event type through one envelope; payments also written as events | `ingest.py` → `ingest_event`, `ingest_event_batch`, `_persist_event`; types in `schemas.py` → `EventIn`; table in `migrations/0008_event_envelope.sql` | D72 |
 
 ### Scoring
 

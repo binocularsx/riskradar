@@ -62,3 +62,8 @@ NOT_APPLICABLE = -1.0
 # signal gets; uncapped values reached 14,045 and 421,388, which made the
 # explanation bars meaningless and would break any drift statistic.
 RATIO_CAP = 100.0
+
+# D72. The event types this package scores. Every other type is accepted at the
+# boundary and stored as an event, but no feature reads it until WP-02 adds its
+# detectors; a type joins this set in the same change that adds its features.
+SCORED_EVENT_TYPES = frozenset({"PAYMENT"})

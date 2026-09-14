@@ -70,6 +70,12 @@ def device_token(fingerprint: str) -> str:
     return _token("device", fingerprint)
 
 
+def msisdn_token(msisdn: str) -> str:
+    """A phone number, for SIM-change events (D72). Digits only, so "+234 803..."
+    and "234803..." are the same line."""
+    return _token("msisdn", "".join(ch for ch in msisdn if ch.isdigit()))
+
+
 def hash_api_key(raw_key: str) -> str:
     """API keys are compared by hash, never stored raw.
 
