@@ -336,6 +336,22 @@ def _aware(v: datetime | None) -> datetime | None:
     return v
 
 
+class WatchlistPlaceIn(Strict):
+    """A temporary watch-list flag on the case's customer (WP-06, D73)."""
+
+    reason: Annotated[str, Field(min_length=5, max_length=500)]
+    hours: Annotated[int, Field(ge=1, le=24)] = 24
+
+
+class WatchlistContactIn(Strict):
+    outcome: Literal["CUSTOMER_CONFIRMED_GENUINE", "CUSTOMER_REPORTED_FRAUD"]
+    note: Annotated[str | None, Field(max_length=4000)] = None
+
+
+class WatchlistLiftIn(Strict):
+    note: Annotated[str | None, Field(max_length=4000)] = None
+
+
 class ReportIn(Strict):
     """The customer's report that starts the CBN clocks (WP-05, D71)."""
 

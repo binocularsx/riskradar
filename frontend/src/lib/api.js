@@ -67,6 +67,11 @@ export const api = {
   recordReport: (id, data) => post(`/v1/cases/${id}/report`, data),
   recordMilestone: (id, data) => post(`/v1/cases/${id}/milestones`, data),
   clockPolicy: () => get('/v1/clocks/policy'),
+  // the 24-hour watch-list flag (WP-06)
+  placeFlag: (caseId, data) => post(`/v1/cases/${caseId}/watchlist`, data),
+  flagContact: (flagId, data) => post(`/v1/watchlist/${flagId}/contact`, data),
+  liftFlag: (flagId, data) => post(`/v1/watchlist/${flagId}/lift`, data ?? {}),
+  watchlist: (active = true) => get(`/v1/watchlist?active=${active}`),
   alerts: (params) => get(`/v1/alerts?${new URLSearchParams(params)}`),
 
   // aggregates

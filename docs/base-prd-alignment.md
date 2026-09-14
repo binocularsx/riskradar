@@ -41,8 +41,8 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 | Status | Count | Meaning |
 |---|---|---|
 | Met | 14 | Built and tested, 4 of them added for this review and 2 since (D71) |
-| Partly | 42 | Some of it built; the missing part is named |
-| Not built | 31 | Absent; on the roadmap or waiting on a bank |
+| Partly | 43 | Some of it built; the missing part is named |
+| Not built | 30 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -196,7 +196,7 @@ The clock values below are as the base PRD states them, from secondary sources.
 | REG-NG-01 | Real-time fraud monitoring on all e-channels | Partly | That is what Risk Radar is, on invented data and advisory. |
 | REG-NG-02 | Identity checks at online opening and reactivation | Not built | Dormant-account reactivation is a model input, not an identity check. |
 | REG-NG-03 | BVN and NIN validation | Not built | The design already keeps BVN-level identity as a one-way hash (D19). |
-| REG-NG-04 | BVN watchlist, including the 24-hour temporary flag | Not built | Our lists work on destination accounts, not BVNs, and have no expiry (D69g). |
+| REG-NG-04 | BVN watchlist, including the 24-hour temporary flag | Partly | The temporary flag is built (D73): at most 24 hours as a database constraint, ends on its own, customer contact recorded and a missed contact escalated. Keyed on the customer, not the BVN, and not connected to the industry watchlist, which needs NIBSS (D73c). |
 | REG-NG-05 | Scam clocks: notify the other bank in 30 minutes, investigate in 14 working days, reimburse in 48 hours, refund in 16 working days | Met | Built (D71), plus the 24-hour acknowledgement. Values are the CBN exposure draft of 26 Nov 2025, held as policy version 1; re-check against the final circular. |
 | REG-NG-06 | Customer reporting window | Met | 72 hours from the first alerted payment to the customer's report, shown on the case as met or late; never escalated, as it is the customer's obligation (D71). |
 | REG-NG-07 | NIBSS fraud reporting | Not built | Needs a bank (D28). |

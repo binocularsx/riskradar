@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ago, api, clock, naira, nairaShort, when } from '../lib/api'
 import { Attributions, Banner, PolicyTrace, RiskBadge, SignalPill } from './ui'
 import RegulatoryClocks from './RegulatoryClocks'
+import WatchlistFlag from './WatchlistFlag'
 import Timeline from './Timeline'
 import Why, { VersusNormal } from './Why'
 import { CONSEQUENCES, NextSteps, OwnershipBanner, RoleCapability } from './Actions'
@@ -176,6 +177,14 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           clocks={detail.clocks || []}
           user={user}
           onUpdated={(r) => setDetail((d) => ({ ...d, case: r.case, clocks: r.clocks }))}
+        />
+      )}
+      {detail && (
+        <WatchlistFlag
+          caseRow={detail.case}
+          flags={detail.watchlist || []}
+          user={user}
+          onUpdated={() => api.caseDetail(caseId).then(setDetail).catch((e) => setError(e.message))}
         />
       )}
 

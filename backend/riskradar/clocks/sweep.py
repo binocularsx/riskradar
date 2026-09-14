@@ -158,14 +158,21 @@ def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - proce
 
     from ..config import settings
     from ..worker.scoring import system_user_id
+    from .watchlist import expire_due
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s %(message)s")
     log.info("clock sweep every %ss", interval_seconds)
     while True:
         try:
             with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
-                actions = sweep(conn, system_user_id=system_user_id(conn))
+                system = system_user_id(conn)
+                actions = sweep(conn, system_user_id=system)
+                # WP-06: flags end on their own; record it and escalate missed contact.
+                expired = expire_due(conn, system_user_id=system)
                 conn.commit()
+            for e in expired:
+                log.warning("watch-list flag %s expired%s", e["flag_id"],
+                            " without customer contact" if e["contact_missed"] else "")
             for a in actions:
                 log.warning("clock breached: case %s %s%s", a["case_id"], a["clock"],
                             " (escalated to Fraud Ops)" if a["escalated"] else "")

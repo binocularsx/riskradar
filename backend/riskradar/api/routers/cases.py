@@ -25,9 +25,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...audit import chain
 from ...clocks import sweep as clock_sweep
+from ...clocks import watchlist
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
-from ..schemas import AssignIn, EscalateIn, MilestoneIn, NoteIn, OutcomeIn, ReportIn
+from ..schemas import (
+    AssignIn,
+    EscalateIn,
+    MilestoneIn,
+    NoteIn,
+    OutcomeIn,
+    ReportIn,
+    WatchlistContactIn,
+    WatchlistLiftIn,
+    WatchlistPlaceIn,
+)
 
 router = APIRouter(prefix="/v1", tags=["cases"])
 
@@ -283,6 +294,8 @@ def case_detail(
         "history": history,
         # WP-05: empty until the customer reports; then every CBN clock's state.
         "clocks": clock_sweep.clocks_for_case(conn, case_id),
+        # WP-06: this customer's recent temporary watch-list flags, newest first.
+        "watchlist": watchlist.flags_for_subject(conn, case["subject_token"]),
     }
 
 
@@ -568,6 +581,80 @@ def record_milestone(
                  "counterparty_institution": body.counterparty_institution},
     )
     return {"case": _fetch_case(conn, case_id), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
+
+
+# ---------------------------------------------------------------------------
+# The twenty-four hour flag (WP-06, D73)
+# ---------------------------------------------------------------------------
+
+
+def _watchlist_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except watchlist.WatchlistError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@router.post("/cases/{case_id}/watchlist")
+def place_watchlist_flag(
+    case_id: int,
+    body: WatchlistPlaceIn,
+    user: dict = Depends(requires(Permission.CASES_ESCALATE)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Flag the case's customer for at most 24 hours while the bank contacts them.
+
+    Risk Radar records the flag; the bank applies it to the customer's BVN.
+    """
+    case = _fetch_case(conn, case_id)
+    flag = _watchlist_call(watchlist.place, conn, case=case, user_id=user["id"],
+                           reason=body.reason, hours=body.hours)
+    return {"flag": flag}
+
+
+@router.post("/watchlist/{flag_id}/contact")
+def record_watchlist_contact(
+    flag_id: int,
+    body: WatchlistContactIn,
+    user: dict = Depends(requires(Permission.CASES_REVIEW)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """The customer was reached. Recorded once, while the flag is active."""
+    flag = _watchlist_call(watchlist.record_contact, conn, flag_id=flag_id, user_id=user["id"],
+                           outcome=body.outcome)
+    if flag["case_id"]:
+        _note(conn, flag["case_id"], user, body.note)
+    return {"flag": flag}
+
+
+@router.post("/watchlist/{flag_id}/lift")
+def lift_watchlist_flag(
+    flag_id: int,
+    body: WatchlistLiftIn,
+    user: dict = Depends(requires(Permission.CASES_ESCALATE)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Lift early because the customer is cleared. Expiry needs no call."""
+    flag = _watchlist_call(watchlist.lift, conn, flag_id=flag_id, user_id=user["id"], note=body.note)
+    if flag["case_id"]:
+        _note(conn, flag["case_id"], user, body.note)
+    return {"flag": flag}
+
+
+@router.get("/watchlist")
+def list_watchlist(
+    active: bool = Query(True),
+    limit: int = Query(100, ge=1, le=500),
+    user: dict = Depends(requires(Permission.CASES_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Every flag in force now (or recent ones, ``active=false``), soonest to expire first."""
+    where = "w.lifted_at IS NULL AND w.expires_at > now()" if active else "true"
+    order = "w.expires_at ASC" if active else "w.placed_at DESC"
+    rows = _rows(conn, f"SELECT {watchlist.FLAG_COLUMNS} FROM subject_watchlist w "
+                       f"WHERE {where} ORDER BY {order} LIMIT %s", (limit,))
+    now = watchlist._now(conn)
+    return {"items": [watchlist.describe(r, now) for r in rows]}
 
 
 @router.get("/clocks/policy")

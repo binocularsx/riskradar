@@ -176,6 +176,7 @@ export default function Triage({ user }) {
                     <span className="tag">{c.distinct_beneficiaries} payees</span>
                   )}
                   {c.new_device && <span className="tag">new device</span>}
+                  {c.watchlisted && <span className="pill escalate" title="24-hour watch-list flag in force">flagged</span>}
                   {c.regulatory_clock && (
                     <span className={`sla sla-${c.regulatory_clock.state === 'RUNNING' ? 'OK' : c.regulatory_clock.state}`}
                           title={`CBN: ${c.regulatory_clock.obligation}`}>

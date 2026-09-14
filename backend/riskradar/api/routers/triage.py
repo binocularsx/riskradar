@@ -32,6 +32,7 @@ from ...audit import chain
 from ...cases import triage
 from ...clocks import engine as clock_engine
 from ...clocks import sweep as clock_sweep
+from ...clocks import watchlist
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import DispositionIn
@@ -196,6 +197,10 @@ def worklist(
 
     context = _clock_context(conn)
     rows = [_enrich(r, context) for r in _rows(conn, WORKLIST_SQL.format(where=" AND ".join(where)), params)]
+    # WP-06: which of these customers carry a temporary flag right now.
+    flagged = watchlist.active_subjects(conn, [r["subject_token"] for r in rows])
+    for r in rows:
+        r["watchlisted"] = r["subject_token"] in flagged
 
     if scope == "breaching":
         rows = [r for r in rows if r["sla_state"] in ("DUE", "BREACHED")]
@@ -211,6 +216,7 @@ def worklist(
             "total_exposure_minor": total_exposure,
             "breaching": sum(1 for r in rows if r["sla_state"] == "BREACHED"),
             "due_soon": sum(1 for r in rows if r["sla_state"] == "DUE"),
+            "watchlisted": sum(1 for r in rows if r["watchlisted"]),
             "regulatory_breached": sum(
                 1 for r in rows if (r["regulatory_clock"] or {}).get("state") == "BREACHED"),
             "unassigned": sum(1 for r in rows if not r["assignee_id"]),
