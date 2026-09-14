@@ -17,9 +17,9 @@ PLAN = Path(__file__).resolve().parents[1] / "docs" / "build-plan.html"
 # (package, title, state, date, evidence). state: built | doing | todo
 STATUS = [
     ("WP-09", "Report the ratio, not the raw count", "built", "14 Sep 2026", "D70 · /v1/metrics/budget-menu"),
-    ("WP-05", "Clocks the regulator sets", "doing", "14 Sep 2026", "started"),
-    ("WP-01", "One event, not one transaction", "todo", "", ""),
-    ("WP-06", "The twenty-four hour flag", "todo", "", "needs WP-05"),
+    ("WP-05", "Clocks the regulator sets", "built", "14 Sep 2026", "D71 · migration 0007 · run_clocks.py"),
+    ("WP-01", "One event, not one transaction", "doing", "14 Sep 2026", "started"),
+    ("WP-06", "The twenty-four hour flag", "todo", "", "ready: WP-05 built"),
     ("WP-07", "A decision a bank can act on", "todo", "", ""),
     ("WP-02", "Signals before the money moves", "todo", "", "needs WP-01"),
     ("WP-03", "Watch the money coming in", "todo", "", "needs WP-01"),

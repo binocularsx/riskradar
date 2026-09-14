@@ -23,12 +23,15 @@ entirely the analyst's, and Risk Radar still never moves money (D7).
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...audit import chain
 from ...cases import triage
+from ...clocks import engine as clock_engine
+from ...clocks import sweep as clock_sweep
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import DispositionIn
@@ -50,6 +53,10 @@ WORKLIST_SQL = """
            c.alert_count,
            c.assignee_id,
            c.escalated_to,
+           c.first_reported_at, c.acknowledged_at, c.counterparty_notified_at,
+           c.investigation_concluded_at, c.reimbursed_at, c.clock_policy_version,
+           (SELECT min(t.occurred_at) FROM alerts a JOIN transactions t ON t.id = a.transaction_id
+             WHERE a.case_id = c.id) AS fraud_first_at,
            u.display_name AS assignee_name,
            EXTRACT(EPOCH FROM (now() - c.opened_at)) / 60.0 AS age_minutes,
 
@@ -112,10 +119,25 @@ def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
         return [dict(r) if not isinstance(r, dict) else r for r in cur.fetchall()]
 
 
-def _enrich(row: dict[str, Any]) -> dict[str, Any]:
-    """Attach exposure, clock and recommendation to one case."""
+def _enrich(row: dict[str, Any], clock_context: dict[str, Any]) -> dict[str, Any]:
+    """Attach exposure, clocks and recommendation to one case."""
     age = float(row.pop("age_minutes") or 0)
     state, remaining = triage.sla_state(age, row["risk_level"])
+
+    # WP-05: on a case the customer reported, the regulator's clock that runs
+    # out first. It feeds lateness in the priority too, so a refund about to
+    # breach is not ordered as if only the response clock mattered.
+    events = {e: row.pop(e, None) for e in clock_engine.EVENTS}
+    version = row.pop("clock_policy_version", None)
+    regulatory = None
+    if version and events["first_reported_at"]:
+        states = clock_engine.evaluate(
+            clock_context["policies"][int(version)], events, outcome=row["outcome"],
+            now=clock_context["now"], calendar=clock_context["calendar"],
+        )
+        regulatory = clock_engine.most_urgent(states)
+    row["reported"] = events["first_reported_at"] is not None
+    row["regulatory_clock"] = regulatory
     signals = list(row.get("signal_codes") or [])
 
     rec = triage.recommend(
@@ -135,10 +157,15 @@ def _enrich(row: dict[str, Any]) -> dict[str, Any]:
     row["priority"] = triage.priority_score(
         risk_level=row["risk_level"],
         exposure_minor=int(row["exposure_minor"] or 0),
-        sla_remaining=remaining,
+        sla_remaining=min(remaining, regulatory["remaining_minutes"]) if regulatory else remaining,
         alert_count=int(row["alert_count"] or 0),
     )
     return row
+
+
+def _clock_context(conn: Any) -> dict[str, Any]:
+    return {"policies": clock_sweep.policies(conn), "calendar": clock_sweep.load_calendar(conn),
+            "now": datetime.now(timezone.utc)}
 
 
 @router.get("/worklist")
@@ -167,7 +194,8 @@ def worklist(
         where.append("c.risk_level = %(risk_level)s")
         params["risk_level"] = risk_level
 
-    rows = [_enrich(r) for r in _rows(conn, WORKLIST_SQL.format(where=" AND ".join(where)), params)]
+    context = _clock_context(conn)
+    rows = [_enrich(r, context) for r in _rows(conn, WORKLIST_SQL.format(where=" AND ".join(where)), params)]
 
     if scope == "breaching":
         rows = [r for r in rows if r["sla_state"] in ("DUE", "BREACHED")]
@@ -183,6 +211,8 @@ def worklist(
             "total_exposure_minor": total_exposure,
             "breaching": sum(1 for r in rows if r["sla_state"] == "BREACHED"),
             "due_soon": sum(1 for r in rows if r["sla_state"] == "DUE"),
+            "regulatory_breached": sum(
+                1 for r in rows if (r["regulatory_clock"] or {}).get("state") == "BREACHED"),
             "unassigned": sum(1 for r in rows if not r["assignee_id"]),
             "mine": sum(1 for r in rows if r["assignee_id"] == user["id"]),
         },
@@ -201,8 +231,9 @@ def next_case(
     an estimate. A case already assigned to *this* analyst is returned first —
     finish what you started before taking something new.
     """
+    context = _clock_context(conn)
     mine = [
-        _enrich(r)
+        _enrich(r, context)
         for r in _rows(
             conn,
             WORKLIST_SQL.format(where="c.state = 'UNDER_REVIEW' AND c.assignee_id = %(uid)s"),
@@ -214,7 +245,7 @@ def next_case(
         return {"case": mine[0], "resumed": True}
 
     available = [
-        _enrich(r)
+        _enrich(r, context)
         for r in _rows(
             conn,
             WORKLIST_SQL.format(

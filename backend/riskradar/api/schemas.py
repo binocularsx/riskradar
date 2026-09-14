@@ -192,6 +192,44 @@ class AssignIn(Strict):
     assignee_id: int | None
 
 
+def _aware(v: datetime | None) -> datetime | None:
+    # A regulatory deadline computed from a naive timestamp could be an hour
+    # out, which is longer than the 30-minute clock it starts.
+    if v is not None and v.tzinfo is None:
+        raise ValueError("timestamps must include a timezone offset")
+    return v
+
+
+class ReportIn(Strict):
+    """The customer's report that starts the CBN clocks (WP-05, D71)."""
+
+    reported_at: IsoDatetime
+    channel: Literal["BRANCH", "CONTACT_CENTRE", "MOBILE_APP", "WEB", "EMAIL", "USSD"]
+    counterparty_institution: Annotated[str | None, Field(min_length=2, max_length=128)] = None
+    note: Annotated[str | None, Field(max_length=4000)] = None
+
+    @field_validator("reported_at")
+    @classmethod
+    def _require_timezone(cls, v: datetime) -> datetime:
+        return _aware(v)
+
+
+class MilestoneIn(Strict):
+    """A moment that stops a regulatory clock. Recorded once, never edited."""
+
+    milestone: Literal["ACKNOWLEDGED", "COUNTERPARTY_NOTIFIED", "INVESTIGATION_CONCLUDED", "REIMBURSED"]
+    # When it happened, if not now: a call made before it was logged still
+    # counts at the time it was made.
+    at: IsoDatetime | None = None
+    counterparty_institution: Annotated[str | None, Field(min_length=2, max_length=128)] = None
+    note: Annotated[str | None, Field(max_length=4000)] = None
+
+    @field_validator("at")
+    @classmethod
+    def _require_timezone(cls, v: datetime | None) -> datetime | None:
+        return _aware(v)
+
+
 # ---------------------------------------------------------------------------
 # Administration
 # ---------------------------------------------------------------------------

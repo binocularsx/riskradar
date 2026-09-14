@@ -176,6 +176,12 @@ export default function Triage({ user }) {
                     <span className="tag">{c.distinct_beneficiaries} payees</span>
                   )}
                   {c.new_device && <span className="tag">new device</span>}
+                  {c.regulatory_clock && (
+                    <span className={`sla sla-${c.regulatory_clock.state === 'RUNNING' ? 'OK' : c.regulatory_clock.state}`}
+                          title={`CBN: ${c.regulatory_clock.obligation}`}>
+                      CBN {clock(c.regulatory_clock.remaining_minutes)}
+                    </span>
+                  )}
                   {c.assignee_id === user.id && <span className="pill">mine</span>}
                 </div>
               </button>

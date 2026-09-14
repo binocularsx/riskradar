@@ -63,6 +63,10 @@ export const api = {
   setOutcome: (id, outcome, note) => post(`/v1/cases/${id}/outcome`, { outcome, note: note || null }),
   escalate: (id, target, note) => post(`/v1/cases/${id}/escalate`, { target, note: note || null }),
   closeCase: (id) => post(`/v1/cases/${id}/close`),
+  // regulatory clocks (WP-05)
+  recordReport: (id, data) => post(`/v1/cases/${id}/report`, data),
+  recordMilestone: (id, data) => post(`/v1/cases/${id}/milestones`, data),
+  clockPolicy: () => get('/v1/clocks/policy'),
   alerts: (params) => get(`/v1/alerts?${new URLSearchParams(params)}`),
 
   // aggregates

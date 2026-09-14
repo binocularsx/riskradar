@@ -69,11 +69,12 @@ every account; `scripts/totp.py <email>` prints a current code for rehearsal.
 
 ### 4. Run
 
-Three processes:
+Four processes:
 
 ```bash
 .venv/Scripts/python scripts/run_api.py         # http://127.0.0.1:8000
 .venv/Scripts/python scripts/run_workers.py 3   # scoring workers
+.venv/Scripts/python scripts/run_clocks.py       # CBN clock breaches, every 60s (D71)
 npm run dev --prefix frontend                   # http://localhost:5173
 ```
 

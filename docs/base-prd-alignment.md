@@ -26,7 +26,7 @@ plainly, where we stand.
 4. **Its Nigerian requirements expose our largest gaps.** The regulator's clocks for
    authorised-push-payment scams, screening money *coming in* as well as going out, and
    events that are not payments (logins, new devices, SIM changes) are where a Nigerian
-   bank would find Risk Radar short (D69g, D69h).
+   bank would find Risk Radar short (D69g, D69h). The clocks are now built (D71).
 5. **It tells us which half of the market we are.** Its recommended default is
    *hybrid*: buy the blocking, orchestration and case-workflow platform; build the
    local fraud models on top, because vendors are *"weak at your fraud."* Risk Radar's
@@ -40,14 +40,14 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 
 | Status | Count | Meaning |
 |---|---|---|
-| Met | 12 | Built and tested, 4 of them added for this review |
-| Partly | 40 | Some of it built; the missing part is named |
-| Not built | 35 | Absent; on the roadmap or waiting on a bank |
+| Met | 14 | Built and tested, 4 of them added for this review and 2 since (D71) |
+| Partly | 41 | Some of it built; the missing part is named |
+| Not built | 32 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
 
-In short: Risk Radar fully meets about one requirement in eight and partly meets
+In short: Risk Radar fully meets about one requirement in seven and partly meets
 four in ten. That is the expected shape for a five-week first version of a platform
 the base PRD itself says takes twelve months, and it is why the five points above name
 the few gaps that matter most rather than all of them.
@@ -61,7 +61,7 @@ the few gaps that matter most rather than all of them.
 | O1 | Stop fraud before settlement | Rejected for v1 | Advisory only (D7). We return ALLOW / MONITOR / REVIEW / HOLD beside every score as a seam for a bank to enforce. |
 | O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Now reported in the unit banks benchmark: 15:1 false alerts per incident at 120, 6.6:1 at 75, 4.1:1 at 60, on the Analytics screen (D70). Not yet reduced on live outcomes. |
 | O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are not scored. |
-| O4 | Regulatory clocks met automatically | Not built | Only our own response clocks per severity. See D69g. |
+| O4 | Regulatory clocks met automatically | Partly | CBN scam clocks run on every reported case, from versioned configuration and a Nigerian working-day calendar; breaches are recorded and escalated (D71). Meeting them still takes the desk: nothing is notified or paid automatically. |
 | O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve now measured (D69f). Cost per case not measured. |
 | O6 | Every decision defensible | Met | Every decision stores its rules' signals with evidence, the policy trace, feature attributions and the versions that produced it (D7a). |
 
@@ -121,7 +121,7 @@ the few gaps that matter most rather than all of them.
 | FR-404 | In-case actions | Partly | Escalate, note, record outcome, assign, close. Block, refund and contact are advice to the analyst, not system actions (D7). |
 | FR-405 | Link-analysis view in the case | Not built | — |
 | FR-406 | Outcome labels feed model training | Partly | Recorded as labels (D13c); not yet used to retrain. |
-| FR-407 | Response clocks with breach alerting, mapped to regulatory clocks | Partly | Clocks per severity with a past-due state. No escalation when breached; not regulatory clocks; set in code (D69g). |
+| FR-407 | Response clocks with breach alerting, mapped to regulatory clocks | Partly | Regulatory clocks built (D71): versioned policy, working days, breach recorded once, written to the permanent record and escalated to Fraud Ops. The per-severity response clocks are still set in code and not escalated. |
 | FR-408 | Tamper-evident record of decisions, overrides and data access | Met | Hash-chained record the application cannot edit, with a check endpoint. Case views are now recorded too (D69k). |
 | FR-409 | Evidence exchange with other banks | Not built | The hashed identifier is designed to travel (D9d). |
 | FR-410 | Customer message templates | Not built | — |
@@ -167,7 +167,7 @@ FR-801 to FR-805 (self-service limits, MFA on control changes, in-app fraud repo
 "this wasn't me", in-flow scam warnings) are **out of scope**: they live in the bank's
 mobile and web channels, not in a fraud engine. One of them matters to us:
 **FR-803**, a customer's fraud report, is what starts the regulator's refund clock, so
-it is the event Risk Radar would need to receive (D69g).
+it is the event Risk Radar would need to receive (D69g). Until a channel sends it, the desk records it on the case (D71).
 
 ## 6. Non-functional
 
@@ -197,8 +197,8 @@ The clock values below are as the base PRD states them, from secondary sources.
 | REG-NG-02 | Identity checks at online opening and reactivation | Not built | Dormant-account reactivation is a model input, not an identity check. |
 | REG-NG-03 | BVN and NIN validation | Not built | The design already keeps BVN-level identity as a one-way hash (D19). |
 | REG-NG-04 | BVN watchlist, including the 24-hour temporary flag | Not built | Our lists work on destination accounts, not BVNs, and have no expiry (D69g). |
-| REG-NG-05 | Scam clocks: notify the other bank in 30 minutes, investigate in 14 working days, reimburse in 48 hours, refund in 16 working days | Not built | The most important regulatory gap (D69g). |
-| REG-NG-06 | Customer reporting window | Not built | — |
+| REG-NG-05 | Scam clocks: notify the other bank in 30 minutes, investigate in 14 working days, reimburse in 48 hours, refund in 16 working days | Met | Built (D71), plus the 24-hour acknowledgement. Values are the CBN exposure draft of 26 Nov 2025, held as policy version 1; re-check against the final circular. |
+| REG-NG-06 | Customer reporting window | Met | 72 hours from the first alerted payment to the customer's report, shown on the case as met or late; never escalated, as it is the customer's obligation (D71). |
 | REG-NG-07 | NIBSS fraud reporting | Not built | Needs a bank (D28). |
 | REG-NG-08 | Controls on fraud proceeds received | Not built | See FR-209. |
 | REG-NG-09 | Fraud desk workflow and forum reporting | Partly | The desk workflow is built; forum reporting is not. |

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { ago, api, clock, naira, nairaShort, when } from '../lib/api'
 import { Attributions, Banner, PolicyTrace, RiskBadge, SignalPill } from './ui'
+import RegulatoryClocks from './RegulatoryClocks'
 import Timeline from './Timeline'
 import Why, { VersusNormal } from './Why'
 import { CONSEQUENCES, NextSteps, OwnershipBanner, RoleCapability } from './Actions'
@@ -167,6 +168,16 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           authResult={detail?.alerts?.length === 1 ? first?.auth_result : null}
         />
       </div>
+
+      {/* ------------------------- what the bank owes, once the customer reports */}
+      {detail && (
+        <RegulatoryClocks
+          caseRow={detail.case}
+          clocks={detail.clocks || []}
+          user={user}
+          onUpdated={(r) => setDetail((d) => ({ ...d, case: r.case, clocks: r.clocks }))}
+        />
+      )}
 
       {/* ------------------------------------ 4. what the activity looks like */}
       {detail?.timeline?.length > 0 && <Timeline items={detail.timeline} />}

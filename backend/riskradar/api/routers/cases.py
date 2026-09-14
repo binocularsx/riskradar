@@ -24,9 +24,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...audit import chain
+from ...clocks import sweep as clock_sweep
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
-from ..schemas import AssignIn, EscalateIn, NoteIn, OutcomeIn
+from ..schemas import AssignIn, EscalateIn, MilestoneIn, NoteIn, OutcomeIn, ReportIn
 
 router = APIRouter(prefix="/v1", tags=["cases"])
 
@@ -280,6 +281,8 @@ def case_detail(
         "baseline": baseline,
         "notes": notes,
         "history": history,
+        # WP-05: empty until the customer reports; then every CBN clock's state.
+        "clocks": clock_sweep.clocks_for_case(conn, case_id),
     }
 
 
@@ -430,6 +433,156 @@ def escalate(
         params={"target": body.target},
         payload={"target": body.target},
     )
+
+
+# ---------------------------------------------------------------------------
+# Regulatory clocks (WP-05, D71)
+# ---------------------------------------------------------------------------
+
+MILESTONE_COLUMN = {
+    "ACKNOWLEDGED": "acknowledged_at",
+    "COUNTERPARTY_NOTIFIED": "counterparty_notified_at",
+    "INVESTIGATION_CONCLUDED": "investigation_concluded_at",
+    "REIMBURSED": "reimbursed_at",
+}
+
+
+def _now(conn: Any):
+    with conn.cursor() as cur:
+        cur.execute("SELECT now() AS ts")
+        row = cur.fetchone()
+    return row["ts"] if isinstance(row, dict) else row[0]
+
+
+def _note(conn: Any, case_id: int, user: dict[str, Any], body: str | None) -> None:
+    if body:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO case_notes (case_id, author_id, body) VALUES (%s, %s, %s)",
+                (case_id, user["id"], body),
+            )
+
+
+@router.post("/cases/{case_id}/report")
+def record_report(
+    case_id: int,
+    body: ReportIn,
+    user: dict = Depends(requires(Permission.CASES_REVIEW)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """The customer reported the fraud: start the CBN clocks.
+
+    Recorded once. The first report is what the refund clock counts from, so a
+    second call cannot move it later — correcting it would be rewriting the
+    moment the bank's obligations began, and belongs in a note, not an update.
+    The case is pinned to the clock policy in force now.
+    """
+    case = _fetch_case(conn, case_id)
+    if case["first_reported_at"]:
+        raise HTTPException(409, "the customer's first report is already recorded")
+    now = _now(conn)
+    if body.reported_at > now:
+        raise HTTPException(400, "a report cannot be in the future")
+    policy = clock_sweep.active_policy(conn)
+    if not policy:
+        raise HTTPException(503, "no active clock policy")
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE cases SET first_reported_at = %s, report_channel = %s,
+                   counterparty_institution = COALESCE(%s, counterparty_institution),
+                   clock_policy_version = %s
+             WHERE id = %s
+            """,
+            (body.reported_at, body.channel, body.counterparty_institution, policy["version"], case_id),
+        )
+    _note(conn, case_id, user, body.note)
+    chain.append(
+        conn,
+        actor_user_id=user["id"],
+        action="CUSTOMER_REPORT_RECORDED",
+        object_type="case",
+        object_id=case_id,
+        payload={"reported_at": body.reported_at.isoformat(), "channel": body.channel,
+                 "counterparty_institution": body.counterparty_institution,
+                 "clock_policy_version": policy["version"]},
+    )
+    return {"case": _fetch_case(conn, case_id), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
+
+
+@router.post("/cases/{case_id}/milestones")
+def record_milestone(
+    case_id: int,
+    body: MilestoneIn,
+    user: dict = Depends(requires(Permission.CASES_REVIEW)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """A moment that stops a clock: acknowledged, receiving bank told, investigation
+    concluded, customer reimbursed. Each is recorded once, never edited.
+
+    Reimbursement pays money back, so it needs ``cases:close`` (a Fraud Ops Lead),
+    and it needs a concluded investigation that confirmed fraud first.
+    """
+    case = _fetch_case(conn, case_id)
+    column = MILESTONE_COLUMN[body.milestone]
+    if not case["first_reported_at"]:
+        raise HTTPException(400, "record the customer's report first; it starts the clocks")
+    if case[column]:
+        raise HTTPException(409, f"{body.milestone.lower()} is already recorded")
+    if body.milestone == "REIMBURSED":
+        if Permission.CASES_CLOSE.value not in user["permissions"]:
+            raise HTTPException(403, "recording a reimbursement needs a Fraud Ops Lead")
+        if not case["investigation_concluded_at"] or case["outcome"] != "CONFIRMED_FRAUD":
+            raise HTTPException(400, "reimbursement follows an investigation that confirmed fraud")
+    if body.milestone == "INVESTIGATION_CONCLUDED" and not case["outcome"]:
+        raise HTTPException(400, "record the outcome before concluding the investigation")
+    if body.milestone == "COUNTERPARTY_NOTIFIED" and not (
+        body.counterparty_institution or case["counterparty_institution"]
+    ):
+        raise HTTPException(400, "name the institution that was notified")
+
+    now = _now(conn)
+    at = body.at or now
+    if at > now:
+        raise HTTPException(400, "a milestone cannot be in the future")
+    if at < case["first_reported_at"]:
+        raise HTTPException(400, "a milestone cannot come before the customer's report")
+
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE cases SET {column} = %s,
+                   counterparty_institution = COALESCE(%s, counterparty_institution)
+             WHERE id = %s
+            """,
+            (at, body.counterparty_institution, case_id),
+        )
+    _note(conn, case_id, user, body.note)
+    chain.append(
+        conn,
+        actor_user_id=user["id"],
+        action=f"CLOCK_{body.milestone}",
+        object_type="case",
+        object_id=case_id,
+        payload={"at": at.isoformat(), "recorded_at": now.isoformat(),
+                 "counterparty_institution": body.counterparty_institution},
+    )
+    return {"case": _fetch_case(conn, case_id), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
+
+
+@router.get("/clocks/policy")
+def clock_policy(
+    user: dict = Depends(requires(Permission.CASES_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """The clock policy in force and the holiday calendar it counts against."""
+    policy = clock_sweep.active_policy(conn)
+    holidays = _rows(
+        conn,
+        "SELECT holiday_date, name, confirmed, source FROM public_holidays "
+        "WHERE holiday_date >= current_date - 30 ORDER BY holiday_date",
+    )
+    return {"policy": policy, "holidays": holidays}
 
 
 @router.post("/cases/{case_id}/assign")

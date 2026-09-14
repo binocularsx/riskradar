@@ -197,7 +197,7 @@
     <div class="meta">
       <span>Benchmarks: Feedzai, IBM (2026)</span>
       <span>Regulation verified: CBN, Nacha</span>
-      <span>9 work packages · 1 built</span>
+      <span>9 work packages · 2 built</span>
       <span>Supersedes base-prd-alignment.md §5.2, §7.1</span>
     </div>
   </section>
@@ -535,7 +535,7 @@
 
     <!-- progress:start -->
     <h3>Progress</h3>
-    <p class="narrow">1 of 9 built. Listed in build order; updated as each package lands, with the decision that records it.</p>
+    <p class="narrow">2 of 9 built. Listed in build order; updated as each package lands, with the decision that records it.</p>
     <div class="tablewrap">
       <table>
         <thead>
@@ -543,9 +543,9 @@
         </thead>
         <tbody>
           <tr><td class="v">WP-09</td><td>Report the ratio, not the raw count</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D70 · /v1/metrics/budget-menu</td></tr>
-          <tr class="now"><td class="v">WP-05</td><td>Clocks the regulator sets</td><td><span class="chip chg">In progress</span></td><td class="v">14 Sep 2026</td><td>started</td></tr>
-          <tr><td class="v">WP-01</td><td>One event, not one transaction</td><td><span class="chip">Not started</span></td><td class="v"></td><td></td></tr>
-          <tr><td class="v">WP-06</td><td>The twenty-four hour flag</td><td><span class="chip">Not started</span></td><td class="v"></td><td>needs WP-05</td></tr>
+          <tr><td class="v">WP-05</td><td>Clocks the regulator sets</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D71 · migration 0007 · run_clocks.py</td></tr>
+          <tr class="now"><td class="v">WP-01</td><td>One event, not one transaction</td><td><span class="chip chg">In progress</span></td><td class="v">14 Sep 2026</td><td>started</td></tr>
+          <tr><td class="v">WP-06</td><td>The twenty-four hour flag</td><td><span class="chip">Not started</span></td><td class="v"></td><td>ready: WP-05 built</td></tr>
           <tr><td class="v">WP-07</td><td>A decision a bank can act on</td><td><span class="chip">Not started</span></td><td class="v"></td><td></td></tr>
           <tr><td class="v">WP-02</td><td>Signals before the money moves</td><td><span class="chip">Not started</span></td><td class="v"></td><td>needs WP-01</td></tr>
           <tr><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip">Not started</span></td><td class="v"></td><td>needs WP-01</td></tr>
@@ -566,7 +566,7 @@
           <p class="why"><b>Why now:</b> every other detection package is blocked behind it, and the cost of changing the event shape doubles with every feature written against the old one. This is the same argument §6.1 already makes for <code>auth_result</code> — and it was right then.</p>
         </div>
         <div class="side">
-          <div class="row status"><span class="chip">Not started</span></div>
+          <div class="row status"><span class="chip chg">In progress</span></div>
           <div class="row"><b>Serves</b> FR-102 foundation</div>
           <div class="row"><b>Touches</b> PRD §6.1, ingest, features, migrations</div>
           <div class="row"><b>Size</b> Medium</div>
@@ -630,7 +630,7 @@
           <p class="why"><b>Why now:</b> all seven CBN obligations are clocks, and four of them are measured in working days — which is a calendar problem, not a timer problem. This is the largest regulatory gap we have, and it is entirely buildable without a bank because the clock engine is pure logic and pure tests.</p>
         </div>
         <div class="side">
-          <div class="row status"><span class="chip chg">In progress</span></div>
+          <div class="row status"><span class="chip ok">Built</span></div>
           <div class="row"><b>Serves</b> REG-NG-05, -06; FR-407</div>
           <div class="row"><b>Needs</b> nothing</div>
           <div class="row"><b>Size</b> Large</div>
@@ -735,7 +735,7 @@
     <strong>Sources.</strong> Benchmarks: <a href="https://www.feedzai.com/blog/fraud-benchmarking/">Feedzai, How Top Banks Benchmark Fraud Performance</a> (value detection rate tiers; false-positive ratios of 12:1–14:1 best-in-class, strong banks beyond 30:1) · <a href="https://www.ibm.com/think/insights/fraud-detection-no-longer-limited-models-limited-by-operations">IBM, Why operational capacity is becoming the binding constraint in fraud detection</a>.
     Regulation: <a href="https://techcabal.com/2025/12/02/nigerian-banks-16-days-fraud-refund-cbn/">CBN Exposure Draft, Guidelines for Handling Authorised Push Payment Fraud, 26 Nov 2025</a> · <a href="https://nairametrics.com/2026/03/13/cbn-tightens-bvn-rules-introduces-fraud-watchlist-for-banking-customers/">CBN Addendum to the Revised BVN Framework, 12 Mar 2026, effective 1 May 2026</a> · <a href="https://www.outseer.com/blog/2026-nacha-rule-change-proactive-fraud-monitoring-requirement">Nacha 2026 fraud-monitoring rule, receiving-side monitoring phased Mar–Jun 2026</a>.
     Practice: <a href="https://www.trustsphere.ai/post/mule-detection-at-the-receive-side-receiving-bank-real-time-defence-playbook">Mule detection at the receive side</a> · <a href="https://www.adaptivesecurity.com/blog/account-takeover-detection">Account takeover detection signals and controls</a>.
-    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
+    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k, D70, D71 · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
     <br><br>
     The APP guidelines are an exposure draft — clock values are as published in the draft and in reporting on it, and should be re-checked against the final circular before any of WP-05 is treated as settled. The BVN addendum is in force.
   </footer>
