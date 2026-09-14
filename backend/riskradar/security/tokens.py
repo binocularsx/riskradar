@@ -70,6 +70,16 @@ def device_token(fingerprint: str) -> str:
     return _token("device", fingerprint)
 
 
+def bvn_token(bvn: str) -> str:
+    """The BVN: one person across every customer record and every bank (D75).
+    Its own namespace, so a BVN can never collide with a customer number."""
+    return _token("bvn", bvn)
+
+
+def nin_token(nin: str) -> str:
+    return _token("nin", nin)
+
+
 def msisdn_token(msisdn: str) -> str:
     """A phone number, for SIM-change events (D72). Digits only, so "+234 803..."
     and "234803..." are the same line."""

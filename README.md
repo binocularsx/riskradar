@@ -86,7 +86,14 @@ cd simulator
 python -m riskradar_sim --seed 424242 history --profile demo --alerting-tail-hours 14
 # a live feed while you demo
 python -m riskradar_sim stream --rate 2
+# another bank flags three of your customers' BVNs on the industry watch-list (D75)
+python -m riskradar_sim industry-flag --count 3
 ```
+
+`history` and `stream` also write `fixtures/core_identities.csv`, the simulated
+core's customer file, which the API reads to learn each customer's BVN. The
+identity and industry adapters are chosen in `.env` (see `.env.example`); the
+real Finacle and NIBSS adapters wait, visibly, until configured.
 
 ---
 

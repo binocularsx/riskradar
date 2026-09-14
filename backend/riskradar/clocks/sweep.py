@@ -157,6 +157,7 @@ def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - proce
     import psycopg
 
     from ..config import settings
+    from ..identity import industry_sync
     from ..worker.scoring import system_user_id
     from .watchlist import expire_due
 
@@ -170,6 +171,14 @@ def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - proce
                 # WP-06: flags end on their own; record it and escalate missed contact.
                 expired = expire_due(conn, system_user_id=system)
                 conn.commit()
+                # D75: send flag messages to the industry watch-list, and take in
+                # other institutions' flags. Separate commit: a hub problem must
+                # never undo a recorded breach or expiry.
+                sync = industry_sync.dispatch(conn)
+                received = industry_sync.pull(conn)
+                conn.commit()
+            if sync["sent"] or sync["failed"] or received["stored"]:
+                log.info("industry watch-list: %s, received %s", sync, received)
             for e in expired:
                 log.warning("watch-list flag %s expired%s", e["flag_id"],
                             " without customer contact" if e["contact_missed"] else "")

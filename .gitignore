@@ -10,6 +10,8 @@ build/
 ml/artifacts/*.pkl
 ml/artifacts/*.joblib
 fixtures/*.dump
+# D75: the simulated core's customer file, written by `riskradar_sim history`.
+fixtures/core_identities.csv
 logs/
 .local/
 

@@ -72,6 +72,8 @@ export const api = {
   flagContact: (flagId, data) => post(`/v1/watchlist/${flagId}/contact`, data),
   liftFlag: (flagId, data) => post(`/v1/watchlist/${flagId}/lift`, data ?? {}),
   watchlist: (active = true) => get(`/v1/watchlist?active=${active}`),
+  integrations: () => get('/v1/admin/integrations'),
+  industryWatchlist: (active = true) => get(`/v1/industry-watchlist?active=${active}`),
   alerts: (params) => get(`/v1/alerts?${new URLSearchParams(params)}`),
 
   // aggregates

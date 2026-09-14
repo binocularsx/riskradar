@@ -41,8 +41,8 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 | Status | Count | Meaning |
 |---|---|---|
 | Met | 14 | Built and tested, 4 of them added for this review and 2 since (D71) |
-| Partly | 44 | Some of it built; the missing part is named |
-| Not built | 29 | Absent; on the roadmap or waiting on a bank |
+| Partly | 47 | Some of it built; the missing part is named |
+| Not built | 26 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -73,7 +73,7 @@ the few gaps that matter most rather than all of them.
 | FR-102 | Non-payment events: logins, resets, device binding, new payee, limit and SIM changes | Partly | Accepted, validated per type, tokenised and stored through `POST /v1/events` (D72): login, device binding, credential or MFA change, new payee, SIM change, limit change. Nothing is scored on them yet; that is WP-02 (D69h). |
 | FR-103 | Device intelligence | Partly | Hashed device fingerprint and coarse region. No emulator, rooting or tampering signals. |
 | FR-104 | Behavioural biometrics | Not built | — |
-| FR-105 | Identity bureaus and registries | Not built | Needs a bank (D3). |
+| FR-105 | Identity bureaus and registries | Not built | Needs a bank (D3). The adapter seam exists (D75, INT-05); no bureau is connected. |
 | FR-106 | Rolling profiles per customer, account, device, payee, merchant, agent, IP | Partly | Account 30 days, customer 30 days, destination 90 days (feature spec 1.1.0). No merchant, agent or IP profiles. |
 | FR-107 | Streaming and batch, with replay for backtesting | Met | Batch endpoint; replayed history is scored without raising alerts (D8d). |
 | FR-108 | Data-quality monitoring | Partly | Invalid payloads go to a dead-letter table (FR-003); both event and arrival times are stored, so lateness is measurable. No automatic alerting. |
@@ -157,7 +157,7 @@ the few gaps that matter most rather than all of them.
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
 | FR-701 | Industry watchlists in near real time | Partly | Lists exist; loaded by hand. |
-| FR-702 | Cross-institution signals | Not built | — |
+| FR-702 | Cross-institution signals | Partly | The industry watch-list both ways: our flags queued in an outbox for the hub, other institutions' flags received by BVN and shown on cases (D75). Not scored; hub not connected. |
 | FR-703 | Negative list with expiry, review and appeal | Partly | Add and remove, recorded. No expiry, review or appeal. |
 | FR-704 | Law-enforcement request API | Not built | — |
 
@@ -195,8 +195,8 @@ The clock values below are as the base PRD states them, from secondary sources.
 |---|---|---|---|
 | REG-NG-01 | Real-time fraud monitoring on all e-channels | Partly | That is what Risk Radar is, on invented data and advisory. |
 | REG-NG-02 | Identity checks at online opening and reactivation | Not built | Dormant-account reactivation is a model input, not an identity check. |
-| REG-NG-03 | BVN and NIN validation | Not built | The design already keeps BVN-level identity as a one-way hash (D19). |
-| REG-NG-04 | BVN watchlist, including the 24-hour temporary flag | Partly | The temporary flag is built (D73): at most 24 hours as a database constraint, ends on its own, customer contact recorded and a missed contact escalated. Keyed on the customer, not the BVN, and not connected to the industry watchlist, which needs NIBSS (D73c). |
+| REG-NG-03 | BVN and NIN validation | Partly | BVN and NIN learned at the boundary or from the core, tokenised, and checked on first sighting and high-risk events; the result is recorded (D75). Only a format check runs until NIBSS is connected. |
+| REG-NG-04 | BVN watchlist, including the 24-hour temporary flag | Partly | The temporary flag is built (D73): at most 24 hours as a database constraint, ends on its own, customer contact recorded and a missed contact escalated. Placed on the BVN when known, covering every customer record with it; every step queued for the industry watch-list and other institutions' flags received and shown (D75). The NIBSS connection itself is a stub. |
 | REG-NG-05 | Scam clocks: notify the other bank in 30 minutes, investigate in 14 working days, reimburse in 48 hours, refund in 16 working days | Met | Built (D71), plus the 24-hour acknowledgement. Values are the CBN exposure draft of 26 Nov 2025, held as policy version 1; re-check against the final circular. |
 | REG-NG-06 | Customer reporting window | Met | 72 hours from the first alerted payment to the customer's report, shown on the case as met or late; never escalated, as it is the customer's obligation (D71). |
 | REG-NG-07 | NIBSS fraud reporting | Not built | Needs a bank (D28). |
@@ -212,7 +212,7 @@ The clock values below are as the base PRD states them, from secondary sources.
 | INT-02 | Card switch | Partly | Designed as the event source, the only place card declines are visible (D20). Not connected. |
 | INT-03 | Instant payments, both legs | Partly | Sending leg only. |
 | INT-04 | Digital channels with session and device context | Partly | Device and region only. |
-| INT-05 | Identity bureaus | Not built | — |
+| INT-05 | Identity bureaus | Partly | Adapters for the core's customer inquiry and NIBSS BVN validation, with a simulated core; real connections are stubs (D75). |
 | INT-06 | Contact centre | Not built | — |
 | INT-07 | Case workflow | Met | Native. |
 | INT-08 | Data lake | Not built | PostgreSQL and local corpus files. |

@@ -35,6 +35,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
+from ...identity import boundary as identity
 from ...security.tokens import (
     account_token,
     beneficiary_token,
@@ -73,7 +74,7 @@ INSERT_SQL = """
         device_token, ip_region, merchant_category,
         auth_result, decline_reason, display_name,
         account_opened_at, last_activity_at, product_type, origin_sol_id,
-        is_replay, raise_alerts
+        is_replay, raise_alerts, bvn_token
     ) VALUES (
         %(transaction_ref)s, %(occurred_at)s, %(amount_minor)s, %(currency)s,
         %(channel)s, %(instrument)s, %(rail)s,
@@ -81,7 +82,7 @@ INSERT_SQL = """
         %(device_token)s, %(ip_region)s, %(merchant_category)s,
         %(auth_result)s, %(decline_reason)s, %(display_name)s,
         %(account_opened_at)s, %(last_activity_at)s, %(product_type)s, %(origin_sol_id)s,
-        %(is_replay)s, %(raise_alerts)s
+        %(is_replay)s, %(raise_alerts)s, %(bvn_token)s
     )
     ON CONFLICT (transaction_ref) DO NOTHING
     RETURNING id
@@ -90,10 +91,11 @@ INSERT_SQL = """
 EVENT_INSERT_SQL = """
     INSERT INTO events (
         event_ref, event_type, occurred_at, subject_token, account_token,
-        device_token, ip_region, channel, transaction_id, detail, is_replay
+        device_token, ip_region, channel, transaction_id, detail, is_replay, bvn_token
     ) VALUES (
         %(event_ref)s, %(event_type)s, %(occurred_at)s, %(subject_token)s, %(account_token)s,
-        %(device_token)s, %(ip_region)s, %(channel)s, %(transaction_id)s, %(detail)s, %(is_replay)s
+        %(device_token)s, %(ip_region)s, %(channel)s, %(transaction_id)s, %(detail)s, %(is_replay)s,
+        %(bvn_token)s
     )
     ON CONFLICT (event_ref) DO NOTHING
     RETURNING id
@@ -198,6 +200,11 @@ def _to_row(tx: TransactionIn, *, is_replay: bool, raise_alerts: bool) -> dict[s
         "origin_sol_id": tx.origin_sol_id,
         "is_replay": is_replay,
         "raise_alerts": raise_alerts,
+        # D75: raw identity rides along only as far as _persist, which stamps
+        # the BVN token and drops these before anything is written.
+        "_customer_id": tx.customer_id,
+        "_bvn": tx.bvn,
+        "_nin": tx.nin,
     }
 
 
@@ -207,6 +214,8 @@ def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
     if existing_type not in (None, "PAYMENT"):
         raise EventRefConflict(f"event_ref already used by a {existing_type} event")
     row = _stamp_account_context(conn, row)
+    row["bvn_token"] = identity.stamp(conn, customer_id=row.pop("_customer_id"), subject_token=row["subject_token"],
+                                      bvn=row.pop("_bvn"), nin=row.pop("_nin"))
     with conn.cursor() as cur:
         cur.execute(INSERT_SQL, row)
         inserted = cur.fetchone()
@@ -246,6 +255,7 @@ def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
             "transaction_id": tx_id,
             "detail": "{}",
             "is_replay": row["is_replay"],
+            "bvn_token": row["bvn_token"],
         })
 
     return TransactionAccepted(
@@ -332,13 +342,17 @@ def _persist_event(conn: Any, ev: Any, *, is_replay: bool, raise_alerts: bool) -
             status=tx.status, queued=tx.queued, transaction_id=tx.transaction_id,
         )
 
+    subject = subject_token(ev.customer_id)
+    bvn = identity.stamp(conn, customer_id=ev.customer_id, subject_token=subject, bvn=ev.bvn, nin=ev.nin,
+                         event_type=ev.event_type)
     with conn.cursor() as cur:
         cur.execute(EVENT_INSERT_SQL, {
             "event_ref": ev.event_ref,
             "event_type": ev.event_type,
             "occurred_at": ev.occurred_at,
             # FR-004 for every type: raw identifiers stop here.
-            "subject_token": subject_token(ev.customer_id),
+            "subject_token": subject,
+            "bvn_token": bvn,
             "account_token": account_token(ev.account_id) if ev.account_id else None,
             "device_token": device_token(ev.device_fingerprint) if ev.device_fingerprint else None,
             "ip_region": ev.ip_region,

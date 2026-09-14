@@ -183,6 +183,8 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         <WatchlistFlag
           caseRow={detail.case}
           flags={detail.watchlist || []}
+          identity={detail.identity}
+          industryFlags={detail.industry_flags || []}
           user={user}
           onUpdated={() => api.caseDetail(caseId).then(setDetail).catch((e) => setError(e.message))}
         />

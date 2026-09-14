@@ -296,6 +296,11 @@ def case_detail(
         "clocks": clock_sweep.clocks_for_case(conn, case_id),
         # WP-06: this customer's recent temporary watch-list flags, newest first.
         "watchlist": watchlist.flags_for_subject(conn, case["subject_token"]),
+        # D75: the customer's identity as far as Risk Radar knows it (never the
+        # BVN itself), and flags other institutions placed on that BVN.
+        "identity": _identity(conn, case["subject_token"]),
+        "industry_flags": watchlist.industry_flags(conn, [case["subject_token"]], active_only=False)
+                                   .get(case["subject_token"], []),
     }
 
 
@@ -586,6 +591,19 @@ def record_milestone(
 # ---------------------------------------------------------------------------
 # The twenty-four hour flag (WP-06, D73)
 # ---------------------------------------------------------------------------
+
+
+def _identity(conn: Any, subject_token: str) -> dict[str, Any]:
+    rows = _rows(
+        conn,
+        """
+        SELECT ci.source, ci.verification_status, ci.verified_at, ci.verification_source,
+               (SELECT count(*) FROM customer_identities o WHERE o.bvn_token = ci.bvn_token) AS records_with_this_bvn
+          FROM customer_identities ci WHERE ci.subject_token = %s
+        """,
+        (subject_token,),
+    )
+    return {"bvn_known": bool(rows), **(rows[0] if rows else {})}
 
 
 def _watchlist_call(fn, *args, **kwargs):

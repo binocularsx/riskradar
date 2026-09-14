@@ -151,6 +151,7 @@ Required fields on every event:
 | `auth_result` | enum | `APPROVED` / `DECLINED` / `FAILED` / `REVERSED`. **An event is an attempt, not a success** |
 | `decline_reason` | string | Nullable. Coarse category: `INSUFFICIENT_FUNDS`, `LIMIT_EXCEEDED`, `INVALID_PIN`, `DO_NOT_HONOUR`, `TIMEOUT` |
 | `display_name` | string | Obviously-synthetic label, analyst UI only |
+| `bvn`, `nin` | string | **[v1.2, D75]** Optional, eleven digits. Tokenised at the boundary into `bvn_token`; when absent, resolved from the core by customer number. Never stored raw |
 
 Core-derived account context, **stamped onto the event at the ingestion boundary** and immutable thereafter (§9.1, §6.3, D20b, D22):
 

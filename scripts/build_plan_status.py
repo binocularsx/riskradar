@@ -19,8 +19,10 @@ STATUS = [
     ("WP-09", "Report the ratio, not the raw count", "built", "14 Sep 2026", "D70 · /v1/metrics/budget-menu"),
     ("WP-05", "Clocks the regulator sets", "built", "14 Sep 2026", "D71 · migration 0007 · run_clocks.py"),
     ("WP-01", "One event, not one transaction", "built", "14 Sep 2026", "D72 · migration 0008 · /v1/events"),
-    ("WP-06", "The twenty-four hour flag", "built", "14 Sep 2026", "D73 · migration 0009 · BVN link open (D73c)"),
+    ("WP-06", "The twenty-four hour flag", "built", "14 Sep 2026", "D73 · migration 0009 · BVN level in WP-06b"),
     ("WP-07", "A decision a bank can act on", "built", "14 Sep 2026", "D74 · migration 0010 · SHADOW v1"),
+    ("WP-06b", "BVN identity and the industry watch-list", "built", "14 Sep 2026",
+     "D75 · migration 0011 · Finacle and NIBSS adapters wait for connection"),
     ("WP-02", "Signals before the money moves", "todo", "", "ready: WP-01 built"),
     ("WP-03", "Watch the money coming in", "todo", "", "ready: WP-01 built"),
     ("WP-04", "The second leg", "todo", "", "needs WP-03"),
@@ -42,11 +44,13 @@ def main() -> None:
         f'<td>{chip(s)}</td><td class="v">{date}</td><td>{ev}</td></tr>'
         for wp, title, s, date, ev in STATUS
     )
-    built = sum(s == "built" for _, _, s, _, _ in STATUS)
+    # Counted against the plan's nine; an added package (WP-06b) shows in the table.
+    planned = [row for row in STATUS if len(row[0]) == 5]
+    built = sum(s == "built" for _, _, s, _, _ in planned)
     block = (
         "<!-- progress:start -->\n"
         '    <h3>Progress</h3>\n'
-        f'    <p class="narrow">{built} of {len(STATUS)} built. Listed in build order; '
+        f'    <p class="narrow">{built} of {len(planned)} built. Listed in build order; '
         "updated as each package lands, with the decision that records it.</p>\n"
         '    <div class="tablewrap">\n      <table>\n        <thead>\n'
         "          <tr><th>Package</th><th>What it does</th><th>Status</th><th>Updated</th><th>Record</th></tr>\n"
@@ -68,7 +72,7 @@ def main() -> None:
     html = re.sub(r"<span>9 work packages(?: · \d+ built)?</span>",
                   f"<span>9 work packages · {built} built</span>", html)
     PLAN.write_text(html, encoding="utf-8")
-    print(f"{built} of {len(STATUS)} built")
+    print(f"{built} of {len(planned)} built")
 
 
 if __name__ == "__main__":

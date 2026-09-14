@@ -45,6 +45,7 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | FR-005 | Persist and enqueue in **one** database transaction | `ingest.py` → `_persist`; both writes share the request's connection | — |
 | FR-006 | Batch endpoint; replays do not alert unless asked | `ingest.py` → `ingest_batch`; defaults in `schemas.py` → `BatchIn` | D8d |
 | FR-007 | Versioned in the path, published as OpenAPI | `api/app.py`; every router carries a `/v1` prefix | — |
+| REG-NG-03, REG-NG-04, INT-05, FR-702 | BVN learned and tokenised at the boundary; BVN-level flags; industry outbox and inbound flags; adapters for core, registry and hub | `identity/adapters.py`, `identity/boundary.py` → `stamp`, `identity/industry_sync.py` → `dispatch`, `pull`, `receive`; `clocks/watchlist.py`; `api/routers/identity.py`; `migrations/0011_bvn_identity_industry_watchlist.sql` | D75 |
 | FR-301 seam, FR-305 | One directive per live decision; bank fetch, poll and acknowledge; signed fail-open policy | `policy/directives.py` → `issue`, `effective`; `api/routers/directives.py`; `worker/scoring.py` after the decision insert; `migrations/0010_directives.sql` | D74 |
 | FR-102 (foundation) | Any event type through one envelope; payments also written as events | `ingest.py` → `ingest_event`, `ingest_event_batch`, `_persist_event`; types in `schemas.py` → `EventIn`; table in `migrations/0008_event_envelope.sql` | D72 |
 

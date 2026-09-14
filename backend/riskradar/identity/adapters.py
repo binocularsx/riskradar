@@ -1,0 +1,259 @@
+"""The three outside systems identity depends on, as adapters (D75).
+
+Plain English
+-------------
+A BVN watch-list needs three things Risk Radar does not own:
+
+1. **The core banking system** knows which BVN (and NIN) belongs to a customer
+   number. Channel and switch payloads usually do not carry it (§9.1).
+2. **The identity registry** (NIBSS for BVN, NIMC for NIN) says whether a BVN
+   is real (REG-NG-03, INT-05).
+3. **The industry watch-list** (NIBSS) is where a bank publishes a temporary
+   flag and learns of flags other banks placed (REG-NG-04, FR-702).
+
+Each is an interface with a version that works today and a version for the real
+system. Swapping is configuration, not code:
+
+    RISKRADAR_CORE_RESOLVER      fixture (default) | none | finacle
+    RISKRADAR_IDENTITY_REGISTRY  format  (default) | nibss
+    RISKRADAR_INDUSTRY_CONNECTOR none    (default) | loopback | nibss
+
+The real adapters raise ``NotConnected`` until their connection is configured.
+Nothing fails because of that: a customer with no BVN keeps a customer-level
+flag, an unverifiable BVN is recorded as UNAVAILABLE, and an industry message
+waits in the outbox with the reason on it.
+
+Raw BVNs and NINs exist only inside a call to these adapters and at the ingestion
+boundary. What Risk Radar stores is always the token (D9c).
+"""
+
+from __future__ import annotations
+
+import csv
+import logging
+import os
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Protocol
+
+from ..config import REPO_ROOT
+
+log = logging.getLogger("riskradar.identity")
+
+BVN_PATTERN = re.compile(r"^\d{11}$")
+HIGH_RISK_EVENT_TYPES = frozenset({"CREDENTIAL_CHANGED", "SIM_CHANGED", "DEVICE_BOUND"})
+
+
+class NotConnected(Exception):
+    """The outside system this adapter talks to is not configured yet."""
+
+
+@dataclass(frozen=True)
+class CoreIdentity:
+    bvn: str
+    nin: str | None = None
+
+
+# --------------------------------------------------------------------------
+# 1. Core banking: customer number -> BVN, NIN
+# --------------------------------------------------------------------------
+
+
+class CoreIdentityResolver(Protocol):
+    name: str
+
+    def resolve(self, customer_id: str) -> CoreIdentity | None: ...
+
+
+class NoCoreResolver:
+    name = "none"
+
+    def resolve(self, customer_id: str) -> CoreIdentity | None:
+        return None
+
+
+class FixtureCoreResolver:
+    """A customer file standing in for the core: ``customer_id,bvn,nin`` rows.
+
+    The simulator writes it for the bank it builds (``history``), so the whole
+    identity path runs end to end before a core is connected. Reloaded when the
+    file changes. No file, no identities: the same as an unconnected core.
+    """
+
+    name = "fixture"
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or Path(os.environ.get("RISKRADAR_CORE_FIXTURE", REPO_ROOT / "fixtures" / "core_identities.csv"))
+        self._mtime: tuple[int, int] | None = None
+        self._rows: dict[str, CoreIdentity] = {}
+
+    def _load(self) -> None:
+        try:
+            st = self.path.stat()
+            mtime = (st.st_mtime_ns, st.st_size)  # size too: appends within one clock tick
+        except FileNotFoundError:
+            self._rows, self._mtime = {}, None
+            return
+        if mtime == self._mtime:
+            return
+        with self.path.open(newline="", encoding="utf-8") as fh:
+            self._rows = {
+                r["customer_id"]: CoreIdentity(r["bvn"], r.get("nin") or None)
+                for r in csv.DictReader(fh)
+                if BVN_PATTERN.match(r.get("bvn", ""))
+            }
+        self._mtime = mtime
+
+    def resolve(self, customer_id: str) -> CoreIdentity | None:
+        self._load()
+        return self._rows.get(customer_id)
+
+
+class FinacleCoreResolver:
+    """Customer inquiry against Finacle (see docs/core-banking-reference.md).
+
+    To connect: call the core's customer inquiry for the CIF and read the BVN
+    and NIN fields from the customer master, inside the bank's network, with a
+    short timeout. Until ``RISKRADAR_FINACLE_URL`` is set this raises, and the
+    boundary carries on without a BVN.
+    """
+
+    name = "finacle"
+
+    def __init__(self) -> None:
+        self.url = os.environ.get("RISKRADAR_FINACLE_URL")
+
+    def resolve(self, customer_id: str) -> CoreIdentity | None:
+        raise NotConnected("Finacle customer inquiry is not configured (RISKRADAR_FINACLE_URL)")
+
+
+# --------------------------------------------------------------------------
+# 2. Identity registry: is this BVN real?
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Verification:
+    status: str  # VALID | INVALID | UNVERIFIED | UNAVAILABLE
+    source: str
+
+
+class IdentityRegistry(Protocol):
+    name: str
+
+    def verify(self, bvn: str) -> Verification: ...
+
+
+class FormatRegistry:
+    """Checks the shape only. A well-formed BVN stays UNVERIFIED, never VALID:
+    eleven digits is not proof that a person exists."""
+
+    name = "format"
+
+    def verify(self, bvn: str) -> Verification:
+        if not BVN_PATTERN.match(bvn) or len(set(bvn)) == 1:
+            return Verification("INVALID", "FORMAT_CHECK")
+        return Verification("UNVERIFIED", "FORMAT_CHECK")
+
+
+class NibssRegistry:
+    """BVN validation through NIBSS. Until configured, every check is UNAVAILABLE."""
+
+    name = "nibss"
+
+    def verify(self, bvn: str) -> Verification:
+        if not os.environ.get("RISKRADAR_NIBSS_BVN_URL"):
+            return Verification("UNAVAILABLE", "NIBSS_NOT_CONNECTED")
+        raise NotConnected("NIBSS BVN validation client not implemented for this deployment")
+
+
+# --------------------------------------------------------------------------
+# 3. The industry watch-list
+# --------------------------------------------------------------------------
+
+
+class IndustryConnector(Protocol):
+    name: str
+
+    def publish(self, message: dict[str, Any]) -> str: ...
+
+    def pull(self) -> list[dict[str, Any]]: ...
+
+
+class NoIndustryConnector:
+    name = "none"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        raise NotConnected("no industry watch-list connector configured (RISKRADAR_INDUSTRY_CONNECTOR)")
+
+    def pull(self) -> list[dict[str, Any]]:
+        return []
+
+
+class LoopbackIndustryConnector:
+    """Accepts every message as if the industry hub had, and returns a reference.
+
+    For demonstrating the outbox end to end. It shares nothing with anyone:
+    flags from other banks arrive through the inbound API, where the simulator
+    can play another bank.
+    """
+
+    name = "loopback"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        return f"LOOPBACK-{message['flag_id']}-{message['operation']}"
+
+    def pull(self) -> list[dict[str, Any]]:
+        return []
+
+
+class NibssIndustryConnector:
+    """The NIBSS watch-list. Runs inside the bank's perimeter.
+
+    A message carries a BVN token, not a BVN. The bank-side connector turns the
+    token into the BVN it sends, from the bank's own records (it holds the
+    pepper and its customers' BVNs), which is how D9d always meant a token to
+    travel. Until ``RISKRADAR_NIBSS_WATCHLIST_URL`` is set this raises and the
+    message waits.
+    """
+
+    name = "nibss"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        raise NotConnected("NIBSS watch-list is not configured (RISKRADAR_NIBSS_WATCHLIST_URL)")
+
+    def pull(self) -> list[dict[str, Any]]:
+        raise NotConnected("NIBSS watch-list is not configured (RISKRADAR_NIBSS_WATCHLIST_URL)")
+
+
+_RESOLVERS = {"none": NoCoreResolver, "fixture": FixtureCoreResolver, "finacle": FinacleCoreResolver}
+_REGISTRIES = {"format": FormatRegistry, "nibss": NibssRegistry}
+_CONNECTORS = {"none": NoIndustryConnector, "loopback": LoopbackIndustryConnector, "nibss": NibssIndustryConnector}
+_cache: dict[str, Any] = {}
+
+
+def _choose(kind: str, env: str, default: str, table: dict[str, type]) -> Any:
+    choice = os.environ.get(env, default)
+    if choice not in table:
+        raise RuntimeError(f"{env}={choice!r}; expected one of {sorted(table)}")
+    key = f"{kind}:{choice}"
+    if key not in _cache:
+        _cache[key] = table[choice]()
+    return _cache[key]
+
+
+def core_resolver() -> CoreIdentityResolver:
+    return _choose("core", "RISKRADAR_CORE_RESOLVER", "fixture", _RESOLVERS)
+
+
+def identity_registry() -> IdentityRegistry:
+    return _choose("registry", "RISKRADAR_IDENTITY_REGISTRY", "format", _REGISTRIES)
+
+
+def industry_connector() -> IndustryConnector:
+    return _choose("industry", "RISKRADAR_INDUSTRY_CONNECTOR", "none", _CONNECTORS)
+
+
+def institution_code() -> str:
+    return os.environ.get("RISKRADAR_INSTITUTION_CODE", "RISKRADAR-DEV")

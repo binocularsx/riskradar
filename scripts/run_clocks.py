@@ -1,7 +1,8 @@
 """Start the regulatory clock sweep. `python scripts/run_clocks.py [seconds]`
 
 Records and escalates breached CBN clocks on reported cases (WP-05, D71), and
-lifts expired 24-hour watch-list flags (WP-06, D73).
+lifts expired 24-hour watch-list flags (WP-06, D73), and syncs flags with the
+industry watch-list through the configured connector (D75).
 """
 import sys
 from pathlib import Path

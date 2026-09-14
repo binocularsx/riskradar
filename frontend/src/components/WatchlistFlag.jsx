@@ -26,7 +26,58 @@ const OUTCOME_LABEL = {
   CUSTOMER_REPORTED_FRAUD: 'customer reported fraud',
 }
 
-export default function WatchlistFlag({ caseRow, flags, user, onUpdated }) {
+const SYNC_LABEL = {
+  PENDING: 'waiting for the industry connection',
+  SENT: 'shared with the industry watch-list',
+  FAILED: 'industry sync failed',
+  NOT_SHAREABLE: 'not shared: no BVN known',
+}
+
+/** D75: where this flag stands with the industry watch-list, and what the BVN covers. */
+function Scope({ flag }) {
+  const latest = (flag.industry_sync || []).slice(-1)[0]
+  return (
+    <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
+      {flag.scope === 'BVN'
+        ? `BVN-level: covers ${flag.records_covered} customer record${flag.records_covered === 1 ? '' : 's'} with this BVN`
+        : 'Customer-level: no BVN known for this customer'}
+      {latest && (
+        <>
+          {' · '}
+          <span title={latest.last_error || ''}>{latest.operation.toLowerCase()} {SYNC_LABEL[latest.status]}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** D75: flags other institutions placed on this customer's BVN. */
+function Elsewhere({ identity, industryFlags }) {
+  const active = industryFlags.filter((f) => f.active)
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bg-2)' }}>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <span className="dim" style={{ fontSize: 11.5 }}>
+          {identity?.bvn_known
+            ? `BVN known (${String(identity.source).replace('_', ' ').toLowerCase()}), ${String(identity.verification_status).toLowerCase()}`
+              + (identity.records_with_this_bvn > 1 ? ` · ${identity.records_with_this_bvn} customer records share it` : '')
+            : 'No BVN known: the core has not been asked, or does not have it'}
+        </span>
+        {active.length > 0 && (
+          <span className="pill override">flagged by {active.map((f) => f.institution_code).join(', ')}</span>
+        )}
+      </div>
+      {industryFlags.map((f) => (
+        <div key={f.external_ref} className="dim" style={{ fontSize: 11.5, padding: '2px 0' }}>
+          {f.institution_code} · {f.reason_code.replace(/_/g, ' ').toLowerCase()} · {when(f.flagged_at)} to {when(f.expires_at)}
+          {f.active ? '' : ' (ended)'}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export default function WatchlistFlag({ caseRow, flags, identity, industryFlags = [], user, onUpdated }) {
   const [reason, setReason] = useState('')
   const [hours, setHours] = useState(24)
   const [note, setNote] = useState('')
@@ -58,6 +109,7 @@ export default function WatchlistFlag({ caseRow, flags, user, onUpdated }) {
             Placed {when(current.placed_at)} by {current.placed_by_name}, ends {when(current.expires_at)}.{' '}
             <span className="muted">{current.reason}</span>
           </p>
+          <Scope flag={current} />
           <div className="row wrap" style={{ gap: 8 }}>
             <span className={`sla ${CONTACT_LABEL[current.contact_state].cls}`}>
               {CONTACT_LABEL[current.contact_state].text}
@@ -118,6 +170,8 @@ export default function WatchlistFlag({ caseRow, flags, user, onUpdated }) {
           ))}
         </div>
       )}
+
+      <Elsewhere identity={identity} industryFlags={industryFlags} />
     </div>
   )
 }

@@ -198,9 +198,13 @@ def worklist(
     context = _clock_context(conn)
     rows = [_enrich(r, context) for r in _rows(conn, WORKLIST_SQL.format(where=" AND ".join(where)), params)]
     # WP-06: which of these customers carry a temporary flag right now.
-    flagged = watchlist.active_subjects(conn, [r["subject_token"] for r in rows])
+    subjects = [r["subject_token"] for r in rows]
+    flagged = watchlist.active_subjects(conn, subjects)
+    # D75: another institution has a flag in force on this customer's BVN.
+    elsewhere = watchlist.industry_flags(conn, subjects)
     for r in rows:
         r["watchlisted"] = r["subject_token"] in flagged
+        r["industry_flagged"] = r["subject_token"] in elsewhere
 
     if scope == "breaching":
         rows = [r for r in rows if r["sla_state"] in ("DUE", "BREACHED")]
@@ -217,6 +221,7 @@ def worklist(
             "breaching": sum(1 for r in rows if r["sla_state"] == "BREACHED"),
             "due_soon": sum(1 for r in rows if r["sla_state"] == "DUE"),
             "watchlisted": sum(1 for r in rows if r["watchlisted"]),
+            "industry_flagged": sum(1 for r in rows if r["industry_flagged"]),
             "regulatory_breached": sum(
                 1 for r in rows if (r["regulatory_clock"] or {}).get("state") == "BREACHED"),
             "unassigned": sum(1 for r in rows if not r["assignee_id"]),

@@ -4,6 +4,7 @@
     python -m riskradar_sim history --profile demo        # seed the demo database
     python -m riskradar_sim stream  --rate 3              # live feed for the demo
     python -m riskradar_sim burst   --tps 250 --seconds 60  # NFR-002
+    python -m riskradar_sim industry-flag --count 3       # another bank flags BVNs (D75)
 
 ``history`` posts through the batch endpoint with replay semantics (D8d), so
 seeding a month of behaviour does not raise a month of alerts. ``stream`` posts
@@ -24,6 +25,7 @@ import httpx
 
 from .engine import legitimate_event
 from .generate import SimulationConfig, generate, write_corpus
+from .identity import DEFAULT_CORE_FILE, CoreFile
 from .population import build_population
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
@@ -85,11 +87,15 @@ def cmd_history(args: argparse.Namespace) -> None:
     batches: dict[bool, list[dict]] = {True: [], False: []}
     started = time.perf_counter()
 
+    core = CoreFile(Path(args.core_file))
+
     with _client(args.base_url, args.api_key) as client:
         def flush(is_history: bool) -> None:
             batch = batches[is_history]
             if not batch:
                 return
+            # D75: the core knows these customers before their payments arrive.
+            core.ensure([p["customer_id"] for p in batch])
             response = client.post(
                 "/v1/transactions/batch",
                 json={
@@ -162,6 +168,9 @@ def cmd_stream(args: argparse.Namespace) -> None:
                                  now=datetime.now(timezone.utc) - timedelta(days=30))
 
     from .engine import TYPOLOGIES
+
+    # D75: the whole live population is known to the simulated core up front.
+    CoreFile().ensure([c.customer_id for c in customers])
 
     interval = 1.0 / max(args.rate, 0.01)
     sent = 0
@@ -244,6 +253,36 @@ def cmd_burst(args: argparse.Namespace) -> None:
     print("  zero transaction loss")
 
 
+def cmd_industry_flag(args: argparse.Namespace) -> None:
+    """Another institution flags some of our customers' BVNs on the industry list.
+
+    Posts to the inbound door a bank-side NIBSS connector would use, so the
+    desk sees "flagged by another bank" on the cases those customers have.
+    """
+    import csv
+
+    rows = list(csv.DictReader(Path(args.core_file).open(newline="", encoding="utf-8")))
+    if not rows:
+        sys.exit(f"no customers in {args.core_file}; run `history` first")
+    rng = random.Random(args.seed)
+    now = datetime.now(timezone.utc)
+    entries = [
+        {
+            "external_ref": f"{args.institution}-{r['bvn']}-{int(now.timestamp())}",
+            "bvn": r["bvn"],
+            "institution_code": args.institution,
+            "reason_code": "SUSPECTED_FRAUD_PENDING_CLARIFICATION",
+            "flagged_at": now.isoformat(),
+            "expires_at": (now + timedelta(hours=min(args.hours, 24.0))).isoformat(),
+        }
+        for r in rng.sample(rows, min(args.count, len(rows)))
+    ]
+    with _client(args.base_url, args.api_key) as client:
+        response = client.post("/v1/industry-watchlist/inbound", json={"entries": entries})
+        response.raise_for_status()
+    print(f"{args.institution} flagged {len(entries)} BVN(s): {response.json()}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="riskradar_sim", description="Risk Radar simulator")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -284,6 +323,8 @@ def main(argv: list[str] | None = None) -> None:
         "--labels-out", default=None,
         help="write the true labels of the alerting window to this local file",
     )
+    p.add_argument("--core-file", default=str(DEFAULT_CORE_FILE),
+                   help="the simulated core's customer file (customer_id,bvn,nin), D75")
     p.set_defaults(func=cmd_history)
 
     p = sub.add_parser("stream", help="live feed for the demo")
@@ -297,6 +338,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--incident-probability", type=float, default=0.002)
     p.add_argument("--typology", default=None, choices=["ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING"])
     p.set_defaults(func=cmd_stream)
+
+    p = sub.add_parser("industry-flag", help="play another bank: flag BVNs on the industry watch-list (D75)")
+    p.add_argument("--count", type=int, default=3)
+    p.add_argument("--institution", default="SIMBANK-044")
+    p.add_argument("--hours", type=float, default=24.0)
+    p.add_argument("--core-file", default=str(DEFAULT_CORE_FILE))
+    p.set_defaults(func=cmd_industry_flag)
 
     p = sub.add_parser("burst", help="NFR-002 burst test")
     p.add_argument("--tps", type=int, default=250)

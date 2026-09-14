@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, when } from '../lib/api'
 import { Banner, Empty } from '../components/ui'
 
-const TABS = ['Rules', 'Thresholds', 'Models', 'Lists', 'Enforcement', 'Audit']
+const TABS = ['Rules', 'Thresholds', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Audit']
 
 /**
  * Administration (FR-040 to FR-042).
@@ -34,6 +34,7 @@ export default function Admin() {
       {tab === 'Models' && <Models />}
       {tab === 'Lists' && <Lists />}
       {tab === 'Enforcement' && <Enforcement />}
+      {tab === 'Integrations' && <Integrations />}
       {tab === 'Audit' && <Audit />}
     </>
   )
@@ -47,6 +48,67 @@ function useAsync(fn, deps = []) {
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
   return { data, error, reload: load, setError }
+}
+
+/* ----------------------------------------------------------- integrations */
+
+/**
+ * D75: the three outside systems identity depends on, and what is waiting on
+ * them. A message that cannot be sent yet is shown with its reason, not hidden.
+ */
+function Integrations() {
+  const { data, error } = useAsync(() => api.integrations())
+  if (error) return <Banner kind="error">{error}</Banner>
+  if (!data) return <p className="muted">Loading…</p>
+  const cov = data.bvn_coverage_30d
+  return (
+    <>
+      <div className="grid cols-3" style={{ marginBottom: 14 }}>
+        {[
+          ['Core banking (BVN lookup)', data.adapters.core_resolver],
+          ['Identity registry', data.adapters.identity_registry],
+          ['Industry watch-list', data.adapters.industry_connector],
+        ].map(([label, value]) => (
+          <div className="card" key={label}>
+            <div className="stat-label">{label}</div>
+            <div className="stat-value" style={{ fontSize: 20 }}>{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h2>Identity</h2>
+        <p style={{ fontSize: 13, marginTop: 0 }}>
+          {cov.with_bvn} of {cov.customers} customers seen in 30 days have a known BVN.
+          {' '}Institution code <span className="mono">{data.adapters.institution_code}</span>.
+        </p>
+        <div className="row wrap" style={{ gap: 8 }}>
+          {data.verification.map((v) => <span key={v.status} className="pill">{v.status.toLowerCase()} {v.n}</span>)}
+        </div>
+      </div>
+      <div className="card">
+        <h2>Industry watch-list</h2>
+        {data.outbox.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Outbox</th><th className="num">Messages</th><th>Oldest</th><th>Last reason</th></tr></thead>
+              <tbody>
+                {data.outbox.map((o) => (
+                  <tr key={o.status}>
+                    <td className="mono">{o.status}</td><td className="num">{o.n}</td>
+                    <td className="mono dim">{when(o.oldest)}</td><td className="dim">{o.last_error || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <Empty>No flags placed yet.</Empty>}
+        <p className="dim" style={{ fontSize: 12, marginBottom: 0 }}>
+          Received from other institutions: {data.inbound.active} in force, {data.inbound.total} in all
+          {data.inbound.last_received ? `, last ${when(data.inbound.last_received)}` : ''}.
+        </p>
+      </div>
+    </>
+  )
 }
 
 /* ------------------------------------------------------------ enforcement */

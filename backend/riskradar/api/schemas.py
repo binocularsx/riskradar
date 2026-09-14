@@ -66,6 +66,9 @@ class TransactionIn(Strict):
     customer_id: Annotated[str, Field(min_length=1, max_length=128)]
     account_id: Annotated[str, Field(min_length=1, max_length=128)]
     beneficiary_account_id: Annotated[str | None, Field(max_length=128)] = None
+    # D75: optional. When absent the boundary asks the core; tokenised either way.
+    bvn: Annotated[str | None, Field(pattern=r"^\d{11}$")] = None
+    nin: Annotated[str | None, Field(pattern=r"^\d{11}$")] = None
     device_fingerprint: Annotated[str | None, Field(max_length=256)] = None
 
     ip_region: Annotated[str | None, Field(max_length=64)] = None
@@ -124,6 +127,8 @@ class EnvelopeIn(Strict):
     device_fingerprint: Annotated[str | None, Field(max_length=256)] = None
     ip_region: Annotated[str | None, Field(max_length=64)] = None
     channel: Channel | None = None
+    bvn: Annotated[str | None, Field(pattern=r"^\d{11}$")] = None
+    nin: Annotated[str | None, Field(pattern=r"^\d{11}$")] = None
 
     @field_validator("occurred_at")
     @classmethod
@@ -356,6 +361,27 @@ class EnforcementPolicyIn(Strict):
     policy_text: Annotated[str, Field(min_length=20, max_length=8000)]
     signed_by: Annotated[str | None, Field(min_length=3, max_length=200)] = None
     signed_at: IsoDatetime | None = None
+
+
+class IndustryFlagIn(Strict):
+    """One entry from the industry watch-list, as the bank-side connector received it."""
+
+    external_ref: Annotated[str, Field(min_length=1, max_length=128)]
+    bvn: Annotated[str, Field(pattern=r"^\d{11}$")]
+    institution_code: Annotated[str, Field(min_length=2, max_length=32)]
+    reason_code: Annotated[str, Field(min_length=2, max_length=64)]
+    flagged_at: IsoDatetime
+    expires_at: IsoDatetime
+    lifted_at: IsoDatetime | None = None
+
+    @field_validator("flagged_at", "expires_at", "lifted_at")
+    @classmethod
+    def _require_timezone(cls, v: datetime | None) -> datetime | None:
+        return _aware(v)
+
+
+class IndustryInboundIn(Strict):
+    entries: Annotated[list[IndustryFlagIn], Field(min_length=1, max_length=1000)]
 
 
 class WatchlistPlaceIn(Strict):
