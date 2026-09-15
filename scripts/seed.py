@@ -43,7 +43,7 @@ USERS = [
 
 SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
 
-# D25: six rules, two of each power; D77 and D78 added two escalating rules. Every rule *power* in D11a is retained,
+# D25: six rules, two of each power; D77, D78 and D79 added three escalating rules. Every rule *power* in D11a is retained,
 # including suppression — the primary false-positive control, which had to be
 # built rather than deferred.
 RULES = [
@@ -59,6 +59,10 @@ RULES = [
     # 3 senders at 5x the account's normal day: 7.3 alerts a day, 2.1 false,
     # 73% of mule rings (ml/artifacts/receiving-side.json).
     ("MULE_INBOUND_FANIN", "ESCALATE", "HIGH", {"min_remitters": 3, "min_count_ratio": 5.0}),
+    # D79: the onward payment. At 75/day it lifts mule-ring value flagged from
+    # 63.5% to 84.9% and total value detected from 84.8% to 90.4%.
+    ("SECOND_LEG_ONWARD_PAYMENT", "ESCALATE", "HIGH",
+     {"min_remitters": 3, "min_count_ratio": 5.0, "max_minutes_since_credit": 180, "min_pass_through": 0.5}),
     (
         "CARD_TESTING_PROBES",
         "ESCALATE",
@@ -82,6 +86,7 @@ RULE_GOVERNANCE = {
     "VELOCITY_BURST_1H": ("Chidera", "D67: a burst of 5+ payments in an hour to a destination new to the bank; 10+ with no destination. Speed alone was mostly traders.", "2026-09-11"),
     "ACCOUNT_TAKEOVER_SEQUENCE": ("Chidera", "D77: two takeover precursors within 24h (device bound, SIM or credential changed, failed logins), then a new destination. 7 alerts/day, precision 0.96.", "2026-09-14"),
     "MULE_INBOUND_FANIN": ("Chidera", "D78: credits from 3+ senders on a day 5x the account's normal; the receiving side of a mule ring. 7.3 alerts/day, 73% of rings.", "2026-09-15"),
+    "SECOND_LEG_ONWARD_PAYMENT": ("Chidera", "D79: an account that took a credit fan-in, paying half or more of it on within 3 hours. Mule value flagged 63.5% -> 84.9% at 75/day.", "2026-09-15"),
     "CARD_TESTING_PROBES": ("Chidera", "D21, D62b: refused small card attempts before a large one. Right 99.8% of the time.", "2026-09-09"),
     "SANCTIONED_BENEFICIARY": ("Chidera", "D11a: a sanctioned destination is not a matter of probability.", "2026-09-09"),
     "KNOWN_MULE_BENEFICIARY": ("Chidera", "D11a: a destination an analyst confirmed as fraudulent.", "2026-09-09"),

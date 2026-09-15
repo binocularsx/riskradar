@@ -1,0 +1,89 @@
+{
+  "budget_per_day": 75,
+  "test_days": 29.8,
+  "machine_signals": [
+    "CARD_TESTING_PROBES",
+    "ACCOUNT_TAKEOVER_SEQUENCE"
+  ],
+  "credit_reviews_reserved_per_day": 7.27,
+  "arms": [
+    {
+      "arm": "one queue (today)",
+      "machine_actions_per_day": 0.0,
+      "machine_precision": 0.0,
+      "reviews_per_day": 75.0,
+      "false_reviews_per_day": 16.6,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": "55/55",
+        "MULE_FANOUT": "44/47",
+        "CARD_TESTING": "48/48"
+      },
+      "value_detection_rate": 0.904,
+      "model_reviews_per_day": 20.9
+    },
+    {
+      "arm": "tiered: machine actions off the budget",
+      "machine_actions_per_day": 24.1,
+      "machine_precision": 0.992,
+      "reviews_per_day": 75.0,
+      "false_reviews_per_day": 38.0,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": "55/55",
+        "MULE_FANOUT": "45/47",
+        "CARD_TESTING": "48/48"
+      },
+      "value_detection_rate": 0.93,
+      "model_reviews_per_day": 45.0
+    },
+    {
+      "arm": "tiered + auto-close lowest fifth",
+      "machine_actions_per_day": 24.1,
+      "machine_precision": 0.992,
+      "reviews_per_day": 66.0,
+      "false_reviews_per_day": 29.4,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": "55/55",
+        "MULE_FANOUT": "45/47",
+        "CARD_TESTING": "48/48"
+      },
+      "value_detection_rate": 0.926,
+      "model_reviews_per_day": 36.0
+    },
+    {
+      "arm": "tiered: freed capacity kept",
+      "machine_actions_per_day": 24.1,
+      "machine_precision": 0.992,
+      "reviews_per_day": 50.9,
+      "false_reviews_per_day": 16.4,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": "55/55",
+        "MULE_FANOUT": "44/47",
+        "CARD_TESTING": "48/48"
+      },
+      "value_detection_rate": 0.904,
+      "model_reviews_per_day": 20.9
+    },
+    {
+      "arm": "tiered, kept + auto-close lowest fifth",
+      "machine_actions_per_day": 24.1,
+      "machine_precision": 0.992,
+      "reviews_per_day": 46.7,
+      "false_reviews_per_day": 13.9,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": "55/55",
+        "MULE_FANOUT": "44/47",
+        "CARD_TESTING": "48/48"
+      },
+      "value_detection_rate": 0.878,
+      "model_reviews_per_day": 16.7
+    }
+  ],
+  "auto_close_candidate": {
+    "closed_per_day": 9.0,
+    "fraud_payments_closed": 12,
+    "incidents_touched": 11,
+    "incidents_lost": 0
+  },
+  "auto_close_probability_cut": 0.7500000006865641,
+  "incidents_lost_to_auto_close_in_kept_arm": 0
+}

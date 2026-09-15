@@ -95,6 +95,8 @@ def main() -> None:
     parser.add_argument("--without-events", action="store_true", help="D77 ablation: no sequence rule")
     parser.add_argument("--without-credits", action="store_true",
                         help="D78: no credit alerts reserved (the receiving side switched off)")
+    parser.add_argument("--no-second-leg", action="store_true",
+                        help="D79 ablation: without the rule on the payment that moves received money on")
     parser.add_argument("--out", default=str(ARTIFACTS / "budget-menu.json"))
     args = parser.parse_args()
 
@@ -143,6 +145,17 @@ def main() -> None:
                       + (col("sim_changed_hours") < 24) + (col("credential_changed_hours") < 24)
                       + (col("failed_logins_1h_subject") >= 3))
         rules = rules | ((precursors >= 2) & (col("beneficiary_is_new_to_account") == 1))
+    if not args.no_second_leg and "pass_through_ratio_24h" in FEATURE_NAMES:
+        # D79, as seeded: read from the full feature matrix, since the model's
+        # inputs no longer carry the receiving-side features (D78b).
+        full = d["X"][order][cut:]
+        fcol = lambda name: full[:, FEATURE_NAMES.index(name)]  # noqa: E731
+        second_leg = ((fcol("distinct_remitters_24h_account") >= 3)
+                      & (fcol("inbound_count_ratio_24h_vs_daily_mean_30d") >= 5.0)
+                      & (fcol("minutes_since_last_credit") <= 180)
+                      & (fcol("pass_through_ratio_24h") >= 0.5))
+        rules = rules | second_leg
+        print(f"second leg: {second_leg.sum() / days:.1f} payments a day", flush=True)
 
     # D78: credits raise alerts too, from the same desk. Their measured volume is
     # reserved first, so the model only spends what payments and credits leave.
@@ -192,14 +205,19 @@ def main() -> None:
                            for t in TYPES},
             "value_detection_rate": round(float(at[system & fraud].sum()) / fraud_value, 3),
             "value_in_caught_incidents": round(float(at[in_caught].sum()) / fraud_value, 3),
+            # D79: the money in mule rings that the system put in front of a person,
+            # payment by payment: what a hold on the onward payment could keep.
+            "mule_value_detection_rate": round(
+                float(at[system & fraud & (tt == "MULE_FANOUT")].sum())
+                / max(float(at[fraud & (tt == "MULE_FANOUT")].sum()), 1.0), 3),
             "held_out": held_out(budget, args.without_events, args.without_credits),
         })
 
-    print(f"{'budget':>6}{'false/day':>10}{'ratio':>8}{'VDR':>7}{'VDR inc':>9}   seen ATO  MULE  CARD   held-out mean")
+    print(f"{'budget':>6}{'false/day':>10}{'ratio':>8}{'VDR':>7}{'mule VDR':>9}{'VDR inc':>9}   seen ATO  MULE  CARD   held-out mean")
     for o in options:
         s = o["seen_fraud"]
         print(f"{o['budget_per_day']:>6}{o['false_alerts_per_day']:>10}{o['false_alerts_per_incident']:>7}:1"
-              f"{o['value_detection_rate']:>7}{o['value_in_caught_incidents']:>9}   "
+              f"{o['value_detection_rate']:>7}{o['mule_value_detection_rate']:>9}{o['value_in_caught_incidents']:>9}   "
               f"{s['ACCOUNT_TAKEOVER']['caught']:>7}{s['MULE_FANOUT']['caught']:>6}{s['CARD_TESTING']['caught']:>6}"
               f"   {o['held_out']['mean'] if o['held_out'] else '-'}")
 

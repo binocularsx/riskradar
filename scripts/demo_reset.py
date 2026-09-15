@@ -192,7 +192,9 @@ def stage_data(args: argparse.Namespace) -> None:
          "--anchor", anchor],
         cwd=sim,
     )
-    wait_for_drain("history")
+    # D76c: thirty days of history is about 360,000 payments plus credits and
+    # events to score (D77, D78); half an hour is no longer enough to drain it.
+    wait_for_drain("history", timeout_s=6 * 3600)
 
     print("\n[2/5] deriving thresholds from that traffic against the alert budget")
     run([str(PYTHON), "-u", "scripts/derive_thresholds.py", "--publish"])
@@ -206,7 +208,7 @@ def stage_data(args: argparse.Namespace) -> None:
          "--labels-out", str(LABELS), "--anchor", anchor],
         cwd=sim,
     )
-    wait_for_drain("alerting window")
+    wait_for_drain("alerting window", timeout_s=2 * 3600)
 
     print("\n[4/5] working a few cases so the desk has history")
     seed_worked_cases(args.seed)

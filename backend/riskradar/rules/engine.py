@@ -33,6 +33,7 @@ Code                         Power      Catches
 VELOCITY_BURST_1H            ESCALATE   ATO extraction, mule fan-out speed
 ACCOUNT_TAKEOVER_SEQUENCE    ESCALATE   A way in taken over, then a new destination (D77)
 MULE_INBOUND_FANIN           ESCALATE   Credits from many senders, unlike the account (D78)
+SECOND_LEG_ONWARD_PAYMENT    ESCALATE   That money leaving again within hours (D79)
 CARD_TESTING_PROBES          ESCALATE   Authorisation probing — decline-heavy by nature
 SANCTIONED_BENEFICIARY       OVERRIDE   Some things are not probabilistic
 KNOWN_MULE_BENEFICIARY       OVERRIDE   Destination confirmed fraudulent by an analyst
@@ -229,6 +230,36 @@ def mule_inbound_fanin(ctx: RuleContext, params: dict[str, Any]) -> Signal | Non
     )
 
 
+@rule("SECOND_LEG_ONWARD_PAYMENT")
+def second_leg_onward_payment(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """The payment that moves received money on (D79, WP-04).
+
+    The receiving-side playbook's point: the recoverable moment is the onward
+    payment, not the credit. A credit fan-in (``MULE_INBOUND_FANIN``) says an
+    account is collecting; this says the collection is now leaving, within hours
+    of arriving, and a hold here keeps the money in the bank. It reads the same
+    receiving-side profile the credit rule reads, from the payment's own
+    features, so the pair lands in one case (D13a) and the directive on this
+    payment carries the hold.
+    """
+    senders = int(ctx.features.get("distinct_remitters_24h_account", 0))
+    ratio = float(ctx.features.get("inbound_count_ratio_24h_vs_daily_mean_30d", 0.0))
+    since = float(ctx.features.get("minutes_since_last_credit", 1440.0))
+    through = float(ctx.features.get("pass_through_ratio_24h", 0.0))
+    if (senders < int(params.get("min_remitters", 3)) or ratio < float(params.get("min_count_ratio", 5.0))
+            or since > float(params.get("max_minutes_since_credit", 180)) or through < float(params.get("min_pass_through", 0.5))):
+        return None
+    return Signal(
+        code="SECOND_LEG_ONWARD_PAYMENT",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"distinct_remitters_24h": senders, "inbound_count_ratio_vs_normal_day": round(ratio, 2),
+                  "minutes_since_last_credit": round(since, 1), "pass_through_ratio_24h": round(through, 3),
+                  "max_minutes_since_credit": float(params.get("max_minutes_since_credit", 180)),
+                  "min_pass_through": float(params.get("min_pass_through", 0.5))},
+    )
+
+
 @rule("CARD_TESTING_PROBES")
 def card_testing_probes(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
     """Decline-heavy, low-value card activity — the probing shape.
@@ -362,6 +393,7 @@ ALL_RULE_CODES: tuple[str, ...] = (
     "VELOCITY_BURST_1H",
     "ACCOUNT_TAKEOVER_SEQUENCE",
     "MULE_INBOUND_FANIN",
+    "SECOND_LEG_ONWARD_PAYMENT",
     "CARD_TESTING_PROBES",
     "SANCTIONED_BENEFICIARY",
     "KNOWN_MULE_BENEFICIARY",

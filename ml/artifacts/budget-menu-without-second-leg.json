@@ -24,9 +24,9 @@
       "budget_per_day": 120,
       "alerts_per_day": 120.0,
       "credit_alerts_per_day": 7.27,
-      "false_alerts_per_day": 56.3,
+      "false_alerts_per_day": 58.3,
       "incidents_per_day": 5.04,
-      "false_alerts_per_incident": 11.2,
+      "false_alerts_per_incident": 11.6,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
           "caught": 55,
@@ -53,9 +53,9 @@
           ]
         }
       },
-      "value_detection_rate": 0.935,
+      "value_detection_rate": 0.903,
       "value_in_caught_incidents": 0.998,
-      "mule_value_detection_rate": 0.906,
+      "mule_value_detection_rate": 0.785,
       "held_out": {
         "per_typology": {
           "ACCOUNT_TAKEOVER": {
@@ -66,10 +66,10 @@
             ]
           },
           "MULE_FANOUT": {
-            "recall": 0.918,
+            "recall": 0.88,
             "ci95": [
-              0.869,
-              0.95
+              0.825,
+              0.919
             ]
           },
           "CARD_TESTING": {
@@ -80,16 +80,16 @@
             ]
           }
         },
-        "mean": 0.961
+        "mean": 0.949
       }
     },
     {
       "budget_per_day": 75,
       "alerts_per_day": 75.0,
       "credit_alerts_per_day": 7.27,
-      "false_alerts_per_day": 14.5,
+      "false_alerts_per_day": 16.3,
       "incidents_per_day": 5.04,
-      "false_alerts_per_incident": 2.9,
+      "false_alerts_per_incident": 3.2,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
           "caught": 55,
@@ -100,11 +100,11 @@
           ]
         },
         "MULE_FANOUT": {
-          "caught": 44,
+          "caught": 45,
           "incidents": 47,
           "ci95": [
-            0.828,
-            0.978
+            0.858,
+            0.988
           ]
         },
         "CARD_TESTING": {
@@ -116,9 +116,9 @@
           ]
         }
       },
-      "value_detection_rate": 0.904,
+      "value_detection_rate": 0.848,
       "value_in_caught_incidents": 0.998,
-      "mule_value_detection_rate": 0.849,
+      "mule_value_detection_rate": 0.635,
       "held_out": {
         "per_typology": {
           "ACCOUNT_TAKEOVER": {
@@ -150,24 +150,24 @@
       "budget_per_day": 60,
       "alerts_per_day": 60.0,
       "credit_alerts_per_day": 7.27,
-      "false_alerts_per_day": 10.5,
+      "false_alerts_per_day": 8.9,
       "incidents_per_day": 5.04,
-      "false_alerts_per_incident": 2.1,
+      "false_alerts_per_incident": 1.8,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
-          "caught": 46,
+          "caught": 54,
           "incidents": 55,
           "ci95": [
-            0.717,
-            0.911
+            0.904,
+            0.997
           ]
         },
         "MULE_FANOUT": {
-          "caught": 42,
+          "caught": 44,
           "incidents": 47,
           "ci95": [
-            0.774,
-            0.954
+            0.828,
+            0.978
           ]
         },
         "CARD_TESTING": {
@@ -179,9 +179,9 @@
           ]
         }
       },
-      "value_detection_rate": 0.781,
-      "value_in_caught_incidents": 0.954,
-      "mule_value_detection_rate": 0.78,
+      "value_detection_rate": 0.739,
+      "value_in_caught_incidents": 0.995,
+      "mule_value_detection_rate": 0.464,
       "held_out": {
         "per_typology": {
           "ACCOUNT_TAKEOVER": {
@@ -192,10 +192,10 @@
             ]
           },
           "MULE_FANOUT": {
-            "recall": 0.907,
+            "recall": 0.869,
             "ci95": [
-              0.856,
-              0.941
+              0.812,
+              0.91
             ]
           },
           "CARD_TESTING": {
@@ -206,7 +206,7 @@
             ]
           }
         },
-        "mean": 0.956
+        "mean": 0.944
       }
     }
   ]

@@ -52,6 +52,7 @@ from ..features.spec import FEATURE_SPEC_VERSION
 from ..features.types import TxView
 from ..model import registry
 from ..policy import directives
+from ..policy import disposition as tiers
 from ..policy.engine import Thresholds, apply as apply_policy
 from ..rules.engine import RuleContext, evaluate as evaluate_rules
 
@@ -164,6 +165,37 @@ def active_thresholds(conn: Any) -> Thresholds:
     if not row:
         raise RuntimeError("no active threshold set — run scripts/seed.py")
     return Thresholds.from_row(dict(row) if not isinstance(row, dict) else row)
+
+
+def _machine_action(conn: Any, sys_uid: int, case_id: int, signals: list, tx: TxView) -> None:
+    """Take the action a machine-action signal names (D80).
+
+    The hold is already in the directive, which follows the decision (D74). A
+    takeover sequence also places the 24-hour flag (D73, D75), whose customer
+    contact is the person's part. A flag already in force is left alone.
+    """
+    from ..clocks import watchlist
+
+    codes = [s.code for s in signals]
+    if "ACCOUNT_TAKEOVER_SEQUENCE" in codes:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM cases WHERE id = %s", (case_id,))
+            case = cur.fetchone()
+        case = dict(case) if not isinstance(case, dict) else case
+        try:
+            with conn.transaction():
+                watchlist.place(conn, case=case, user_id=sys_uid, hours=24,
+                                reason="Machine action: takeover sequence before a payment to a new destination (D80)")
+        except watchlist.WatchlistError:
+            pass  # already flagged: one flag per customer and per BVN
+    chain.append(
+        conn,
+        actor_user_id=sys_uid,
+        action="DISPOSITION_MACHINE_ACTION",
+        object_type="case",
+        object_id=case_id,
+        payload={"signals": codes, "transaction_ref": tx.transaction_ref},
+    )
 
 
 def list_membership(conn: Any, tx: TxView) -> tuple[bool, bool, bool]:
@@ -302,6 +334,11 @@ def score_transaction(
     thresholds = thresholds or active_thresholds(conn)
     result = apply_policy(p_fraud, signals, thresholds, rule_only_mode=rule_only, model_applies=model_applies)
 
+    # --- disposition (WP-08, D80): who acts, the system or a person ---------
+    disposition_policy = tiers.active_policy(conn)
+    disposition = tiers.choose(actionable=result.actionable, signals=signals, p_fraud=p_fraud,
+                               model_applies=model_applies, policy=disposition_policy)
+
     # --- explanation, only where it is needed -------------------------------
     # G3 requires attributions on **alerts**, not on every decision, and the vast
     # majority of decisions are ALLOW. Explaining all of them cost ~180ms each
@@ -321,8 +358,9 @@ def score_transaction(
             INSERT INTO decisions
                 (transaction_id, p_fraud, score_0_100, decision, risk_level,
                  model_version_id, ruleset_id, threshold_set_id, feature_spec_version,
-                 features, signals, attributions, policy_trace, rule_only_mode, latency_ms)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 features, signals, attributions, policy_trace, rule_only_mode, latency_ms,
+                 disposition, disposition_policy_version)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -341,6 +379,8 @@ def score_transaction(
                 json.dumps(result.trace),
                 rule_only,
                 latency_ms,
+                disposition,
+                disposition_policy.version if disposition_policy else None,
             ),
         )
         dec_row = cur.fetchone()
@@ -367,13 +407,24 @@ def score_transaction(
     # --- alert and case ----------------------------------------------------
     # D8d: replayed transactions do not raise alerts unless explicitly requested.
     # Re-scoring six weeks of history on a model change must not page anybody.
-    if result.actionable and row["raise_alerts"]:
+    outcome["disposition"] = disposition
+    # AUTO_CLOSE (D80): recorded on the decision, no alert, no case, no label.
+    if result.actionable and row["raise_alerts"] and disposition != tiers.AUTO_CLOSE:
         case_id, created = correlation.attach(
             conn,
             subject_token=tx.subject_token,
             risk_level=result.risk_level,
             at=row["occurred_at"],
         )
+        # D80: a case the system can act on is MACHINE-handled; the first alert
+        # that needs a person makes it HUMAN, and it never goes back.
+        with conn.cursor() as cur:
+            if created and disposition == tiers.MACHINE_ACTION:
+                cur.execute("UPDATE cases SET handling = 'MACHINE' WHERE id = %s", (case_id,))
+            elif disposition == tiers.HUMAN_REVIEW:
+                cur.execute("UPDATE cases SET handling = 'HUMAN' WHERE id = %s AND handling <> 'HUMAN'", (case_id,))
+        if disposition == tiers.MACHINE_ACTION:
+            _machine_action(conn, sys_uid, case_id, signals, tx)
         with conn.cursor() as cur:
             cur.execute(
                 """

@@ -41,8 +41,8 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 | Status | Count | Meaning |
 |---|---|---|
 | Met | 15 | Built and tested, 4 of them added for this review and 3 since (D71, D77) |
-| Partly | 49 | Some of it built; the missing part is named |
-| Not built | 23 | Absent; on the roadmap or waiting on a bank |
+| Partly | 51 | Some of it built; the missing part is named |
+| Not built | 21 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -62,7 +62,7 @@ the few gaps that matter most rather than all of them.
 | O2 | Fewer false alarms without less detection | Partly | Measured together: held-out recall 0.892 at 120 alerts a day, with budget trade-offs at 75 and 60 (D67c). Now reported in the unit banks benchmark: 15:1 false alerts per incident at 120, 6.6:1 at 75, 4.1:1 at 60, on the Analytics screen (D70). Not yet reduced on live outcomes. |
 | O3 | One decision layer for every channel | Partly | One scorer for every channel and instrument in the event model (mobile, web, USSD, POS, ATM, agent, branch). Non-payment events are accepted through one envelope (D72) and read by the features and rules that score payments (D77). |
 | O4 | Regulatory clocks met automatically | Partly | CBN scam clocks run on every reported case, from versioned configuration and a Nigerian working-day calendar; breaches are recorded and escalated (D71). Meeting them still takes the desk: nothing is notified or paid automatically. |
-| O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve now measured (D69f). Cost per case not measured. |
+| O5 | Lower cost per investigation | Partly | Ranked worklist, one-key outcome, case assignment; median time to resolve measured (D69f); machine actions take 24 alerts a day off the analysts at the same detection (D80). Cost per case not measured. |
 | O6 | Every decision defensible | Met | Every decision stores its rules' signals with evidence, the policy trace, feature attributions and the versions that produced it (D7a). |
 
 ## 5.1 Data ingestion (FR-1xx)
@@ -86,7 +86,7 @@ the few gaps that matter most rather than all of them.
 | FR-201 | Rules engine | Partly | Six rules including payment bursts and card testing (D25, D67). Amount, location and time-of-day rules not written; dormancy is a model input, not a rule. |
 | FR-202 | Supervised model on labelled outcomes | Partly | Calibrated gradient boosting (D60–D61), trained on simulator labels. Analyst outcomes are recorded as future labels (D13c) but not yet trained on. |
 | FR-203 | Unsupervised anomaly detection for novel patterns | Not built | Our own evidence argues for it: the model alone caught 0 of 194 card-testing incidents it had never seen (D69h). |
-| FR-204 | Graph and link analysis for rings and mules | Not built | Roadmap (D16). |
+| FR-204 | Graph and link analysis for rings and mules | Partly | The two-leg link built without a graph (D79): a credit fan-in and the payment that moves it on, scored and cased together; mule-ring value flagged 63.5% to 84.9%. Ring-wide graph analysis still roadmap (D16). |
 | FR-205 | Scoring against the individual's own baseline | Met | Amount against the account's usual largest, today against a normal day, new device for this customer, new payee for this account. |
 | FR-206 | Session modelling to catch takeover in progress | Partly | Sequences inside a 72-hour window: failed logins, a new device bound, a SIM or credential change, then a payee enrolled and paid (D77). No explicit session identifier from the channel. |
 | FR-207 | Scam (APP) detection | Partly | First-time payee, unusual amount and bursts are measured. No session or "coached customer" signals; no dedicated scam pattern. |
@@ -101,7 +101,7 @@ the few gaps that matter most rather than all of them.
 |---|---|---|---|
 | FR-301 | Approve / step-up / hold / decline before authorisation | Rejected for v1 | D7. The seam is now a contract: a directive per decision with a TTL, a signed fail-open policy and a delivery record (D74). Nothing is enforced. |
 | FR-302 | Risk-based step-up authentication | Rejected for v1 | Requires enforcement. |
-| FR-303 | Policy per channel, product, segment and amount | Not built | One threshold set for all traffic. |
+| FR-303 | Policy per channel, product, segment and amount | Partly | A versioned disposition policy per signal: machine action, analyst review or auto-close (D80); analyst reviews a third lower at the same detection. One threshold set still serves every channel and segment. |
 | FR-304 | Business users change rules without a deployment | Partly | Enable, disable, retune and re-grade rules from the admin screen, versioned. A new kind of rule still needs code. |
 | FR-305 | Shadow mode on live traffic | Partly | Built as a contract (D74): every live decision issues a SHADOW directive with a TTL and fail-open action; delivery and the bank's acknowledgement are recorded and measured. No bank traffic yet. |
 | FR-306 | Champion–challenger routing | Not built | — |

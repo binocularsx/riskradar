@@ -90,6 +90,8 @@ RULE_CONFIGS = {
     "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5, "new_destination_days": 1, "no_destination_min_count": 10}},  # D67
     "ACCOUNT_TAKEOVER_SEQUENCE": {"enabled": True, "params": {"within_hours": 24, "min_failed_logins": 3, "min_precursors": 2}},  # D77
     "MULE_INBOUND_FANIN": {"enabled": True, "params": {"min_remitters": 3, "min_count_ratio": 5.0}},  # D78 (credits only)
+    "SECOND_LEG_ONWARD_PAYMENT": {"enabled": True, "params": {"min_remitters": 3, "min_count_ratio": 5.0,
+                                  "max_minutes_since_credit": 180, "min_pass_through": 0.5}},  # D79
     "CARD_TESTING_PROBES": {
         "enabled": True,
         "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3},
@@ -200,6 +202,9 @@ def main() -> None:
     budget = args.budget
 
     corpus = load_or_build(REPO_ROOT / args.corpus, rebuild=False)
+    # D79: rules read every feature (the second leg reads the receiving side);
+    # the model is given only its own inputs (D78b). Two matrices, one row order.
+    X_rules, rule_names = corpus.X, list(FEATURE_NAMES)
     names = list(FEATURE_NAMES)
     configs = dict(RULE_CONFIGS)
     if args.without_events:
@@ -207,6 +212,8 @@ def main() -> None:
         corpus.X = corpus.X[:, keep]
         names = [names[j] for j in keep]
         configs = {k: v for k, v in configs.items() if k not in EVENT_RULES}
+        X_rules = corpus.X
+        rule_names = list(names)
         print(f"  without events: {len(names)} features, rules {sorted(configs)}")
     if not args.with_credit_features:
         # D78: as shipped, the model is not given the receiving-side features.
@@ -220,7 +227,7 @@ def main() -> None:
     # cached matrix is not possible, so it is approximated from the decline
     # signature the typology produces. Stated plainly because it is the one place
     # this offline evaluation is not the live path.
-    card_like = corpus.X[:, names.index("decline_rate_24h_account")] > 0.0
+    card_like = X_rules[:, rule_names.index("decline_rate_24h_account")] > 0.0
     instruments = np.where(card_like, "CARD", "ACCOUNT_TRANSFER")
     baseline_col = names.index(BASELINE_FEATURE)
 
@@ -249,7 +256,7 @@ def main() -> None:
         p_one = Xte[:, baseline_col].astype(float)
 
         print("   evaluating rules (once, reused by every arm) …")
-        signals = compute_signals(Xte, instruments[test_idx], names, configs)
+        signals = compute_signals(X_rules[test_idx], instruments[test_idx], rule_names, configs)
 
         arms: list[dict] = []
 

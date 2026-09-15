@@ -193,6 +193,31 @@ export default function Operations() {
         </div>
       )}
 
+      {/* D80: how the day's alerts were spent, tier by tier. */}
+      {data.disposition_policy && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="between">
+            <h2 style={{ margin: 0 }}>Who acted on today's alerts</h2>
+            <span className="dim" style={{ fontSize: 12 }}>
+              policy v{data.disposition_policy.version} · review capacity {data.disposition_policy.review_capacity_per_day}/day
+            </span>
+          </div>
+          <div className="grid cols-3" style={{ marginTop: 10 }}>
+            {[
+              ['HUMAN_REVIEW', 'Analyst review', 'Investigated by a person'],
+              ['MACHINE_ACTION', 'Machine action', `Hold or 24-hour flag, then a customer call · ${(data.disposition_policy.machine_action_signals || []).map((c) => c.replace(/_/g, ' ').toLowerCase()).join(', ')}`],
+              ['AUTO_CLOSE', 'Auto-closed', data.disposition_policy.auto_close_enabled ? 'Recorded, no case' : 'Off: it would cost fraud value (D80)'],
+            ].map(([key, label, note]) => (
+              <div key={key}>
+                <div className="stat-label">{label}</div>
+                <div className="stat-value">{(data.tiers_24h || []).find((t) => t.disposition === key)?.n ?? 0}</div>
+                <div className="stat-note">{note}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid cols-2">
         <div className="card">
           <h2>Backlog by severity</h2>

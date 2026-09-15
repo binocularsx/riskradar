@@ -25,8 +25,8 @@ STATUS = [
      "D75 · migration 0011 · Finacle and NIBSS adapters wait for connection"),
     ("WP-02", "Signals before the money moves", "built", "14 Sep 2026", "D77 · unseen takeover 0.726 to 0.986 at 75/day"),
     ("WP-03", "Watch the money coming in", "built", "15 Sep 2026", "D78 · credits scored by rules · 73% of mule rings at 7.3/day"),
-    ("WP-04", "The second leg", "todo", "", "ready: WP-03 built"),
-    ("WP-08", "Spend the budget by tier", "todo", "", "ready: WP-06 built"),
+    ("WP-04", "The second leg", "built", "15 Sep 2026", "D79 · mule value flagged 63.5% to 84.9% at 75/day"),
+    ("WP-08", "Spend the budget by tier", "built", "15 Sep 2026", "D80 · analyst reviews 75 to 51/day, detection unchanged"),
 ]
 CHIP = {"built": ('ok', 'Built'), "doing": ('chg', 'In progress'), "todo": ('', 'Not started')}
 

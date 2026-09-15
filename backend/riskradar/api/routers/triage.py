@@ -54,6 +54,7 @@ WORKLIST_SQL = """
            c.alert_count,
            c.assignee_id,
            c.escalated_to,
+           c.handling,
            c.first_reported_at, c.acknowledged_at, c.counterparty_notified_at,
            c.investigation_concluded_at, c.reimbursed_at, c.clock_policy_version,
            (SELECT min(t.occurred_at) FROM alerts a JOIN transactions t ON t.id = a.transaction_id
@@ -171,7 +172,7 @@ def _clock_context(conn: Any) -> dict[str, Any]:
 
 @router.get("/worklist")
 def worklist(
-    scope: str = Query("all", pattern="^(all|mine|unassigned|breaching)$"),
+    scope: str = Query("all", pattern="^(all|mine|unassigned|breaching|machine)$"),
     risk_level: str | None = None,
     limit: int = Query(60, ge=1, le=200),
     user: dict = Depends(requires(Permission.CASES_READ)),
@@ -190,7 +191,10 @@ def worklist(
         where.append("c.assignee_id = %(uid)s")
         params["uid"] = user["id"]
     elif scope == "unassigned":
-        where.append("c.assignee_id IS NULL")
+        # D80: machine-handled cases wait for a contact, not an investigation.
+        where.append("c.assignee_id IS NULL AND c.handling = 'HUMAN'")
+    elif scope == "machine":
+        where.append("c.handling = 'MACHINE'")
     if risk_level:
         where.append("c.risk_level = %(risk_level)s")
         params["risk_level"] = risk_level
@@ -226,6 +230,7 @@ def worklist(
                 1 for r in rows if (r["regulatory_clock"] or {}).get("state") == "BREACHED"),
             "unassigned": sum(1 for r in rows if not r["assignee_id"]),
             "mine": sum(1 for r in rows if r["assignee_id"] == user["id"]),
+            "machine": sum(1 for r in rows if r["handling"] == "MACHINE"),
         },
     }
 
@@ -260,7 +265,7 @@ def next_case(
         for r in _rows(
             conn,
             WORKLIST_SQL.format(
-                where="c.state = ANY(%(open_states)s) AND c.assignee_id IS NULL"
+                where="c.state = ANY(%(open_states)s) AND c.assignee_id IS NULL AND c.handling = 'HUMAN'"
             ),
             {"open_states": list(OPEN_STATES)},
         )
@@ -497,7 +502,23 @@ def operations(
     if resolution["median_minutes"] is not None:
         resolution["median_minutes"] = round(float(resolution["median_minutes"]))
 
+    # D80: how the day's actionable decisions were spent, tier by tier.
+    tiers_24h = _rows(
+        conn,
+        """
+        SELECT coalesce(disposition, 'UNTIERED') AS disposition, count(*) AS n
+          FROM decisions
+         WHERE decided_at > now() - interval '24 hours' AND coalesce(disposition, '') <> 'NONE'
+           AND risk_level IN ('MEDIUM', 'HIGH', 'CRITICAL')
+         GROUP BY 1 ORDER BY 1
+        """,
+    )
+    policy = _rows(conn, "SELECT version, machine_action_signals, auto_close_enabled, review_capacity_per_day "
+                         "FROM disposition_policies WHERE is_active")
+
     return {
+        "tiers_24h": tiers_24h,
+        "disposition_policy": policy[0] if policy else None,
         "backlog": backlog,
         "ageing": ageing,
         "analysts": analysts,

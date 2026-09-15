@@ -24,6 +24,7 @@ const SCOPES = [
   { key: 'mine', label: 'Mine' },
   { key: 'unassigned', label: 'Unassigned' },
   { key: 'breaching', label: 'Past due' },
+  { key: 'machine', label: 'Machine actions' },
 ]
 
 export default function Triage({ user }) {
@@ -151,6 +152,8 @@ export default function Triage({ user }) {
                 <>Nobody is working these yet. Taking one assigns it to you.</>
               ) : scope === 'breaching' ? (
                 <>Past their target response time. Oldest and largest first.</>
+              ) : scope === 'machine' ? (
+                <>The system already acted: a hold, and for a takeover a 24-hour flag. What is left is the call to the customer.</>
               ) : (
                 <>Every open case on the desk, whoever owns it.</>
               )}
@@ -176,6 +179,7 @@ export default function Triage({ user }) {
                     <span className="tag">{c.distinct_beneficiaries} payees</span>
                   )}
                   {c.new_device && <span className="tag">new device</span>}
+                  {c.handling === 'MACHINE' && <span className="pill suppress" title="The system took the action; confirm with the customer">machine action</span>}
                   {c.watchlisted && <span className="pill escalate" title="24-hour watch-list flag in force">flagged</span>}
                   {c.industry_flagged && <span className="pill override" title="Another institution flagged this BVN">flagged elsewhere</span>}
                   {c.regulatory_clock && (

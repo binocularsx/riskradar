@@ -284,3 +284,26 @@ def test_a_credit_is_decided_without_the_model():
     result = apply(0.99, [signal], th, model_applies=False)
     assert result.trace[0]["source"] == "receiving_side"
     assert result.risk_level == "MEDIUM", "LOW, raised one band by the fan-in, never by a probability"
+
+
+# ---------------------------------------------------------------- D79
+
+
+LEG = {"SECOND_LEG_ONWARD_PAYMENT": {"enabled": True, "params": {
+    "min_remitters": 3, "min_count_ratio": 5.0, "max_minutes_since_credit": 180, "min_pass_through": 0.5}}}
+
+
+def test_second_leg_fires_on_the_payment_that_moves_a_fanin_on():
+    moving = features(distinct_remitters_24h_account=5.0, inbound_count_ratio_24h_vs_daily_mean_30d=20.0,
+                      minutes_since_last_credit=40.0, pass_through_ratio_24h=0.9)
+    fired = evaluate(RuleContext(tx=tx(), features=moving), LEG)
+    assert [s.code for s in fired] == ["SECOND_LEG_ONWARD_PAYMENT"]
+    for change in ({"minutes_since_last_credit": 400.0}, {"pass_through_ratio_24h": 0.2},
+                   {"distinct_remitters_24h_account": 2.0}, {"inbound_count_ratio_24h_vs_daily_mean_30d": 1.2}):
+        assert not evaluate(RuleContext(tx=tx(), features={**moving, **change}), LEG), change
+
+
+def test_second_leg_never_fires_on_the_credit_itself():
+    moving = features(distinct_remitters_24h_account=5.0, inbound_count_ratio_24h_vs_daily_mean_30d=20.0,
+                      minutes_since_last_credit=40.0, pass_through_ratio_24h=0.9)
+    assert not evaluate(RuleContext(tx=credit_tx(), features=moving), LEG)
