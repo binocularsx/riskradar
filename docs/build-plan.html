@@ -59,6 +59,8 @@
   .lede{font-size:1.16rem; color:var(--ink-2); max-width:62ch; margin:0 0 8px;}
   section{padding-block:38px; border-top:1px solid var(--line);}
   section:first-of-type{border-top:none; padding-top:0;}
+  section.standing{border-top:1px solid var(--line);}
+  section.standing .tablewrap td:last-child{min-width:260px;}
 
   /* header meta */
   .meta{
@@ -199,6 +201,54 @@
       <span>Regulation verified: CBN, Nacha</span>
       <span>9 work packages · 6 built</span>
       <span>Supersedes base-prd-alignment.md §5.2, §7.1</span>
+    </div>
+  </section>
+
+  <section class="standing" id="where-it-stands">
+    <p class="kicker">Where the build stands · 15 September 2026</p>
+    <h2>Six of the nine packages built, plus one the team added</h2>
+    <p class="narrow">Built so far, in order: WP-09, WP-05, WP-01, WP-06, WP-07 and WP-02, and WP-06b, BVN identity with the industry watch-list, added because REG-NG-04 is a BVN list shared across banks. Every open decision is closed: the desk runs at <strong>75 alerts a day</strong> (D76). The figures below are current; they come from a new 120-day corpus with non-payment events, measured with and without them.</p>
+
+    <div class="verdicts">
+      <div class="vcard">
+        <div class="v">0.986</div>
+        <div class="k">Account takeover caught when it was hidden from training, at 75/day. Without the WP-02 signals: 0.726</div>
+        <span class="band good">Intervals do not overlap</span>
+      </div>
+      <div class="vcard">
+        <div class="v">5.0 : 1</div>
+        <div class="k">False alerts per confirmed fraud incident at 75/day. Without events: 6.1 : 1</div>
+        <span class="band good">Better than best-in-class 12–14</span>
+      </div>
+      <div class="vcard">
+        <div class="v">86.7%</div>
+        <div class="k">Share of fraud value detected at 75/day, time-ordered test. Without events: 80.5%</div>
+        <span class="band good">Above the 60–70% band</span>
+      </div>
+      <div class="vcard">
+        <div class="v">0.962</div>
+        <div class="k">Mean recall across the three fraud types, each hidden from training in turn</div>
+        <span class="band mid">Partly shaped by the simulator (D77d)</span>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Next</th><th>What it does</th><th>Can start</th><th>Why it waits or goes</th></tr>
+        </thead>
+        <tbody>
+          <tr class="now"><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip ok">Now</span></td><td>WP-01 built. Needs a receiving-side fraud pattern in the simulator, a new corpus and a held-out run.</td></tr>
+          <tr><td class="v">WP-08</td><td>Spend the budget by tier</td><td><span class="chip ok">Now</span></td><td>WP-06 built. With events, 60/day costs no held-out recall (0.962), which changes what each tier can afford.</td></tr>
+          <tr><td class="v">WP-04</td><td>The second leg</td><td><span class="chip chg">After WP-03</span></td><td>Links an inbound credit to the account's next outbound payment; needs WP-03's receiving-side profiles.</td></tr>
+          <tr><td class="v">Reset</td><td>Rebuild the demo on 30 days of history</td><td><span class="chip chg">Last</span></td><td>Nothing depends on it. It derives the 75/day thresholds and loads the takeover sequence rule and BVN identities (D76c, D76d).</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="tag">Reading the rest of this page</span>
+      <p>The three sections that follow and the spine diagram are the plan as written on 14 September, when the desk ran at 120 alerts a day on the earlier corpus; "today" in them means that day. The diagram's blue boxes mark work the plan introduced, and six of those packages are now built. The progress table under the work packages is kept current.</p>
     </div>
   </section>
 
