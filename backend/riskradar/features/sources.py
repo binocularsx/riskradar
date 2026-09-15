@@ -31,6 +31,7 @@ from typing import Any
 
 from .spec import (
     ACCOUNT_HISTORY_DAYS,
+    CREDIT_HISTORY_DAYS,
     BENEFICIARY_LOOKBACK_DAYS,
     EVENT_LOOKBACK_HOURS,
     FEATURE_EVENT_TYPES,
@@ -49,6 +50,7 @@ _ACCOUNT_SQL = f"""
     SELECT {_PRIOR_COLUMNS}
       FROM transactions
      WHERE account_token = %(account)s
+       AND direction = 'OUTBOUND'
        AND occurred_at <  %(now)s
        AND occurred_at >= %(from)s
 """
@@ -57,6 +59,18 @@ _SUBJECT_SQL = f"""
     SELECT {_PRIOR_COLUMNS}
       FROM transactions
      WHERE subject_token = %(subject)s
+       AND direction = 'OUTBOUND'
+       AND occurred_at <  %(now)s
+       AND occurred_at >= %(from)s
+"""
+
+# D78. Credits into the account; the remitter stands where the beneficiary
+# stands on a payment, the other party.
+_CREDITS_SQL = """
+    SELECT occurred_at, amount_minor, auth_result, remitter_token AS beneficiary_token, device_token
+      FROM transactions
+     WHERE account_token = %(account)s
+       AND direction = 'INBOUND'
        AND occurred_at <  %(now)s
        AND occurred_at >= %(from)s
 """
@@ -77,6 +91,7 @@ _BENEFICIARY_SQL = """
     SELECT min(occurred_at) AS first_seen
       FROM transactions
      WHERE beneficiary_token = %(beneficiary)s
+       AND direction = 'OUTBOUND'
        AND occurred_at < %(now)s
 """
 
@@ -139,8 +154,19 @@ def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
         )
         events = [event_from_row(r) for r in cur.fetchall()]
 
+        cur.execute(
+            _CREDITS_SQL,
+            {
+                "account": tx.account_token,
+                "now": tx.occurred_at,
+                "from": tx.occurred_at - timedelta(days=CREDIT_HISTORY_DAYS),
+            },
+        )
+        credits = [_row_to_prior(r) for r in cur.fetchall()]
+
     return HistoryBundle(
-        account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events
+        account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events,
+        credits=credits,
     )
 
 
@@ -175,14 +201,19 @@ def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBun
     """
     occurred = frame["occurred_at"]
     before = occurred < tx.occurred_at
+    # D78: a frame without a direction column predates credits; all outbound.
+    inbound = (frame["direction"] == "INBOUND") if "direction" in frame else (occurred != occurred)
+    outbound = ~inbound
 
     account_mask = (
         before
+        & outbound
         & (frame["account_token"] == tx.account_token)
         & (occurred >= tx.occurred_at - timedelta(days=ACCOUNT_HISTORY_DAYS))
     )
     subject_mask = (
         before
+        & outbound
         & (frame["subject_token"] == tx.subject_token)
         & (occurred >= tx.occurred_at - timedelta(days=SUBJECT_HISTORY_DAYS))
     )
@@ -202,7 +233,7 @@ def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBun
 
     first_seen = None
     if tx.beneficiary_token:
-        ben_mask = before & (frame["beneficiary_token"] == tx.beneficiary_token)
+        ben_mask = before & outbound & (frame["beneficiary_token"] == tx.beneficiary_token)
         if bool(ben_mask.any()):
             first_seen = frame.loc[ben_mask, "occurred_at"].min()
 
@@ -217,12 +248,29 @@ def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBun
         )
         prior_events = [event_from_row(r) for r in events.loc[ev_mask].to_dict("records")]
 
+    credit_mask = (
+        before
+        & inbound
+        & (frame["account_token"] == tx.account_token)
+        & (occurred >= tx.occurred_at - timedelta(days=CREDIT_HISTORY_DAYS))
+    )
+    credits = []
+    if bool(credit_mask.any()):
+        sub = frame.loc[credit_mask]
+        credits = [
+            PriorTx(occurred_at=r["occurred_at"], amount_minor=int(r["amount_minor"]), auth_result=r["auth_result"],
+                    beneficiary_token=r["remitter_token"] if _present(r.get("remitter_token")) else None,
+                    device_token=r["device_token"] if _present(r.get("device_token")) else None)
+            for r in sub.to_dict("records")
+        ]
+
     _ = BENEFICIARY_LOOKBACK_DAYS  # documented window; first-seen is unbounded by design
     return HistoryBundle(
         account=to_priors(account_mask),
         subject=to_priors(subject_mask),
         beneficiary_first_seen_at=first_seen,
         events=prior_events,
+        credits=credits,
     )
 
 

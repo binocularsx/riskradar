@@ -58,9 +58,26 @@ def _fixture_rows(subject: str, account: str, now: datetime) -> list[dict]:
             "beneficiary_token": ben,
             "device_token": dev,
             "auth_result": result,
+            "direction": "OUTBOUND",
+            "remitter_token": None,
         }
 
+    def credit(minutes_ago: float, amount: int, result: str, remitter: str):
+        """D78: money into the same account. Must never count as outgoing history."""
+        r = row(minutes_ago, amount, result, None, None)
+        r.update(direction="INBOUND", remitter_token=remitter)
+        return r
+
+    rem_x = f"acc_{uuid.uuid4().hex[:20]}"
+    rem_y = f"acc_{uuid.uuid4().hex[:20]}"
+
     return [
+        credit(30, 2_000_000, "APPROVED", rem_x),
+        credit(90, 1_500_000, "APPROVED", rem_y),
+        credit(200, 700_000, "DECLINED", rem_x),                # declined: counts, moves no money
+        credit(60 * 23.9, 500_000, "APPROVED", rem_y),          # inside the day
+        credit(60 * 24 * 10, 300_000, "APPROVED", rem_x),       # inside 30d, outside the day
+        credit(60 * 24 * 40, 9_000_000, "APPROVED", rem_x),     # OUTSIDE 30d
         row(5, 120_000, "APPROVED", ben_a, dev_known),
         row(12, 90_000, "DECLINED", ben_b, dev_known),
         row(25, 4_500_000, "APPROVED", ben_a, dev_known),
@@ -133,7 +150,7 @@ def scenario(conn):
     now = datetime.now(timezone.utc)
     rows = _fixture_rows(subject, account, now)
     device = f"dev_{uuid.uuid4().hex[:20]}"  # a device never used for a payment before
-    events = _fixture_events(subject, device, rows[0]["beneficiary_token"], now)
+    events = _fixture_events(subject, device, next(r for r in rows if r["direction"] == "OUTBOUND")["beneficiary_token"], now)
 
     with conn.cursor() as cur:
         for r in rows:
@@ -142,11 +159,11 @@ def scenario(conn):
                 INSERT INTO transactions
                     (transaction_ref, occurred_at, amount_minor, currency, channel,
                      instrument, rail, subject_token, account_token, beneficiary_token,
-                     device_token, auth_result)
+                     device_token, auth_result, direction, remitter_token)
                 VALUES (%(transaction_ref)s, %(occurred_at)s, %(amount_minor)s, %(currency)s,
                         %(channel)s, %(instrument)s, %(rail)s, %(subject_token)s,
                         %(account_token)s, %(beneficiary_token)s, %(device_token)s,
-                        %(auth_result)s)
+                        %(auth_result)s, %(direction)s, %(remitter_token)s)
                 """,
                 r,
             )
@@ -170,7 +187,7 @@ def scenario(conn):
         rail="NIP",
         subject_token=subject,
         account_token=account,
-        beneficiary_token=rows[0]["beneficiary_token"],
+        beneficiary_token=next(r for r in rows if r["direction"] == "OUTBOUND")["beneficiary_token"],
         device_token=device,
         auth_result="APPROVED",
         account_opened_at=now - timedelta(days=365),
@@ -225,6 +242,16 @@ def test_features_are_actually_exercised(scenario):
     assert f["credential_changed_hours"] == pytest.approx(30, abs=0.01)
     assert f["sim_changed_hours"] == 72.0, "a SIM change 100 hours ago is not recent"
     assert f["payee_added_minutes"] == pytest.approx(20, abs=0.01), "this payee, not the later one"
+    # D78: credits count on the receiving side and nowhere else.
+    assert f["txn_count_1h_account"] == 6, "credits must not count as outgoing velocity"
+    assert f["credits_24h_account"] == 4, "four credits inside the day; the 10- and 40-day ones outside"
+    assert f["distinct_remitters_24h_account"] == 2
+    assert f["minutes_since_last_credit"] == pytest.approx(30, abs=0.01)
+    assert f["inbound_count_ratio_24h_vs_daily_mean_30d"] == pytest.approx(4 / (5 / 30), rel=1e-6)
+    # Out: approved outgoing in the day (NGN 1,200 + 45,000 + 300, the 26-hour payment excluded, plus this
+    # payment's 30,000) over approved in (20,000 + 15,000 + 5,000; the declined credit moved nothing).
+    assert f["pass_through_ratio_24h"] == pytest.approx((120_000 + 4_500_000 + 30_000 + 3_000_000)
+                                                         / (2_000_000 + 1_500_000 + 500_000), rel=1e-6)
 
 
 def test_out_of_window_history_is_excluded(scenario):
@@ -276,3 +303,20 @@ def test_all_three_data_access_paths_agree(scenario):
             f"{name} diverges: sql={by_sql[name]} frame={by_frame[name]} "
             f"indexed={by_index[name]}"
         )
+
+
+def test_the_paths_agree_on_a_credit(scenario):
+    """D78: the scored transaction can itself be a credit; the paths must still agree."""
+    import dataclasses
+
+    tx, rows, conn, events = scenario
+    credit = dataclasses.replace(tx, direction="INBOUND", beneficiary_token=None, device_token=None,
+                                 remitter_token=f"acc_{uuid.uuid4().hex[:20]}")
+    frame = pd.DataFrame(rows)
+    by_sql = compute_features(credit, load_history_sql(conn, credit))
+    by_frame = compute_features(credit, load_history_frame(frame, credit, events))
+    by_index = compute_features(credit, PandasHistorySource(frame, events).load(credit))
+    for name in FEATURE_NAMES:
+        assert by_sql[name] == by_frame[name] == by_index[name], name
+    assert by_sql["distinct_remitters_24h_account"] == 3, "this credit's new sender counts"
+    assert by_sql["pass_through_ratio_24h"] > 0

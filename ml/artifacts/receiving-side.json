@@ -1,0 +1,169 @@
+{
+  "warm_up_days": 30,
+  "credits": 334646,
+  "days": 89.8,
+  "mule_rings_with_receipts": 141,
+  "fraudulent_credits": 787,
+  "chosen": {
+    "min_remitters": 3,
+    "min_count_ratio": 5.0,
+    "alerts_per_day": 7.27,
+    "false_alerts_per_day": 2.12,
+    "precision": 0.709,
+    "rings_caught": 103,
+    "ring_recall": 0.73,
+    "chosen": true
+  },
+  "variants": [
+    {
+      "min_remitters": 2,
+      "min_count_ratio": 3.0,
+      "alerts_per_day": 68.88,
+      "false_alerts_per_day": 62.56,
+      "precision": 0.092,
+      "rings_caught": 110,
+      "ring_recall": 0.78,
+      "chosen": false
+    },
+    {
+      "min_remitters": 2,
+      "min_count_ratio": 5.0,
+      "alerts_per_day": 68.63,
+      "false_alerts_per_day": 62.32,
+      "precision": 0.092,
+      "rings_caught": 109,
+      "ring_recall": 0.773,
+      "chosen": false
+    },
+    {
+      "min_remitters": 2,
+      "min_count_ratio": 10.0,
+      "alerts_per_day": 62.77,
+      "false_alerts_per_day": 56.62,
+      "precision": 0.098,
+      "rings_caught": 106,
+      "ring_recall": 0.752,
+      "chosen": false
+    },
+    {
+      "min_remitters": 3,
+      "min_count_ratio": 3.0,
+      "alerts_per_day": 7.34,
+      "false_alerts_per_day": 2.17,
+      "precision": 0.704,
+      "rings_caught": 104,
+      "ring_recall": 0.738,
+      "chosen": false
+    },
+    {
+      "min_remitters": 3,
+      "min_count_ratio": 5.0,
+      "alerts_per_day": 7.27,
+      "false_alerts_per_day": 2.12,
+      "precision": 0.709,
+      "rings_caught": 103,
+      "ring_recall": 0.73,
+      "chosen": true
+    },
+    {
+      "min_remitters": 3,
+      "min_count_ratio": 10.0,
+      "alerts_per_day": 7.14,
+      "false_alerts_per_day": 2.04,
+      "precision": 0.715,
+      "rings_caught": 101,
+      "ring_recall": 0.716,
+      "chosen": false
+    },
+    {
+      "min_remitters": 4,
+      "min_count_ratio": 3.0,
+      "alerts_per_day": 4.28,
+      "false_alerts_per_day": 0.25,
+      "precision": 0.943,
+      "rings_caught": 92,
+      "ring_recall": 0.652,
+      "chosen": false
+    },
+    {
+      "min_remitters": 4,
+      "min_count_ratio": 5.0,
+      "alerts_per_day": 4.21,
+      "false_alerts_per_day": 0.19,
+      "precision": 0.955,
+      "rings_caught": 91,
+      "ring_recall": 0.645,
+      "chosen": false
+    },
+    {
+      "min_remitters": 4,
+      "min_count_ratio": 10.0,
+      "alerts_per_day": 4.18,
+      "false_alerts_per_day": 0.18,
+      "precision": 0.957,
+      "rings_caught": 90,
+      "ring_recall": 0.638,
+      "chosen": false
+    },
+    {
+      "min_remitters": 5,
+      "min_count_ratio": 3.0,
+      "alerts_per_day": 3.22,
+      "false_alerts_per_day": 0.2,
+      "precision": 0.938,
+      "rings_caught": 78,
+      "ring_recall": 0.553,
+      "chosen": false
+    },
+    {
+      "min_remitters": 5,
+      "min_count_ratio": 5.0,
+      "alerts_per_day": 3.15,
+      "false_alerts_per_day": 0.14,
+      "precision": 0.954,
+      "rings_caught": 77,
+      "ring_recall": 0.546,
+      "chosen": false
+    },
+    {
+      "min_remitters": 5,
+      "min_count_ratio": 10.0,
+      "alerts_per_day": 3.13,
+      "false_alerts_per_day": 0.13,
+      "precision": 0.957,
+      "rings_caught": 76,
+      "ring_recall": 0.539,
+      "chosen": false
+    },
+    {
+      "min_remitters": 6,
+      "min_count_ratio": 3.0,
+      "alerts_per_day": 2.35,
+      "false_alerts_per_day": 0.19,
+      "precision": 0.919,
+      "rings_caught": 62,
+      "ring_recall": 0.44,
+      "chosen": false
+    },
+    {
+      "min_remitters": 6,
+      "min_count_ratio": 5.0,
+      "alerts_per_day": 2.28,
+      "false_alerts_per_day": 0.13,
+      "precision": 0.941,
+      "rings_caught": 61,
+      "ring_recall": 0.433,
+      "chosen": false
+    },
+    {
+      "min_remitters": 6,
+      "min_count_ratio": 10.0,
+      "alerts_per_day": 2.28,
+      "false_alerts_per_day": 0.13,
+      "precision": 0.941,
+      "rings_caught": 61,
+      "ring_recall": 0.433,
+      "chosen": false
+    }
+  ]
+}

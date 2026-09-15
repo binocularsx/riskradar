@@ -41,6 +41,10 @@ class TxView:
     last_activity_at: datetime | None = None
     product_type: str | None = None
     origin_sol_id: str | None = None
+    # D78: OUTBOUND money leaves this account; INBOUND arrives in it from
+    # ``remitter_token``, and ``beneficiary_token`` is empty.
+    direction: str = "OUTBOUND"
+    remitter_token: str | None = None
 
 
 @dataclass(frozen=True)
@@ -90,3 +94,6 @@ class HistoryBundle:
     beneficiary_first_seen_at: datetime | None = None
     # D77: the customer's non-payment events in the lookback window.
     events: list[PriorEvent] = field(default_factory=list)
+    # D78: credits into this account in the lookback window. A credit is a
+    # PriorTx whose ``beneficiary_token`` holds the remitter, the other party.
+    credits: list[PriorTx] = field(default_factory=list)

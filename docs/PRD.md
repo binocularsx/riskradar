@@ -152,6 +152,8 @@ Required fields on every event:
 | `decline_reason` | string | Nullable. Coarse category: `INSUFFICIENT_FUNDS`, `LIMIT_EXCEEDED`, `INVALID_PIN`, `DO_NOT_HONOUR`, `TIMEOUT` |
 | `display_name` | string | Obviously-synthetic label, analyst UI only |
 | `bvn`, `nin` | string | **[v1.2, D75]** Optional, eleven digits. Tokenised at the boundary into `bvn_token`; when absent, resolved from the core by customer number. Never stored raw |
+| `direction` | enum | **[v1.3, D78]** `OUTBOUND` (default): money leaves the customer's account. `INBOUND`: a credit arrives in it; `customer_id` and `account_id` are the receiving side |
+| `remitter_account_id`, `remitter_bank_code` | string | **[v1.3, D78]** Required on an `INBOUND` credit, refused on an outgoing payment. The sender is tokenised into `remitter_token` in the account namespace (D9d); an inbound credit has no beneficiary |
 
 Core-derived account context, **stamped onto the event at the ingestion boundary** and immutable thereafter (§9.1, §6.3, D20b, D22):
 

@@ -127,11 +127,25 @@ def apply(
     thresholds: Thresholds,
     *,
     rule_only_mode: bool = False,
+    model_applies: bool = True,
 ) -> PolicyResult:
     """Combine a probability and a set of facts into one decision."""
     trace: list[dict[str, Any]] = []
 
-    if rule_only_mode:
+    if not model_applies:
+        # D78: a credit. The model learned outgoing fraud only; applying it to
+        # money arriving would be a number that means nothing. Not an outage,
+        # so no alarm: the receiving-side rules carry the decision by design.
+        level = "LOW"
+        trace.append(
+            {
+                "step": "base",
+                "source": "receiving_side",
+                "level": level,
+                "note": "a credit is judged by receiving-side rules; no model is trained on incoming fraud",
+            }
+        )
+    elif rule_only_mode:
         # FR-017 / D15d: the model is unavailable. We do not invent a probability;
         # we say so, start from LOW, and let the deterministic layer carry the
         # weight. The alarm is raised by the worker, not silently here.

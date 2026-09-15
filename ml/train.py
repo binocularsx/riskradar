@@ -51,7 +51,10 @@ from dataset import Corpus, holdout_typology_split, load_corpus  # noqa: E402
 from metrics import summarise  # noqa: E402
 from riskradar.config import settings  # noqa: E402
 from riskradar.model.calibrated import TimeSplitCalibratedBooster  # noqa: E402
-from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION  # noqa: E402
+from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION, MODEL_FEATURE_NAMES  # noqa: E402
+
+# D78: the columns of the feature matrix the model is trained on.
+MODEL_COLUMNS = [FEATURE_NAMES.index(n) for n in MODEL_FEATURE_NAMES]
 
 TYPOLOGIES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
 ALERT_BUDGET_PER_DAY = 75  # D76 (was 120, D24)
@@ -146,7 +149,7 @@ def train_final(corpus: Corpus, args, days: float) -> None:
           f"{sorted(set(t for t in corpus.typology if t))}")
     started = time.perf_counter()
     model = build_model()
-    model.fit(corpus.X, corpus.y, times=corpus.occurred_at)
+    model.fit(corpus.X[:, MODEL_COLUMNS], corpus.y, times=corpus.occurred_at)
     print(f"  fit in {time.perf_counter() - started:.1f}s on {len(corpus.y):,} rows")
 
     def evidence(name: str) -> dict:
@@ -183,8 +186,8 @@ def train_final(corpus: Corpus, args, days: float) -> None:
             "incidents": len({i for i in corpus.incident_id if i}),
             "span_days": round(days, 2),
         },
-        "feature_names": list(FEATURE_NAMES),
-        "feature_baseline": [float(v) for v in np.median(corpus.X, axis=0)],
+        "feature_names": list(MODEL_FEATURE_NAMES),
+        "feature_baseline": [float(v) for v in np.median(corpus.X[:, MODEL_COLUMNS], axis=0)],
         "alert_budget_per_day": ALERT_BUDGET_PER_DAY,
     }
     model_id = register(
@@ -249,11 +252,11 @@ def main() -> None:
     print("training ...")
     started = time.perf_counter()
     model = build_model()
-    model.fit(corpus.X[train_idx], corpus.y[train_idx], times=corpus.occurred_at[train_idx])
+    model.fit(corpus.X[train_idx][:, MODEL_COLUMNS], corpus.y[train_idx], times=corpus.occurred_at[train_idx])
     print(f"  fit in {time.perf_counter() - started:.1f}s")
 
-    p_test = model.predict_proba(corpus.X[test_idx])[:, 1]
-    p_train = model.predict_proba(corpus.X[train_idx])[:, 1]
+    p_test = model.predict_proba(corpus.X[test_idx][:, MODEL_COLUMNS])[:, 1]
+    p_train = model.predict_proba(corpus.X[train_idx][:, MODEL_COLUMNS])[:, 1]
 
     test_days = max(days * 0.25, 1.0)
     held_out = summarise(
@@ -290,10 +293,10 @@ def main() -> None:
             "fraud": int(corpus.y.sum()),
             "span_days": round(days, 2),
         },
-        "feature_names": list(FEATURE_NAMES),
+        "feature_names": list(MODEL_FEATURE_NAMES),
         # The ablation reference for local attributions (G3). Medians of the
         # training set: "what this feature usually is".
-        "feature_baseline": [float(v) for v in np.median(corpus.X[train_idx], axis=0)],
+        "feature_baseline": [float(v) for v in np.median(corpus.X[train_idx][:, MODEL_COLUMNS], axis=0)],
         "alert_budget_per_day": ALERT_BUDGET_PER_DAY,
     }
 

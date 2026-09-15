@@ -2,7 +2,7 @@
 
 Plain English
 -------------
-This file answers one question, seventeen times: *is this transaction unusual for
+This file answers one question, twenty-two times: *is this transaction unusual for
 this customer?*
 
 Each function takes the transaction being examined plus a list of that
@@ -38,7 +38,7 @@ from __future__ import annotations
 import math
 from datetime import timedelta
 
-from .spec import EVENT_LOOKBACK_HOURS, FEATURE_NAMES, NOT_APPLICABLE, RATIO_CAP
+from .spec import CREDIT_RECENCY_CAP_MINUTES, EVENT_LOOKBACK_HOURS, FEATURE_NAMES, NOT_APPLICABLE, RATIO_CAP
 from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
 
@@ -275,6 +275,74 @@ def payee_added_minutes(tx: TxView, h: HistoryBundle) -> float:
 
 
 # ---------------------------------------------------------------------------
+# D78: the receiving side
+# ---------------------------------------------------------------------------
+#
+# A mule account is first an account that receives: several people it has never
+# dealt with send it money, and the money leaves again within the hour. These
+# read the account's recent credits. They are computed for every transaction,
+# a credit or a payment, so the second leg (WP-04) can see what came in before
+# it went out.
+
+
+def _is_inbound(tx: TxView) -> bool:
+    return tx.direction == "INBOUND"
+
+
+def credits_24h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Credits into this account in the day before."""
+    return float(len(_within(h.credits, tx, 24)))
+
+
+def distinct_remitters_24h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Different senders in a day, counting this credit's sender. Fan-in."""
+    senders = {c.beneficiary_token for c in _within(h.credits, tx, 24) if c.beneficiary_token}
+    if _is_inbound(tx) and tx.remitter_token:
+        senders.add(tx.remitter_token)
+    return float(len(senders))
+
+
+def inbound_count_ratio_24h_vs_daily_mean_30d(tx: TxView, h: HistoryBundle) -> float:
+    """Is today's inflow unlike this account's normal day?
+
+    A trader takes forty payments a day, every day; a mule takes forty on the
+    day it is used. The month's mean is floored at one credit a month, so a
+    first-ever credit reads as unusual rather than dividing by zero.
+    """
+    day = len(_within(h.credits, tx, 24)) + (1 if _is_inbound(tx) else 0)
+    if day == 0:
+        return 0.0
+    month = len(_within(h.credits, tx, 24 * 30))
+    daily_mean = max(month / 30.0, 1.0 / 30.0)
+    return round(min(day / daily_mean, RATIO_CAP), 6)
+
+
+def minutes_since_last_credit(tx: TxView, h: HistoryBundle) -> float:
+    """How long ago money last arrived. Capped at a day."""
+    recent = _within(h.credits, tx, CREDIT_RECENCY_CAP_MINUTES / 60.0)
+    if not recent:
+        return float(CREDIT_RECENCY_CAP_MINUTES)
+    latest = max(c.occurred_at for c in recent)
+    return round((tx.occurred_at - latest).total_seconds() / 60.0, 6)
+
+
+def pass_through_ratio_24h(tx: TxView, h: HistoryBundle) -> float:
+    """Money out over money in, in the last day, counting this payment.
+
+    Near 1 or above, what arrived is leaving: the shape of an account used to
+    move someone else's money. Zero when nothing came in. Integer kobo until
+    the division (D9a); only approved money moves (D21).
+    """
+    inflow = sum(c.amount_minor for c in _approved(_within(h.credits, tx, 24)))
+    if inflow <= 0:
+        return 0.0
+    outflow = sum(p.amount_minor for p in _approved(_within(h.account, tx, 24)))
+    if not _is_inbound(tx) and tx.auth_result == "APPROVED":
+        outflow += tx.amount_minor
+    return round(min(outflow / inflow, RATIO_CAP), 6)
+
+
+# ---------------------------------------------------------------------------
 # The vector
 # ---------------------------------------------------------------------------
 
@@ -296,6 +364,11 @@ _FUNCTIONS = {
     "credential_changed_hours": credential_changed_hours,
     "sim_changed_hours": sim_changed_hours,
     "payee_added_minutes": payee_added_minutes,
+    "credits_24h_account": credits_24h_account,
+    "distinct_remitters_24h_account": distinct_remitters_24h_account,
+    "inbound_count_ratio_24h_vs_daily_mean_30d": inbound_count_ratio_24h_vs_daily_mean_30d,
+    "minutes_since_last_credit": minutes_since_last_credit,
+    "pass_through_ratio_24h": pass_through_ratio_24h,
 }
 
 assert set(_FUNCTIONS) == set(FEATURE_NAMES), "feature registry disagrees with the spec"
@@ -306,6 +379,9 @@ def compute_features(tx: TxView, history: HistoryBundle) -> dict[str, float]:
     return {name: _FUNCTIONS[name](tx, history) for name in FEATURE_NAMES}
 
 
-def to_vector(features: dict[str, float]) -> list[float]:
-    """Deterministic ordering. Never rely on dict insertion order across a wire."""
-    return [float(features[name]) for name in FEATURE_NAMES]
+def to_vector(features: dict[str, float], names: tuple[str, ...] = FEATURE_NAMES) -> list[float]:
+    """Deterministic ordering. Never rely on dict insertion order across a wire.
+
+    ``names`` is the full spec by default; the model is given MODEL_FEATURE_NAMES (D78).
+    """
+    return [float(features[name]) for name in names]

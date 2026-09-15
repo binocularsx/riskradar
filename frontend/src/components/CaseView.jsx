@@ -235,6 +235,9 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
               <div className="row wrap">
                 <RiskBadge level={a.risk_level} />
                 <strong>{naira(a.amount_minor)}</strong>
+                {a.direction === 'INBOUND' && (
+                  <span className="pill suppress" title={`Credit from bank ${a.remitter_bank_code || 'unknown'}`}>incoming credit</span>
+                )}
                 <span className="muted">{a.channel.replace(/_/g, ' ').toLowerCase()}</span>
                 {a.auth_result !== 'APPROVED' && <span className="pill">{a.auth_result.toLowerCase()}</span>}
               </div>

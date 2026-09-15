@@ -199,37 +199,42 @@
     <div class="meta">
       <span>Benchmarks: Feedzai, IBM (2026)</span>
       <span>Regulation verified: CBN, Nacha</span>
-      <span>9 work packages · 6 built</span>
+      <span>9 work packages · 7 built</span>
       <span>Supersedes base-prd-alignment.md §5.2, §7.1</span>
     </div>
   </section>
 
   <section class="standing" id="where-it-stands">
-    <p class="kicker">Where the build stands · 15 September 2026</p>
-    <h2>Six of the nine packages built, plus one the team added</h2>
-    <p class="narrow">Built so far, in order: WP-09, WP-05, WP-01, WP-06, WP-07 and WP-02, and WP-06b, BVN identity with the industry watch-list, added because REG-NG-04 is a BVN list shared across banks. Every open decision is closed: the desk runs at <strong>75 alerts a day</strong> (D76). The figures below are current; they come from a new 120-day corpus with non-payment events, measured with and without them.</p>
+    <p class="kicker">Where the build stands · 15 September 2026, after WP-03</p>
+    <h2>Seven of the nine packages built, plus one the team added</h2>
+    <p class="narrow">Built so far, in order: WP-09, WP-05, WP-01, WP-06, WP-07, WP-02 and WP-03, and WP-06b, BVN identity with the industry watch-list, added because REG-NG-04 is a BVN list shared across banks. The desk runs at <strong>75 alerts a day</strong> (D76). The figures below come from the anchored 120-day corpus with events and credits (D78d); earlier write-ups used a previous corpus, so small differences are the data, not a regression.</p>
 
     <div class="verdicts">
       <div class="vcard">
-        <div class="v">0.986</div>
-        <div class="k">Account takeover caught when it was hidden from training, at 75/day. Without the WP-02 signals: 0.726</div>
-        <span class="band good">Intervals do not overlap</span>
+        <div class="v">0.991</div>
+        <div class="k">Account takeover caught when it was hidden from training, at 75/day, with the WP-02 signals</div>
+        <span class="band good">Was 0.726 without them</span>
       </div>
       <div class="vcard">
-        <div class="v">5.0 : 1</div>
-        <div class="k">False alerts per confirmed fraud incident at 75/day. Without events: 6.1 : 1</div>
+        <div class="v">3.2 : 1</div>
+        <div class="k">False alerts per fraud incident on payments at 75/day, with credit alerts reserved out of the budget</div>
         <span class="band good">Better than best-in-class 12–14</span>
       </div>
       <div class="vcard">
-        <div class="v">86.7%</div>
-        <div class="k">Share of fraud value detected at 75/day, time-ordered test. Without events: 80.5%</div>
-        <span class="band good">Above the 60–70% band</span>
+        <div class="v">73%</div>
+        <div class="k">Mule rings flagged as the victims' money arrives, at 7.3 credit alerts a day and 2.1 false</div>
+        <span class="band mid">Needs a month of history (D78c)</span>
       </div>
       <div class="vcard">
-        <div class="v">0.962</div>
-        <div class="k">Mean recall across the three fraud types, each hidden from training in turn</div>
+        <div class="v">0.947</div>
+        <div class="k">Mean recall across the three fraud types, each hidden from training in turn. Fraud value detected: 84.8%</div>
         <span class="band mid">Partly shaped by the simulator (D77d)</span>
       </div>
+    </div>
+
+    <div class="note">
+      <span class="tag">What WP-03 measured and refused</span>
+      <p>Giving the payment model the receiving-side features made it <strong>worse</strong> on account takeover it had never seen: 0.991 fell to 0.857, intervals apart, with nothing gained on mule rings. The features stay with the rules, the model keeps its 17 inputs, and every decision still records all 22 (D78b).</p>
     </div>
 
     <div class="tablewrap">
@@ -238,10 +243,9 @@
           <tr><th>Next</th><th>What it does</th><th>Can start</th><th>Why it waits or goes</th></tr>
         </thead>
         <tbody>
-          <tr class="now"><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip ok">Now</span></td><td>WP-01 built. Needs a receiving-side fraud pattern in the simulator, a new corpus and a held-out run.</td></tr>
-          <tr><td class="v">WP-08</td><td>Spend the budget by tier</td><td><span class="chip ok">Now</span></td><td>WP-06 built. With events, 60/day costs no held-out recall (0.962), which changes what each tier can afford.</td></tr>
-          <tr><td class="v">WP-04</td><td>The second leg</td><td><span class="chip chg">After WP-03</span></td><td>Links an inbound credit to the account's next outbound payment; needs WP-03's receiving-side profiles.</td></tr>
-          <tr><td class="v">Reset</td><td>Rebuild the demo on 30 days of history</td><td><span class="chip chg">Last</span></td><td>Nothing depends on it. It derives the 75/day thresholds and loads the takeover sequence rule and BVN identities (D76c, D76d).</td></tr>
+          <tr class="now"><td class="v">WP-04</td><td>The second leg</td><td><span class="chip ok">Now</span></td><td>WP-03 built: a credit's receiving-side profile and <code>pass_through_ratio_24h</code> already sit on every payment, ready for a rule that links the flagged credit to the payment that moves it on.</td></tr>
+          <tr><td class="v">WP-08</td><td>Spend the budget by tier</td><td><span class="chip ok">Now</span></td><td>WP-06 built. Held-out recall barely moves between 60 and 120 a day (0.944 to 0.949), which changes what each tier can afford.</td></tr>
+          <tr><td class="v">Reset</td><td>Rebuild the demo on 30 days of history</td><td><span class="chip chg">Last</span></td><td>Nothing depends on it. It derives the 75/day thresholds and loads the two new rules, BVN identities and credits (D76c, D78c).</td></tr>
         </tbody>
       </table>
     </div>
@@ -585,7 +589,7 @@
 
     <!-- progress:start -->
     <h3>Progress</h3>
-    <p class="narrow">6 of 9 built. Listed in build order; updated as each package lands, with the decision that records it.</p>
+    <p class="narrow">7 of 9 built. Listed in build order; updated as each package lands, with the decision that records it.</p>
     <div class="tablewrap">
       <table>
         <thead>
@@ -599,8 +603,8 @@
           <tr><td class="v">WP-07</td><td>A decision a bank can act on</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D74 · migration 0010 · SHADOW v1</td></tr>
           <tr><td class="v">WP-06b</td><td>BVN identity and the industry watch-list</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D75 · migration 0011 · Finacle and NIBSS adapters wait for connection</td></tr>
           <tr><td class="v">WP-02</td><td>Signals before the money moves</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D77 · unseen takeover 0.726 to 0.986 at 75/day</td></tr>
-          <tr><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip">Not started</span></td><td class="v"></td><td>ready: WP-01 built</td></tr>
-          <tr><td class="v">WP-04</td><td>The second leg</td><td><span class="chip">Not started</span></td><td class="v"></td><td>needs WP-03</td></tr>
+          <tr><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D78 · credits scored by rules · 73% of mule rings at 7.3/day</td></tr>
+          <tr><td class="v">WP-04</td><td>The second leg</td><td><span class="chip">Not started</span></td><td class="v"></td><td>ready: WP-03 built</td></tr>
           <tr><td class="v">WP-08</td><td>Spend the budget by tier</td><td><span class="chip">Not started</span></td><td class="v"></td><td>ready: WP-06 built</td></tr>
         </tbody>
       </table>
@@ -649,7 +653,7 @@
           <p class="why"><b>Why now:</b> this stopped being optional in two regimes inside a year. Nacha made receiving-side monitoring mandatory in phases through 2026, and CBN's framework lets the regulator withhold settlement from second-level beneficiary institutions — meaning a Nigerian bank can now lose money on fraud it merely <em>received</em>.</p>
         </div>
         <div class="side">
-          <div class="row status"><span class="chip">Not started</span></div>
+          <div class="row status"><span class="chip ok">Built</span></div>
           <div class="row"><b>Serves</b> FR-209, REG-NG-08</div>
           <div class="row"><b>Needs</b> WP-01</div>
           <div class="row"><b>Size</b> Medium</div>
@@ -786,7 +790,7 @@
     <strong>Sources.</strong> Benchmarks: <a href="https://www.feedzai.com/blog/fraud-benchmarking/">Feedzai, How Top Banks Benchmark Fraud Performance</a> (value detection rate tiers; false-positive ratios of 12:1–14:1 best-in-class, strong banks beyond 30:1) · <a href="https://www.ibm.com/think/insights/fraud-detection-no-longer-limited-models-limited-by-operations">IBM, Why operational capacity is becoming the binding constraint in fraud detection</a>.
     Regulation: <a href="https://techcabal.com/2025/12/02/nigerian-banks-16-days-fraud-refund-cbn/">CBN Exposure Draft, Guidelines for Handling Authorised Push Payment Fraud, 26 Nov 2025</a> · <a href="https://nairametrics.com/2026/03/13/cbn-tightens-bvn-rules-introduces-fraud-watchlist-for-banking-customers/">CBN Addendum to the Revised BVN Framework, 12 Mar 2026, effective 1 May 2026</a> · <a href="https://www.outseer.com/blog/2026-nacha-rule-change-proactive-fraud-monitoring-requirement">Nacha 2026 fraud-monitoring rule, receiving-side monitoring phased Mar–Jun 2026</a>.
     Practice: <a href="https://www.trustsphere.ai/post/mule-detection-at-the-receive-side-receiving-bank-real-time-defence-playbook">Mule detection at the receive side</a> · <a href="https://www.adaptivesecurity.com/blog/account-takeover-detection">Account takeover detection signals and controls</a>.
-    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k, D70–D77 · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
+    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k, D70–D78 · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
     <br><br>
     The APP guidelines are an exposure draft — clock values are as published in the draft and in reporting on it, and should be re-checked against the final circular before any of WP-05 is treated as settled. The BVN addendum is in force.
   </footer>

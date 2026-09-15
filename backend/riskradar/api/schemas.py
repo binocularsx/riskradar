@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Channel = Literal["MOBILE_APP", "WEB", "USSD", "POS", "ATM", "AGENT", "BRANCH", "API"]
 Instrument = Literal["CARD", "ACCOUNT_TRANSFER", "CASH", "WALLET"]
@@ -69,6 +69,24 @@ class TransactionIn(Strict):
     # D75: optional. When absent the boundary asks the core; tokenised either way.
     bvn: Annotated[str | None, Field(pattern=r"^\d{11}$")] = None
     nin: Annotated[str | None, Field(pattern=r"^\d{11}$")] = None
+
+    # D78: money leaving the customer's account, or arriving in it. For an
+    # INBOUND credit, customer_id and account_id are the receiving side and
+    # the sender is the remitter; there is no beneficiary.
+    direction: Literal["OUTBOUND", "INBOUND"] = "OUTBOUND"
+    remitter_account_id: Annotated[str | None, Field(min_length=1, max_length=128)] = None
+    remitter_bank_code: Annotated[str | None, Field(max_length=16)] = None
+
+    @model_validator(mode="after")
+    def _direction_is_consistent(self) -> "TransactionIn":
+        if self.direction == "INBOUND":
+            if not self.remitter_account_id:
+                raise ValueError("an INBOUND credit needs remitter_account_id")
+            if self.beneficiary_account_id:
+                raise ValueError("an INBOUND credit has a remitter, not a beneficiary")
+        elif self.remitter_account_id or self.remitter_bank_code:
+            raise ValueError("remitter fields belong to INBOUND credits only")
+        return self
     device_fingerprint: Annotated[str | None, Field(max_length=256)] = None
 
     ip_region: Annotated[str | None, Field(max_length=64)] = None
@@ -114,7 +132,7 @@ class TransactionIn(Strict):
 # than stored with the wrong shape.
 
 EventType = Literal[
-    "PAYMENT", "LOGIN", "DEVICE_BOUND", "CREDENTIAL_CHANGED", "PAYEE_ADDED", "SIM_CHANGED", "LIMIT_CHANGED"
+    "PAYMENT", "CREDIT", "LOGIN", "DEVICE_BOUND", "CREDENTIAL_CHANGED", "PAYEE_ADDED", "SIM_CHANGED", "LIMIT_CHANGED"
 ]
 Ref = Annotated[str, Field(min_length=1, max_length=128)]
 

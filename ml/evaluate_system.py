@@ -74,6 +74,10 @@ from train import ALERT_BUDGET_PER_DAY, TYPOLOGIES, build_model  # noqa: E402
 EVENT_FEATURES = ("failed_logins_1h_subject", "device_bound_hours", "credential_changed_hours",
                   "sim_changed_hours", "payee_added_minutes")
 EVENT_RULES = ("ACCOUNT_TAKEOVER_SEQUENCE",)
+# D78. The receiving-side features; ``--without-credits`` removes them.
+CREDIT_FEATURES = ("credits_24h_account", "distinct_remitters_24h_account",
+                   "inbound_count_ratio_24h_vs_daily_mean_30d", "minutes_since_last_credit",
+                   "pass_through_ratio_24h")
 
 # The cheapest thing that could possibly work, used as the floor everything else
 # has to clear. Chosen before seeing any result: it is the single feature with
@@ -85,6 +89,7 @@ BASELINE_FEATURE = "txn_count_1h_account"
 RULE_CONFIGS = {
     "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5, "new_destination_days": 1, "no_destination_min_count": 10}},  # D67
     "ACCOUNT_TAKEOVER_SEQUENCE": {"enabled": True, "params": {"within_hours": 24, "min_failed_logins": 3, "min_precursors": 2}},  # D77
+    "MULE_INBOUND_FANIN": {"enabled": True, "params": {"min_remitters": 3, "min_count_ratio": 5.0}},  # D78 (credits only)
     "CARD_TESTING_PROBES": {
         "enabled": True,
         "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3},
@@ -189,6 +194,8 @@ def main() -> None:
     parser.add_argument("--budget", type=int, default=ALERT_BUDGET_PER_DAY, help="alerts a day (D76: 75)")
     parser.add_argument("--without-events", action="store_true",
                         help="D77 ablation: drop the event features and the rule built on them")
+    parser.add_argument("--with-credit-features", action="store_true",
+                        help="D78 rejected option, kept measurable: give the model the receiving-side features")
     args = parser.parse_args()
     budget = args.budget
 
@@ -201,6 +208,12 @@ def main() -> None:
         names = [names[j] for j in keep]
         configs = {k: v for k, v in configs.items() if k not in EVENT_RULES}
         print(f"  without events: {len(names)} features, rules {sorted(configs)}")
+    if not args.with_credit_features:
+        # D78: as shipped, the model is not given the receiving-side features.
+        keep = [j for j, n in enumerate(names) if n not in CREDIT_FEATURES]
+        corpus.X = corpus.X[:, keep]
+        names = [names[j] for j in keep]
+        print(f"  model features: {len(names)} (receiving-side features left to the rules)")
     span_days = (max(corpus.occurred_at) - min(corpus.occurred_at)).total_seconds() / 86400.0
 
     # The card-testing rule gates on instrument == CARD. Recovering that from the
@@ -337,7 +350,9 @@ def main() -> None:
 
     report = {
         "alert_budget_per_day": budget,
-        "feature_spec": "without event features (D77 ablation)" if args.without_events else "1.2.0",
+        "feature_spec": ("without event features (D77 ablation)" if args.without_events
+                         else "1.3.0 with receiving-side features in the model (D78 rejected)" if args.with_credit_features
+                         else "1.3.0"),
         "features": names,
         "rules": sorted(configs),
         "incidents_per_typology": {t: arms[0]["incidents"] for t, arms in results.items()},

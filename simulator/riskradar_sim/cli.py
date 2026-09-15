@@ -51,6 +51,8 @@ def cmd_corpus(args: argparse.Namespace) -> None:
         # together, so the fraud rate stays at the ~0.3% reference point while
         # the intervals narrow with the square root of the count.
         config.days = args.days
+    if args.anchor:
+        config.end = datetime.fromisoformat(args.anchor)
     out = Path(args.out)
     started = time.perf_counter()
     counts = write_corpus(config, out)
@@ -132,7 +134,7 @@ def cmd_history(args: argparse.Namespace) -> None:
                 print("  errors:", body["errors"][:3], file=sys.stderr)
             batches[is_history] = []
 
-        for event in generate(config, with_events=True):
+        for event in generate(config, with_events=True, with_credits=True):
             is_history = datetime.fromisoformat(event.payload["occurred_at"]) < cutoff
             if not is_history and args.skip_tail:
                 # History only: the alerting window is posted by a later run
@@ -143,7 +145,8 @@ def cmd_history(args: argparse.Namespace) -> None:
                 # wants the recent alerting window. Generating the earlier days
                 # and throwing them away costs minutes for nothing.
                 continue
-            if event.kind != "PAYMENT":
+            if event.kind not in ("PAYMENT", "CREDIT"):
+                # Credits are transactions (D78) and travel with the payments.
                 event_batches[is_history].append(event.payload)
                 if len(event_batches[is_history]) >= args.batch_size:
                     flush_events(is_history)
@@ -331,6 +334,8 @@ def main(argv: list[str] | None = None) -> None:
         help="override the profile's window. Raises incidents and legitimate "
              "traffic together, so the fraud rate is unchanged (D58)",
     )
+    p.add_argument("--anchor", default=None,
+                   help="ISO time the corpus ends at, so the same seed rebuilds it byte for byte (D78)")
     p.set_defaults(func=cmd_corpus)
 
     p = sub.add_parser("history", help="seed the database with replayed history")

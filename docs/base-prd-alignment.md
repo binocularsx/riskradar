@@ -41,8 +41,8 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 | Status | Count | Meaning |
 |---|---|---|
 | Met | 15 | Built and tested, 4 of them added for this review and 3 since (D71, D77) |
-| Partly | 47 | Some of it built; the missing part is named |
-| Not built | 25 | Absent; on the roadmap or waiting on a bank |
+| Partly | 49 | Some of it built; the missing part is named |
+| Not built | 23 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -91,7 +91,7 @@ the few gaps that matter most rather than all of them.
 | FR-206 | Session modelling to catch takeover in progress | Partly | Sequences inside a 72-hour window: failed logins, a new device bound, a SIM or credential change, then a payee enrolled and paid (D77). No explicit session identifier from the channel. |
 | FR-207 | Scam (APP) detection | Partly | First-time payee, unusual amount and bursts are measured. No session or "coached customer" signals; no dedicated scam pattern. |
 | FR-208 | Synthetic identity at onboarding | Not built | No onboarding events. |
-| FR-209 | Screening money coming in, not only going out | Not built | Only outgoing payments are scored (D69h). |
+| FR-209 | Screening money coming in, not only going out | Partly | Credits are ingested and decided as INBOUND transactions with receiving-side features and a fan-in rule: 73% of mule rings flagged at 7.3 credit alerts a day (D78). Rules only; no model on incoming fraud. |
 | FR-210 | One weighted score with visible contributions | Rejected for v1 | Conflicts with D11. Its intent, visible contribution per component, is met by separate outputs and the policy trace (D69b). |
 | Accept. | A documented detection path and owner per top fraud type | Partly | Three fraud types, each with a measured path (D63–D67). |
 
@@ -200,7 +200,7 @@ The clock values below are as the base PRD states them, from secondary sources.
 | REG-NG-05 | Scam clocks: notify the other bank in 30 minutes, investigate in 14 working days, reimburse in 48 hours, refund in 16 working days | Met | Built (D71), plus the 24-hour acknowledgement. Values are the CBN exposure draft of 26 Nov 2025, held as policy version 1; re-check against the final circular. |
 | REG-NG-06 | Customer reporting window | Met | 72 hours from the first alerted payment to the customer's report, shown on the case as met or late; never escalated, as it is the customer's obligation (D71). |
 | REG-NG-07 | NIBSS fraud reporting | Not built | Needs a bank (D28). |
-| REG-NG-08 | Controls on fraud proceeds received | Not built | See FR-209. |
+| REG-NG-08 | Controls on fraud proceeds received | Partly | Proceeds arriving are flagged and can carry a hold recommendation through the directive (D74, D78). Holding and returning funds, and settlement withholding, are the bank's and NIBSS's (D78e). |
 | REG-NG-09 | Fraud desk workflow and forum reporting | Partly | The desk workflow is built; forum reporting is not. |
 | REG-NG-10 | Customer opt-out of instant transfers | Out of scope | A channel control. |
 

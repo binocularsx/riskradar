@@ -25,6 +25,8 @@ function hour(value) {
 const DRIVER_NAME = {
   MODEL: 'The model alone',
   VELOCITY_BURST_1H: 'Burst of payments to a new destination',
+  ACCOUNT_TAKEOVER_SEQUENCE: 'Takeover signs, then a new destination',
+  MULE_INBOUND_FANIN: 'Credits from many senders',
   CARD_TESTING_PROBES: 'Card-testing probes',
   SANCTIONED_BENEFICIARY: 'Sanctioned destination',
   KNOWN_MULE_BENEFICIARY: 'Known mule destination',

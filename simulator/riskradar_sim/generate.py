@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .engine import TYPOLOGIES, Event, disbursement_burst, legitimate_event
+from .credits import CreditLayer
 from .signals import EventLayer
 from . import ids
 from .population import Customer, build_population
@@ -92,7 +93,7 @@ def _active_hour(rng: random.Random, customer: Customer, day: datetime) -> datet
                        microsecond=0)
 
 
-def generate(config: SimulationConfig, *, with_events: bool = False) -> Iterator[Event]:
+def generate(config: SimulationConfig, *, with_events: bool = False, with_credits: bool = False) -> Iterator[Event]:
     """Yield events in chronological order, ending at *now*.
 
     The first version looped ``range(days)`` from ``now - days``, so the last day
@@ -110,6 +111,9 @@ def generate(config: SimulationConfig, *, with_events: bool = False) -> Iterator
     ``with_events`` (D77) adds logins, device bindings, credential and SIM
     changes and payee enrolments around the payments, from the event layer's own
     random stream. The payments are identical either way.
+
+    ``with_credits`` (D78) adds money arriving in customers' accounts, from the
+    credit layer's own stream. Payments and events are identical either way.
     """
     rng = random.Random(config.seed)
     ids.reseed(config.seed)  # D68: same seed, same customers, accounts and payees
@@ -138,6 +142,8 @@ def generate(config: SimulationConfig, *, with_events: bool = False) -> Iterator
 
     batch_payers = [c for c in customers if c.does_batch_payouts]
     layer = EventLayer(config.seed, customers) if with_events else None
+    credit_layer = CreditLayer(config.seed, customers) if with_credits else None
+    by_id = {c.customer_id: c for c in customers}
 
     # days + 1 because the window now includes today, partially.
     for day_index in range(config.days + 1):
@@ -191,11 +197,17 @@ def generate(config: SimulationConfig, *, with_events: bool = False) -> Iterator
                 if datetime.fromisoformat(e.payload["occurred_at"]) <= end
             )
 
+        payments = list(events)
         if layer is not None:
             # Drawn after the day's payments, from the layer's own stream, so
             # the payments above consumed exactly what they always did.
-            extra = layer.around(events) + layer.background(day, end)
+            extra = layer.around(payments) + layer.background(day, end)
             events.extend(e for e in extra if datetime.fromisoformat(e.payload["occurred_at"]) <= end)
+        if credit_layer is not None:
+            # D78: its own stream too, and it sees payments only, so the event
+            # layer above drew exactly what it drew before credits existed.
+            credits = credit_layer.for_day(day, payments, by_id)
+            events.extend(e for e in credits if datetime.fromisoformat(e.payload["occurred_at"]) <= end)
 
         events.sort(key=lambda e: e.payload["occurred_at"])
         yield from events
@@ -204,6 +216,11 @@ def generate(config: SimulationConfig, *, with_events: bool = False) -> Iterator
 def events_path(corpus_path: Path) -> Path:
     """``corpus.jsonl`` -> ``corpus.events.jsonl`` (D77)."""
     return corpus_path.with_name(corpus_path.stem + ".events.jsonl")
+
+
+def credits_path(corpus_path: Path) -> Path:
+    """``corpus.jsonl`` -> ``corpus.credits.jsonl`` (D78)."""
+    return corpus_path.with_name(corpus_path.stem + ".credits.jsonl")
 
 
 def write_corpus(config: SimulationConfig, out_path: Path) -> dict[str, int]:
@@ -217,13 +234,23 @@ def write_corpus(config: SimulationConfig, out_path: Path) -> dict[str, int]:
     corpus built before events existed.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    counts = {"total": 0, "fraud": 0, "events": 0, "fraud_events": 0}
+    counts = {"total": 0, "fraud": 0, "events": 0, "fraud_events": 0, "credits": 0, "fraud_credits": 0}
     typologies: dict[str, int] = {}
     incidents: set[str] = set()
 
     with out_path.open("w", encoding="utf-8") as fh, \
-            events_path(out_path).open("w", encoding="utf-8") as efh:
-        for event in generate(config, with_events=True):
+            events_path(out_path).open("w", encoding="utf-8") as efh, \
+            credits_path(out_path).open("w", encoding="utf-8") as cfh:
+        for event in generate(config, with_events=True, with_credits=True):
+            if event.kind == "CREDIT":
+                record = dict(event.payload)
+                record["is_fraud"] = event.is_fraud
+                record["typology"] = event.typology
+                record["incident_id"] = event.incident_id
+                cfh.write(json.dumps(record) + "\n")
+                counts["credits"] += 1
+                counts["fraud_credits"] += int(event.is_fraud)
+                continue
             if event.kind != "PAYMENT":
                 record = dict(event.payload)
                 record["is_fraud"] = event.is_fraud

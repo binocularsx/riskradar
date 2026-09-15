@@ -246,3 +246,41 @@ def test_as_seeded_one_precursor_is_not_enough():
     ctx = lambda f: RuleContext(tx=tx(), features=f)  # noqa: E731
     assert not evaluate(ctx(one), SEQUENCE_AS_SEEDED)
     assert [s.code for s in evaluate(ctx(two), SEQUENCE_AS_SEEDED)] == ["ACCOUNT_TAKEOVER_SEQUENCE"]
+
+
+# ---------------------------------------------------------------- D78
+
+
+FANIN = {"MULE_INBOUND_FANIN": {"enabled": True, "params": {"min_remitters": 3, "min_count_ratio": 5.0}},
+         "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5}}}
+
+
+def credit_tx():
+    return tx(direction="INBOUND", beneficiary_token=None, remitter_token="acc_sender")
+
+
+def test_fanin_needs_many_senders_on_an_unusual_day():
+    busy = features(distinct_remitters_24h_account=6.0, inbound_count_ratio_24h_vs_daily_mean_30d=12.0)
+    trader = features(distinct_remitters_24h_account=40.0, inbound_count_ratio_24h_vs_daily_mean_30d=1.1)
+    few = features(distinct_remitters_24h_account=2.0, inbound_count_ratio_24h_vs_daily_mean_30d=30.0)
+    code = lambda f: [s.code for s in evaluate(RuleContext(tx=credit_tx(), features=f), FANIN)]  # noqa: E731
+    assert code(busy) == ["MULE_INBOUND_FANIN"]
+    assert code(trader) == [], "a trader's every-day fan-in is not an event"
+    assert code(few) == []
+
+
+def test_rules_only_apply_to_their_direction():
+    f = features(txn_count_1h_account=9.0, distinct_remitters_24h_account=6.0,
+                 inbound_count_ratio_24h_vs_daily_mean_30d=12.0)
+    on_credit = [s.code for s in evaluate(RuleContext(tx=credit_tx(), features=f), FANIN)]
+    on_payment = [s.code for s in evaluate(RuleContext(tx=tx(), features=f), FANIN)]
+    assert "VELOCITY_BURST_1H" not in on_credit
+    assert "MULE_INBOUND_FANIN" not in on_payment
+
+
+def test_a_credit_is_decided_without_the_model():
+    th = Thresholds(id=1, version=1, p_monitor=0.02, p_review=0.15, p_hold=0.6, alert_min_level="MEDIUM")
+    signal = Signal(code="MULE_INBOUND_FANIN", power="ESCALATE", severity="HIGH")
+    result = apply(0.99, [signal], th, model_applies=False)
+    assert result.trace[0]["source"] == "receiving_side"
+    assert result.risk_level == "MEDIUM", "LOW, raised one band by the fan-in, never by a probability"

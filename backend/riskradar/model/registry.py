@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from ..features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION
+from ..features.spec import FEATURE_SPEC_VERSION, MODEL_FEATURE_NAMES
 
 
 class Scorer(Protocol):
@@ -80,7 +80,7 @@ class ModelBundle:
         have put NFR-001 out of reach. Batched, the same work is one matrix.
         """
         probes = [list(vector)]
-        for i in range(len(FEATURE_NAMES)):
+        for i in range(len(MODEL_FEATURE_NAMES)):
             probe = list(vector)
             probe[i] = baseline[i]
             probes.append(probe)
@@ -89,7 +89,7 @@ class ModelBundle:
         base_p = max(0.0, min(1.0, float(predictions[0])))
         return {
             name: round(base_p - max(0.0, min(1.0, float(predictions[i + 1]))), 6)
-            for i, name in enumerate(FEATURE_NAMES)
+            for i, name in enumerate(MODEL_FEATURE_NAMES)
         }
 
 
@@ -217,14 +217,14 @@ def load_active(conn: Any) -> ModelBundle:
         if isinstance(metrics, str):
             metrics = json.loads(metrics)
         _baseline_cache[row["id"]] = [
-            float(v) for v in (metrics.get("feature_baseline") or [0.0] * len(FEATURE_NAMES))
+            float(v) for v in (metrics.get("feature_baseline") or [0.0] * len(MODEL_FEATURE_NAMES))
         ]
         return bundle
 
 
 def baseline_for(bundle: ModelBundle) -> list[float]:
     """The training-set median vector, used as the ablation reference."""
-    return _baseline_cache.get(bundle.id, [0.0] * len(FEATURE_NAMES))
+    return _baseline_cache.get(bundle.id, [0.0] * len(MODEL_FEATURE_NAMES))
 
 
 def invalidate_cache() -> None:

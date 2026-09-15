@@ -312,7 +312,7 @@ def search_transactions(
         f"""
         SELECT t.id, t.transaction_ref, t.occurred_at, t.amount_minor, t.currency,
                t.channel, t.instrument, t.rail, t.auth_result, t.decline_reason,
-               t.display_name, t.ip_region,
+               t.display_name, t.ip_region, t.direction,
                d.score_0_100, d.risk_level, d.decision,
                (a.id IS NOT NULL) AS alerted, a.case_id
           FROM transactions t

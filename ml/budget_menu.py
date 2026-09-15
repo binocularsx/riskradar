@@ -57,6 +57,7 @@ ARTIFACTS = REPO_ROOT / "ml" / "artifacts"
 CORPUS = REPO_ROOT / "ml" / "data"
 HELD_OUT = {120: "system-evaluation.json", 75: "system-evaluation-75.json", 60: "system-evaluation-60.json"}
 HELD_OUT_WITHOUT_EVENTS = {b: f.replace(".json", "-without-events.json") for b, f in HELD_OUT.items()}
+HELD_OUT_WITHOUT_CREDITS = {b: f.replace(".json", "-without-credits.json") for b, f in HELD_OUT.items()}
 FULL_SYSTEM_ARM = "rules + gradient boosting (ours)"
 # The sweep rounds to 0.1 a day; anything further apart is a different measurement.
 SWEEP_TOLERANCE = 0.2
@@ -70,12 +71,13 @@ def wilson(k: int, n: int, z: float = 1.96) -> list[float]:
     return [round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3)]
 
 
-def held_out(budget: int, without_events: bool = False) -> dict | None:
-    name = (HELD_OUT_WITHOUT_EVENTS if without_events else HELD_OUT)[budget]
+def held_out(budget: int, without_events: bool = False, without_credits: bool = False) -> dict | None:
+    table = HELD_OUT_WITHOUT_EVENTS if without_events else HELD_OUT
+    name = table[budget]
     if not (ARTIFACTS / name).exists():
         return None
     evaluation = json.loads((ARTIFACTS / name).read_text(encoding="utf-8"))
-    if "feature_spec" not in evaluation:
+    if evaluation.get("feature_spec") != "1.3.0":
         # Written before D77, on the previous corpus. Its recall belongs to a
         # different bank and must not sit in a row measured on this one.
         return None
@@ -91,6 +93,8 @@ def main() -> None:
     parser.add_argument("--check-sweep", action="store_true",
                         help="stop unless false alarms match budget-sweep-gated.json (pre-D77 corpus only)")
     parser.add_argument("--without-events", action="store_true", help="D77 ablation: no sequence rule")
+    parser.add_argument("--without-credits", action="store_true",
+                        help="D78: no credit alerts reserved (the receiving side switched off)")
     parser.add_argument("--out", default=str(ARTIFACTS / "budget-menu.json"))
     args = parser.parse_args()
 
@@ -103,6 +107,11 @@ def main() -> None:
 
         keep = [j for j, n in enumerate(names) if n not in EVENT_FEATURES]
         X, names = X[:, keep], [names[j] for j in keep]
+    # D78: the model is not given the receiving-side features.
+    from evaluate_system import CREDIT_FEATURES
+
+    keep = [j for j, n in enumerate(names) if n not in CREDIT_FEATURES]
+    X, names = X[:, keep], [names[j] for j in keep]
 
     print("reading instruments and amounts ...", flush=True)
     inst, amount = [], []
@@ -135,6 +144,14 @@ def main() -> None:
                       + (col("failed_logins_1h_subject") >= 3))
         rules = rules | ((precursors >= 2) & (col("beneficiary_is_new_to_account") == 1))
 
+    # D78: credits raise alerts too, from the same desk. Their measured volume is
+    # reserved first, so the model only spends what payments and credits leave.
+    credit_alerts_per_day = 0.0
+    receiving = ARTIFACTS / "receiving-side.json"
+    if not args.without_credits and receiving.exists():
+        credit_alerts_per_day = json.loads(receiving.read_text(encoding="utf-8"))["chosen"]["alerts_per_day"]
+        print(f"reserving {credit_alerts_per_day} credit alerts a day for the receiving side", flush=True)
+
     fraud = yt == 1
     totals = {t: len(set(it[tt == t])) for t in TYPES}
     incidents = sum(totals.values())
@@ -145,7 +162,7 @@ def main() -> None:
 
     options = []
     for budget in BUDGETS:
-        spare = int(budget * days - rules.sum())
+        spare = int((budget - credit_alerts_per_day) * days - rules.sum())
         free = np.flatnonzero(~rules)
         ranked = free[np.argsort(-p[free], kind="stable")]
         model_flag = np.zeros(len(yt), bool)
@@ -166,7 +183,8 @@ def main() -> None:
         in_caught = fraud & np.isin(it, list(caught_incidents))
         options.append({
             "budget_per_day": budget,
-            "alerts_per_day": round(float(system.sum()) / days, 1),
+            "alerts_per_day": round(float(system.sum()) / days + credit_alerts_per_day, 1),
+            "credit_alerts_per_day": credit_alerts_per_day,
             "false_alerts_per_day": round(false_day, 1),
             "incidents_per_day": round(incidents / days, 2),
             "false_alerts_per_incident": round(false_day / (incidents / days), 1),
@@ -174,7 +192,7 @@ def main() -> None:
                            for t in TYPES},
             "value_detection_rate": round(float(at[system & fraud].sum()) / fraud_value, 3),
             "value_in_caught_incidents": round(float(at[in_caught].sum()) / fraud_value, 3),
-            "held_out": held_out(budget, args.without_events),
+            "held_out": held_out(budget, args.without_events, args.without_credits),
         })
 
     print(f"{'budget':>6}{'false/day':>10}{'ratio':>8}{'VDR':>7}{'VDR inc':>9}   seen ATO  MULE  CARD   held-out mean")

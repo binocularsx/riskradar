@@ -47,7 +47,7 @@ from typing import Any
 from ..audit import chain
 from ..cases import correlation
 from ..db import connection, pool
-from ..features import compute_features, load_history_sql, to_vector
+from ..features import MODEL_FEATURE_NAMES, compute_features, load_history_sql, to_vector
 from ..features.spec import FEATURE_SPEC_VERSION
 from ..features.types import TxView
 from ..model import registry
@@ -104,7 +104,7 @@ TX_SQL = """
            channel, instrument, rail, subject_token, account_token,
            beneficiary_token, device_token, ip_region, merchant_category,
            auth_result, decline_reason, account_opened_at, last_activity_at,
-           product_type, origin_sol_id, is_replay, raise_alerts
+           product_type, origin_sol_id, is_replay, raise_alerts, direction, remitter_token
       FROM transactions
      WHERE id = %s
 """
@@ -219,6 +219,8 @@ def _tx_view(row: dict[str, Any]) -> TxView:
         last_activity_at=row["last_activity_at"],
         product_type=row["product_type"],
         origin_sol_id=row["origin_sol_id"],
+        direction=row["direction"],
+        remitter_token=row["remitter_token"],
     )
 
 
@@ -262,21 +264,25 @@ def score_transaction(
     # --- features (D15: the shared package, SQL data-access path) -----------
     history = load_history_sql(conn, tx)
     features = compute_features(tx, history)
-    vector = to_vector(features)
+    # D78: the model's own inputs; the decision still records every feature.
+    vector = to_vector(features, MODEL_FEATURE_NAMES)
 
     # --- model -------------------------------------------------------------
     rule_only = False
     model_id: int | None = None
     p_fraud = 0.0
     bundle = None
-    try:
-        bundle = registry.load_active(conn)
-        model_id = bundle.id
-        p_fraud = bundle.predict(vector)
-    except registry.ModelUnavailable as exc:
-        # FR-017 / D15d: rule-only mode is never a silent degradation.
-        rule_only = True
-        _raise_alarm(conn, sys_uid, "MODEL_UNAVAILABLE", str(exc))
+    # D78: the model applies to money leaving; a credit is judged by rules.
+    model_applies = tx.direction == "OUTBOUND"
+    if model_applies:
+        try:
+            bundle = registry.load_active(conn)
+            model_id = bundle.id
+            p_fraud = bundle.predict(vector)
+        except registry.ModelUnavailable as exc:
+            # FR-017 / D15d: rule-only mode is never a silent degradation.
+            rule_only = True
+            _raise_alarm(conn, sys_uid, "MODEL_UNAVAILABLE", str(exc))
 
     # --- rules -------------------------------------------------------------
     ruleset_id, rule_configs = ruleset if ruleset else active_ruleset(conn)
@@ -294,7 +300,7 @@ def score_transaction(
 
     # --- policy ------------------------------------------------------------
     thresholds = thresholds or active_thresholds(conn)
-    result = apply_policy(p_fraud, signals, thresholds, rule_only_mode=rule_only)
+    result = apply_policy(p_fraud, signals, thresholds, rule_only_mode=rule_only, model_applies=model_applies)
 
     # --- explanation, only where it is needed -------------------------------
     # G3 requires attributions on **alerts**, not on every decision, and the vast

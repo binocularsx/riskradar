@@ -8,9 +8,9 @@ import { naira } from '../lib/api'
  * actually asking, which is *what did this customer do that was unusual, and
  * unusual compared to what?*
  *
- * So each of the twelve measurements gets a plain sentence and, where it makes
+ * So each measurement gets a plain sentence and, where it makes
  * sense, an explicit comparison to that account's own normal. Only the readings
- * that are genuinely out of the ordinary are shown — a list of twelve numbers,
+ * that are genuinely out of the ordinary are shown — a list of every number,
  * ten of them boring, is the same problem in a different shape.
  */
 
@@ -20,6 +20,65 @@ import { naira } from '../lib/api'
  * strongest evidence reads first.
  */
 const READINGS = [
+  // D77: what happened to the customer before the payment.
+  {
+    key: 'failed_logins_1h_subject',
+    unusual: (v) => v >= 3,
+    weight: 98,
+    text: (v) => `**${Math.round(v)} failed logins in the hour before** this payment.`,
+    meaning: 'Somebody guessing a password, not a customer mistyping once.',
+  },
+  {
+    key: 'device_bound_hours',
+    // -1: no device on the payment; 72: not bound in the last three days.
+    unusual: (v) => v >= 0 && v < 24,
+    weight: 97,
+    text: (v) => `The phone making this payment was **bound to the account ${v < 1 ? 'under an hour' : `${Math.round(v)} hours`} ago**.`,
+    meaning: 'A takeover starts by putting the attacker\'s own phone on the account.',
+  },
+  {
+    key: 'sim_changed_hours',
+    unusual: (v) => v < 24,
+    weight: 96,
+    text: (v) => `The customer's **SIM was changed ${Math.round(v)} hours ago**.`,
+    meaning: 'Whoever holds the new SIM receives the one-time passwords.',
+  },
+  {
+    key: 'credential_changed_hours',
+    unusual: (v) => v < 24,
+    weight: 94,
+    text: (v) => `A **PIN, password or MFA method was changed ${Math.round(v)} hours ago**.`,
+    meaning: 'Changing credentials locks the real owner out.',
+  },
+  {
+    key: 'payee_added_minutes',
+    unusual: (v) => v >= 0 && v < 60,
+    weight: 86,
+    text: (v) => `This destination was **added as a payee ${Math.round(v)} minutes before** being paid.`,
+    meaning: 'Enrolled and paid at once is how mule accounts are lined up.',
+  },
+  // D78: the receiving side.
+  {
+    key: 'distinct_remitters_24h_account',
+    unusual: (v) => v >= 4,
+    weight: 93,
+    text: (v) => `**${Math.round(v)} different senders** paid into this account in a day.`,
+    meaning: 'Many strangers paying one account is how a mule collects victims\' money.',
+  },
+  {
+    key: 'inbound_count_ratio_24h_vs_daily_mean_30d',
+    unusual: (v) => v >= 5,
+    weight: 89,
+    text: (v) => `Today's credits are **${v.toFixed(1)}× this account's normal day**.`,
+    meaning: 'A trader is busy every day; this account is not.',
+  },
+  {
+    key: 'pass_through_ratio_24h',
+    unusual: (v) => v >= 0.7,
+    weight: 91,
+    text: (v) => `**${Math.round(Math.min(v, 9.99) * 100)}% of the money that came in today has gone out again**.`,
+    meaning: 'Money that only passes through is someone else\'s money being moved.',
+  },
   {
     key: 'device_is_new_to_subject',
     unusual: (v) => v >= 1,

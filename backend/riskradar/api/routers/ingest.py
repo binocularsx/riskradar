@@ -74,7 +74,7 @@ INSERT_SQL = """
         device_token, ip_region, merchant_category,
         auth_result, decline_reason, display_name,
         account_opened_at, last_activity_at, product_type, origin_sol_id,
-        is_replay, raise_alerts, bvn_token
+        is_replay, raise_alerts, bvn_token, direction, remitter_token, remitter_bank_code
     ) VALUES (
         %(transaction_ref)s, %(occurred_at)s, %(amount_minor)s, %(currency)s,
         %(channel)s, %(instrument)s, %(rail)s,
@@ -82,7 +82,8 @@ INSERT_SQL = """
         %(device_token)s, %(ip_region)s, %(merchant_category)s,
         %(auth_result)s, %(decline_reason)s, %(display_name)s,
         %(account_opened_at)s, %(last_activity_at)s, %(product_type)s, %(origin_sol_id)s,
-        %(is_replay)s, %(raise_alerts)s, %(bvn_token)s
+        %(is_replay)s, %(raise_alerts)s, %(bvn_token)s, %(direction)s, %(remitter_token)s,
+        %(remitter_bank_code)s
     )
     ON CONFLICT (transaction_ref) DO NOTHING
     RETURNING id
@@ -200,6 +201,11 @@ def _to_row(tx: TransactionIn, *, is_replay: bool, raise_alerts: bool) -> dict[s
         "origin_sol_id": tx.origin_sol_id,
         "is_replay": is_replay,
         "raise_alerts": raise_alerts,
+        # D78: the sender of a credit shares the account namespace, so a
+        # remitter today and a destination tomorrow are the same token.
+        "direction": tx.direction,
+        "remitter_token": account_token(tx.remitter_account_id) if tx.remitter_account_id else None,
+        "remitter_bank_code": tx.remitter_bank_code,
         # D75: raw identity rides along only as far as _persist, which stamps
         # the BVN token and drops these before anything is written.
         "_customer_id": tx.customer_id,
@@ -211,7 +217,7 @@ def _to_row(tx: TransactionIn, *, is_replay: bool, raise_alerts: bool) -> dict[s
 def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
     # One reference names one event. A payment may not reuse a login's.
     existing_type = _existing_event_type(conn, row["transaction_ref"])
-    if existing_type not in (None, "PAYMENT"):
+    if existing_type not in (None, "PAYMENT", "CREDIT"):
         raise EventRefConflict(f"event_ref already used by a {existing_type} event")
     row = _stamp_account_context(conn, row)
     row["bvn_token"] = identity.stamp(conn, customer_id=row.pop("_customer_id"), subject_token=row["subject_token"],
@@ -245,7 +251,7 @@ def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
         # also an event from the moment it exists.
         cur.execute(EVENT_INSERT_SQL, {
             "event_ref": row["transaction_ref"],
-            "event_type": "PAYMENT",
+            "event_type": "CREDIT" if row["direction"] == "INBOUND" else "PAYMENT",
             "occurred_at": row["occurred_at"],
             "subject_token": row["subject_token"],
             "account_token": row["account_token"],
@@ -337,7 +343,7 @@ def _persist_event(conn: Any, ev: Any, *, is_replay: bool, raise_alerts: bool) -
             cur.execute("SELECT id FROM events WHERE transaction_id = %s", (tx.transaction_id,))
             row = cur.fetchone()
         return EventAccepted(
-            event_ref=tx.transaction_ref, event_type="PAYMENT",
+            event_ref=tx.transaction_ref, event_type="CREDIT" if ev.payment.direction == "INBOUND" else "PAYMENT",
             event_id=int(row["id"] if isinstance(row, dict) else row[0]),
             status=tx.status, queued=tx.queued, transaction_id=tx.transaction_id,
         )

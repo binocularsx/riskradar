@@ -20,7 +20,13 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 
-from .spec import ACCOUNT_HISTORY_DAYS, EVENT_LOOKBACK_HOURS, FEATURE_EVENT_TYPES, SUBJECT_HISTORY_DAYS
+from .spec import (
+    ACCOUNT_HISTORY_DAYS,
+    CREDIT_HISTORY_DAYS,
+    EVENT_LOOKBACK_HOURS,
+    FEATURE_EVENT_TYPES,
+    SUBJECT_HISTORY_DAYS,
+)
 from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
 
@@ -37,8 +43,20 @@ class PandasHistorySource:
         self._subject_times: dict[str, list[datetime]] = defaultdict(list)
         self._subject_rows: dict[str, list[PriorTx]] = defaultdict(list)
         self._beneficiary_first: dict[str, list[datetime]] = defaultdict(list)
+        # D78: credits into each account, kept apart from outgoing history.
+        self._credit_times: dict[str, list[datetime]] = defaultdict(list)
+        self._credit_rows: dict[str, list[PriorTx]] = defaultdict(list)
 
         for row in _iter_rows(rows):
+            if row.get("direction") == "INBOUND":
+                self._credit_rows[row["account_token"]].append(PriorTx(
+                    occurred_at=row["occurred_at"],
+                    amount_minor=int(row["amount_minor"]),
+                    auth_result=row["auth_result"],
+                    beneficiary_token=_clean(row.get("remitter_token")),
+                    device_token=_clean(row.get("device_token")),
+                ))
+                continue
             prior = PriorTx(
                 occurred_at=row["occurred_at"],
                 amount_minor=int(row["amount_minor"]),
@@ -59,6 +77,9 @@ class PandasHistorySource:
             self._subject_times[key] = [p.occurred_at for p in items]
         for key, times in self._beneficiary_first.items():
             times.sort()
+        for key, items in self._credit_rows.items():
+            items.sort(key=lambda p: p.occurred_at)
+            self._credit_times[key] = [p.occurred_at for p in items]
 
         # D77: the customer's non-payment events, indexed the same way.
         self._event_times: dict[str, list[datetime]] = defaultdict(list)
@@ -115,8 +136,15 @@ class PandasHistorySource:
             tx.occurred_at - timedelta(hours=EVENT_LOOKBACK_HOURS),
             tx.occurred_at,
         )
+        credits = self._slice(
+            self._credit_times.get(tx.account_token, []),
+            self._credit_rows.get(tx.account_token, []),
+            tx.occurred_at - timedelta(days=CREDIT_HISTORY_DAYS),
+            tx.occurred_at,
+        )
         return HistoryBundle(
-            account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events
+            account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events,
+            credits=credits,
         )
 
 

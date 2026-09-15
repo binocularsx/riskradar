@@ -186,7 +186,7 @@ def case_detail(
                t.id AS transaction_id, t.transaction_ref, t.occurred_at,
                t.amount_minor, t.currency, t.channel, t.instrument, t.rail,
                t.auth_result, t.decline_reason, t.ip_region, t.merchant_category,
-               t.display_name, t.product_type, t.origin_sol_id,
+               t.display_name, t.product_type, t.origin_sol_id, t.direction, t.remitter_bank_code,
                d.p_fraud, d.decision, d.signals, d.attributions, d.policy_trace,
                d.features, d.rule_only_mode, d.feature_spec_version,
                mv.name AS model_name, mv.version AS model_version,

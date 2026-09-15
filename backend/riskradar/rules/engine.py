@@ -32,6 +32,7 @@ Code                         Power      Catches
 ===========================  =========  ==============================================
 VELOCITY_BURST_1H            ESCALATE   ATO extraction, mule fan-out speed
 ACCOUNT_TAKEOVER_SEQUENCE    ESCALATE   A way in taken over, then a new destination (D77)
+MULE_INBOUND_FANIN           ESCALATE   Credits from many senders, unlike the account (D78)
 CARD_TESTING_PROBES          ESCALATE   Authorisation probing — decline-heavy by nature
 SANCTIONED_BENEFICIARY       OVERRIDE   Some things are not probabilistic
 KNOWN_MULE_BENEFICIARY       OVERRIDE   Destination confirmed fraudulent by an analyst
@@ -91,14 +92,23 @@ class RuleContext:
 RuleFn = Callable[[RuleContext, dict[str, Any]], "Signal | None"]
 
 _REGISTRY: dict[str, RuleFn] = {}
+# D78: which way the money must be moving for a rule to apply. A velocity burst
+# is about payments leaving; a fan-in is about credits arriving. Outbound by
+# default, so every rule written before credits existed keeps its meaning.
+_DIRECTIONS: dict[str, tuple[str, ...]] = {}
 
 
-def rule(code: str) -> Callable[[RuleFn], RuleFn]:
+def rule(code: str, directions: tuple[str, ...] = ("OUTBOUND",)) -> Callable[[RuleFn], RuleFn]:
     def decorate(fn: RuleFn) -> RuleFn:
         _REGISTRY[code] = fn
+        _DIRECTIONS[code] = directions
         return fn
 
     return decorate
+
+
+def applies_to(code: str) -> tuple[str, ...]:
+    return _DIRECTIONS[code]
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +200,32 @@ def account_takeover_sequence(ctx: RuleContext, params: dict[str, Any]) -> Signa
         severity=params.get("severity", "HIGH"),
         evidence={"precursors": precursors, "within_hours": within, "min_failed_logins": min_failed,
                   "payee_added_minutes": round(float(ctx.features.get("payee_added_minutes", -1.0)), 1)},
+    )
+
+
+@rule("MULE_INBOUND_FANIN", directions=("INBOUND",))
+def mule_inbound_fanin(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """Money arriving from many different senders, on a day unlike the account's normal (D78).
+
+    The receiving side of a mule ring: several victims, at other banks, pay one
+    account within hours. A trader also takes many senders a day, every day, so
+    the count of senders is judged together with the account's own normal: the
+    same inflow that is Tuesday for a market stall is an event for a salary
+    account.
+    """
+    min_senders = int(params.get("min_remitters", 3))
+    min_ratio = float(params.get("min_count_ratio", 5.0))
+    senders = int(ctx.features.get("distinct_remitters_24h_account", 0))
+    ratio = float(ctx.features.get("inbound_count_ratio_24h_vs_daily_mean_30d", 0.0))
+    if senders < min_senders or ratio < min_ratio:
+        return None
+    return Signal(
+        code="MULE_INBOUND_FANIN",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"distinct_remitters_24h": senders, "inbound_count_ratio_vs_normal_day": round(ratio, 2),
+                  "min_remitters": min_senders, "min_count_ratio": min_ratio,
+                  "credits_24h": int(ctx.features.get("credits_24h_account", 0))},
     )
 
 
@@ -325,6 +361,7 @@ def established_payee_normal(ctx: RuleContext, params: dict[str, Any]) -> Signal
 ALL_RULE_CODES: tuple[str, ...] = (
     "VELOCITY_BURST_1H",
     "ACCOUNT_TAKEOVER_SEQUENCE",
+    "MULE_INBOUND_FANIN",
     "CARD_TESTING_PROBES",
     "SANCTIONED_BENEFICIARY",
     "KNOWN_MULE_BENEFICIARY",
@@ -346,6 +383,8 @@ def evaluate(ctx: RuleContext, configs: dict[str, dict[str, Any]]) -> list[Signa
     for code in ALL_RULE_CODES:
         config = configs.get(code)
         if not config or not config.get("enabled", True):
+            continue
+        if ctx.tx.direction not in _DIRECTIONS[code]:
             continue
         signal = _REGISTRY[code](ctx, config.get("params") or {})
         if signal is not None:

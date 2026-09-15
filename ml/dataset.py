@@ -93,79 +93,106 @@ def load_events(corpus_path: Path) -> list[dict]:
     return out
 
 
-def load_corpus(path: Path, limit: int | None = None) -> Corpus:
-    """Read JSONL, tokenise exactly as ingestion would, compute features.
+def credits_file(corpus_path: Path) -> Path:
+    """``corpus.jsonl`` -> ``corpus.credits.jsonl``, as the simulator writes it (D78)."""
+    return corpus_path.with_name(corpus_path.stem + ".credits.jsonl")
 
-    Tokenising here rather than reusing raw ids matters: the model must see the
-    same token shapes serving will produce, and any drift between the two
-    tokenisers would be a silent train/serve skew of its own.
-    """
+
+def _read(path: Path, limit: int | None = None) -> list[dict]:
     records: list[dict] = []
+    if not path.exists():
+        return records
     with path.open(encoding="utf-8") as fh:
         for i, line in enumerate(fh):
             if limit and i >= limit:
                 break
             records.append(json.loads(line))
+    return records
 
-    print(f"  loaded {len(records)} records")
 
-    # Shape them the way the transactions table would hold them.
-    rows = []
-    for r in records:
-        rows.append(
-            {
-                "occurred_at": _parse(r["occurred_at"]),
-                "amount_minor": r["amount_minor"],
-                "auth_result": r["auth_result"],
-                "subject_token": subject_token(r["customer_id"]),
-                "account_token": account_token(r["account_id"]),
-                "beneficiary_token": (
-                    beneficiary_token(r["beneficiary_account_id"])
-                    if r.get("beneficiary_account_id")
-                    else None
-                ),
-                "device_token": (
-                    device_token(r["device_fingerprint"]) if r.get("device_fingerprint") else None
-                ),
-            }
-        )
+def _row(r: dict) -> dict:
+    """One record shaped the way the transactions table holds it, tokenised as ingestion would."""
+    inbound = r.get("direction") == "INBOUND"
+    return {
+        "occurred_at": _parse(r["occurred_at"]),
+        "amount_minor": r["amount_minor"],
+        "auth_result": r["auth_result"],
+        "subject_token": subject_token(r["customer_id"]),
+        "account_token": account_token(r["account_id"]),
+        "beneficiary_token": (
+            beneficiary_token(r["beneficiary_account_id"]) if r.get("beneficiary_account_id") else None
+        ),
+        "device_token": device_token(r["device_fingerprint"]) if r.get("device_fingerprint") else None,
+        "direction": "INBOUND" if inbound else "OUTBOUND",
+        # D78: a remitter shares the account namespace, as at ingestion.
+        "remitter_token": account_token(r["remitter_account_id"]) if r.get("remitter_account_id") else None,
+    }
+
+
+def _tx(record: dict, row: dict) -> TxView:
+    return TxView(
+        transaction_ref=record["transaction_ref"],
+        occurred_at=row["occurred_at"],
+        amount_minor=record["amount_minor"],
+        currency=record["currency"],
+        channel=record["channel"],
+        instrument=record["instrument"],
+        rail=record["rail"],
+        subject_token=row["subject_token"],
+        account_token=row["account_token"],
+        beneficiary_token=row["beneficiary_token"],
+        device_token=row["device_token"],
+        ip_region=record.get("ip_region"),
+        merchant_category=record.get("merchant_category"),
+        auth_result=record["auth_result"],
+        decline_reason=record.get("decline_reason"),
+        account_opened_at=_parse(record.get("account_opened_at")),
+        last_activity_at=_parse(record.get("last_activity_at")),
+        product_type=record.get("product_type"),
+        origin_sol_id=record.get("origin_sol_id"),
+        direction=row["direction"],
+        remitter_token=row["remitter_token"],
+    )
+
+
+def load_corpus(path: Path, limit: int | None = None, target: str = "payments") -> Corpus:
+    """Read JSONL, tokenise exactly as ingestion would, compute features.
+
+    Tokenising here rather than reusing raw ids matters: the model must see the
+    same token shapes serving will produce, and any drift between the two
+    tokenisers would be a silent train/serve skew of its own.
+
+    History is always the whole bank: payments, credits (D78) and events (D77).
+    ``target`` chooses which rows get a feature vector: ``payments`` for the
+    model, ``credits`` for the receiving-side evaluation.
+    """
+    payments = _read(path, limit)
+    # A limited (smoke) load skips credits, whose file is not in step with a prefix.
+    credit_records = [] if limit else _read(credits_file(path))
+    print(f"  loaded {len(payments)} payments, {len(credit_records)} credits")
+
+    rows = [_row(r) for r in payments]
+    credit_rows = [_row(r) for r in credit_records]
 
     events = load_events(path)
     print(f"  loaded {len(events)} non-payment events")
 
     print("  building history index ...")
-    source = PandasHistorySource(rows, events)
+    source = PandasHistorySource(rows + credit_rows, events)
     del events
 
-    print("  computing features ...")
+    records, scored_rows = (credit_records, credit_rows) if target == "credits" else (payments, rows)
+    if target == "credits":
+        del payments, rows
+    print(f"  computing features for {len(records)} {target} ...")
     X = np.zeros((len(records), len(FEATURE_NAMES)), dtype=float)
     y = np.zeros(len(records), dtype=int)
     typology = np.empty(len(records), dtype=object)
     incident = np.empty(len(records), dtype=object)
     occurred = np.empty(len(records), dtype=object)
 
-    for i, (record, row) in enumerate(zip(records, rows)):
-        tx = TxView(
-            transaction_ref=record["transaction_ref"],
-            occurred_at=row["occurred_at"],
-            amount_minor=record["amount_minor"],
-            currency=record["currency"],
-            channel=record["channel"],
-            instrument=record["instrument"],
-            rail=record["rail"],
-            subject_token=row["subject_token"],
-            account_token=row["account_token"],
-            beneficiary_token=row["beneficiary_token"],
-            device_token=row["device_token"],
-            ip_region=record.get("ip_region"),
-            merchant_category=record.get("merchant_category"),
-            auth_result=record["auth_result"],
-            decline_reason=record.get("decline_reason"),
-            account_opened_at=_parse(record.get("account_opened_at")),
-            last_activity_at=_parse(record.get("last_activity_at")),
-            product_type=record.get("product_type"),
-            origin_sol_id=record.get("origin_sol_id"),
-        )
+    for i, (record, row) in enumerate(zip(records, scored_rows)):
+        tx = _tx(record, row)
         X[i] = to_vector(compute_features(tx, source.load(tx)))
         y[i] = 1 if record.get("is_fraud") else 0
         typology[i] = record.get("typology")

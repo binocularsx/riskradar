@@ -89,7 +89,10 @@ export default function Transactions() {
                   <td className="mono">{when(t.occurred_at)}</td>
                   <td className="mono dim">{t.transaction_ref.slice(0, 16)}…</td>
                   <td>{t.display_name || <span className="dim">—</span>}</td>
-                  <td className="num">{naira(t.amount_minor)}</td>
+                  <td className="num">
+                    {t.direction === 'INBOUND' ? '+' : ''}{naira(t.amount_minor)}
+                    {t.direction === 'INBOUND' && <div className="dim" style={{ fontSize: 11 }}>incoming</div>}
+                  </td>
                   <td className="muted">{t.channel.replace(/_/g, ' ')}</td>
                   <td className="muted">{t.rail}</td>
                   <td className="muted">
