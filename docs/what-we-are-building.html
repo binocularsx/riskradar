@@ -150,7 +150,7 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
 <div class="wrap">
 
   <header>
-    <div class="num">Risk Radar · scope and requirements · 10 September 2026</div>
+    <div class="num">Risk Radar · scope and requirements · 10 September 2026 · results updated 15 September 2026</div>
     <h1>What We Are Building</h1>
     <p class="standfirst">
       A plain-language description of the whole project: what it is, who uses it,
@@ -236,8 +236,8 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       </div>
       <div>
         <span class="mark y">it does</span>
-        <h4>Measures twelve things about each one</h4>
-        <p>Not "is this a big payment" but "is this big <em>for this customer</em>" — compared against their own history.</p>
+        <h4>Measures twenty-two things about each one</h4>
+        <p>Not "is this a big payment" but "is this big <em>for this customer</em>" — compared against their own history. It also reads what happened before the money moved (a new phone, a changed PIN, a swapped SIM) and money coming in to the account.</p>
       </div>
       <div>
         <span class="mark y">it does</span>
@@ -267,12 +267,12 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       <div>
         <span class="mark n">it does not</span>
         <h4>Block or reverse any payment</h4>
-        <p>It advises. A human acts. Building it to act automatically is a much larger responsibility and we are not taking it on.</p>
+        <p>It advises. A human acts. For two very precise warning signs it recommends a hold and flags the customer for a same-day call without waiting for an analyst, but whether the payment is held is still the bank's own decision.</p>
       </div>
       <div>
         <span class="mark n">it does not</span>
         <h4>Connect to a real bank</h4>
-        <p>No bank has agreed to work with us. Everything runs on our own infrastructure with invented data.</p>
+        <p>No bank has agreed to work with us. Everything runs on our own infrastructure with invented data. The connection points to a bank's core system, the national identity register and other banks are built, with stand-ins in their place until a bank plugs in.</p>
       </div>
       <div>
         <span class="mark n">it does not</span>
@@ -341,7 +341,7 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       What we can do — and have done — is make our invented data match every real
       published statistic we can find. Nigeria's interbank settlement body
       publishes annual fraud figures. Our invented fraud rate is
-      <strong>0.288%</strong> against their reported <strong>0.30%</strong>.
+      <strong>0.305%</strong> against their reported <strong>0.30%</strong>.
     </p>
 
     <div class="callout warn">
@@ -387,34 +387,42 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       <table>
         <thead><tr><th>Crime hidden from training</th><th>Trained model alone</th><th>Model plus written rules</th></tr></thead>
         <tbody>
-          <tr><td>Account takeover</td><td>0.77</td><td>0.78</td></tr>
-          <tr><td>Mule fan-out</td><td>0.44</td><td>0.91</td></tr>
-          <tr><td>Card testing</td><td><strong>0.00</strong></td><td>0.99</td></tr>
-          <tr style="background:var(--surface-2)"><td><strong>Average</strong></td><td><strong>0.40</strong></td><td><strong>0.89</strong></td></tr>
+          <tr><td>Account takeover</td><td>0.92</td><td>0.99</td></tr>
+          <tr><td>Mule fan-out</td><td>0.36</td><td>0.91</td></tr>
+          <tr><td>Card testing</td><td><strong>0.00</strong></td><td>0.98</td></tr>
+          <tr style="background:var(--surface-2)"><td><strong>Average</strong></td><td><strong>0.43</strong></td><td><strong>0.96</strong></td></tr>
         </tbody>
       </table>
     </div>
     <p>
       Read that as: <em>of every ten fraud incidents of a type it had never seen,
       the trained model on its own caught about four; the full system caught
-      about nine.</em> These figures are measured with the system held to the
-      team's real capacity of 120 alerts a day, on about 200 incidents of each
-      kind.
+      more than nine.</em> These figures are measured with the system held to the
+      team's chosen capacity of 75 alerts a day, on about 200 incidents of each
+      kind. On 10 September, before the system could see warning events and
+      incoming money, the full system averaged 0.89 at 120 alerts a day.
+      Held to that capacity it now raises about three false alerts for each
+      fraud, and flags nine-tenths of the money stolen.
     </p>
     <p>
       <strong>The zero is the most useful number here.</strong> Shown card
       testing, a pattern completely absent from its training, the model caught
-      none of 194. That is exactly what this kind of model does with something
+      one of 207. That is exactly what this kind of model does with something
       new, and it is the reason we keep a set of plainly written rules alongside
-      it rather than relying on the model alone. The rules caught 192 of 194 —
-      up from 185 once we fixed a bug that had been letting a "familiar payee"
+      it rather than relying on the model alone. The rules caught 202 of 207.
+      Earlier, on a previous set of test data, they went from 185 to 192 of 194 once we fixed a bug that had been letting a "familiar payee"
       rule lower the risk on card payments, which have no payee at all.
     </p>
     <p>
-      The two halves divide the work cleanly. <strong>The model is what catches
-      account takeover</strong> — the rules alone catch almost none of it.
+      The two halves divide the work. <strong>The model carries account
+      takeover</strong>: on its own it catches 0.92 of it. A new rule that watches
+      for warning signs before the money moves (a new phone and a changed PIN,
+      then a payment somewhere new) now catches 0.84 by itself, and together they
+      miss two in 210. That rule reads events our own program writes, so it is
+      the figure most likely to fall on a real bank's data.
       <strong>The rules are what catch card testing,</strong> and most mule
-      fan-out: on their own they catch 0.87 of it, and the model adds the rest.
+      fan-out: on their own they catch 0.89 of it. A rule that follows the money
+      in and then out again flags 85% of the money in mule rings, up from 64%.
     </p>
     <h3>Two trade-offs we chose, stated openly</h3>
     <ul>
@@ -422,10 +430,11 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       <li><strong>The probability is honest.</strong> We fixed the model so that a stated 0.30 really means about three in ten. That changed how many frauds we catch not at all; it changed whether the team's workload can be predicted from the settings. It can now.</li>
     </ul>
 
-    <h3>Two numbers we refuse to publish</h3>
+    <h3>Three numbers we refuse to publish as proven</h3>
     <ul>
       <li><strong>Accuracy.</strong> Roughly three payments in a thousand are fraud. A system that answers "not fraud" to everything is 99.7% accurate and completely useless. A measure that rewards doing nothing is worse than no measure.</li>
       <li><strong>Any figure that reached 100%.</strong> We had one — the system caught every mule fan-out. The check described in section 5 showed the rule was matching something our own program did every time, by construction. It has been withdrawn. Measured honestly, on a pattern hidden from training and with the workload capped, it now reads 0.91.</li>
+      <li><strong>How many analysts we would save, as a bank figure.</strong> Letting the system act on its two most precise warnings takes a third of the reviews off the desk (75 to 51 a day) with nothing missed, on our data. Right about 99 times in 100 on invented data is not a figure a bank should trust unread, so it waits for a trial alongside a real bank.</li>
     </ul>
   </section>
 
@@ -466,17 +475,21 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
         <thead><tr><th>Area</th><th>Decision</th></tr></thead>
         <tbody>
           <tr><td>Receiving payments, checking them, storing them</td><td>In. Built and working.</td></tr>
-          <tr><td>The twelve measurements, the trained model, the written rules, the verdict</td><td>In. Built and working.</td></tr>
+          <tr><td>The twenty-two measurements, the trained model, the nine written rules, the verdict</td><td>In. Built and working.</td></tr>
+          <tr><td>Warning events before a payment, and money coming in</td><td>In. Built and working.</td></tr>
+          <tr><td>Nigerian refund and notification clocks, the 24-hour customer flag</td><td>In. Built and working; the clock values still to confirm against the regulator's circular.</td></tr>
+          <tr><td>Sharing that flag with other banks, identity by BVN</td><td>In. Built up to the connection; the live link needs a bank.</td></tr>
+          <tr><td>Letting the system act on its most precise warnings</td><td>In. Built; a bank should trial it before trusting it.</td></tr>
           <tr><td>Grouping alerts into cases and the investigation workflow</td><td>In. Built and working.</td></tr>
           <tr><td>The screen analysts work on</td><td>In. Built and working.</td></tr>
           <tr><td>Sign-in, the four roles, the permanent record</td><td>In. Built and working.</td></tr>
           <tr><td>Settings screens for the administrator</td><td>In. Built and working.</td></tr>
-          <tr><td>Making our invented customers realistic and checking for giveaways</td><td><strong>In. In progress — highest priority.</strong></td></tr>
-          <tr><td>Testing each written rule individually against the data</td><td><strong>In. Not yet started.</strong></td></tr>
+          <tr><td>Making our invented customers realistic and checking for giveaways</td><td><strong>In. Done for payments; the ten newer measurements still to check.</strong></td></tr>
+          <tr><td>Testing each written rule individually against the data</td><td><strong>In. Six of nine done.</strong></td></tr>
           <tr><td>Nigerian geography in the invented data</td><td><strong>In. Not yet started.</strong></td></tr>
           <tr><td>Blocking or reversing payments</td><td>Out. Advisory only, permanently.</td></tr>
           <tr><td>Connecting to a bank's real systems</td><td>Out. Separate project.</td></tr>
-          <tr><td>Detecting networks of linked criminals</td><td>Out. Later version.</td></tr>
+          <tr><td>Detecting networks of linked criminals</td><td>Out. Later version. Following one account's money in and out again is built.</td></tr>
           <tr><td>Testing a new model on live traffic before switching to it</td><td>Out. Designed, not built.</td></tr>
         </tbody>
       </table>

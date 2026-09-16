@@ -45,6 +45,8 @@ PYTHON = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
 # Simulator truth for the alerting window. Git-ignored with the rest of ml/data.
 LABELS = REPO_ROOT / "ml" / "data" / "demo-tail-labels.jsonl"
 
+from riskradar.features.spec import CREDIT_HISTORY_DAYS  # noqa: E402
+
 
 def run(cmd: list[str], cwd: Path | None = None, quiet: bool = False) -> str:
     result = subprocess.run(
@@ -180,24 +182,27 @@ def wait_for_drain(label: str, timeout_s: float = 1800) -> None:
 def stage_data(args: argparse.Namespace) -> None:
     sim = REPO_ROOT / "simulator"
 
-    print("[1/5] loading history with alerting OFF")
-    print("      (baselines need history; nobody needs paging about last week)")
     # D68: one anchor and one seed for both runs, so the alerting window is the
     # same bank carrying on, not a new one. History stops where it begins.
-    anchor = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    run(
-        [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed),
-         "history", "--profile", "demo", "--batch-size", "500",
-         "--alerting-tail-hours", str(args.alerting_hours), "--skip-tail",
-         "--anchor", anchor],
-        cwd=sim,
-    )
-    # D76c: thirty days of history is about 360,000 payments plus credits and
-    # events to score (D77, D78); half an hour is no longer enough to drain it.
-    wait_for_drain("history", timeout_s=6 * 3600)
+    # --anchor with --from-step resumes a reset that failed after its history
+    # loaded, which took close to three hours on 15 Sep 2026.
+    anchor = args.anchor or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    print(f"      anchor {anchor} (pass --anchor {anchor} to resume)")
+    if args.from_step <= 1:
+        load_history(args, sim, anchor)
 
-    print("\n[2/5] deriving thresholds from that traffic against the alert budget")
-    run([str(PYTHON), "-u", "scripts/derive_thresholds.py", "--publish"])
+    if args.from_step <= 2:
+        print("\n[2/5] deriving thresholds from that traffic against the alert budget")
+        # D78c: the receiving-side rules read a 30-day credit mean, so in the
+        # first days of a fresh history every busy account looks unlike its
+        # "normal" day. On the 15 Sep reset the fan-in rule fired 1,000-1,800
+        # times a day in the first week and under 20 a day after the second,
+        # and measuring all thirty days put the rules alone at 532 a day. A
+        # bank switching this on would have years of history; the demo has one
+        # month. Thresholds are therefore derived from the second half of it,
+        # when the credit window is at least half full.
+        run([str(PYTHON), "-u", "scripts/derive_thresholds.py", "--publish",
+             "--last-days", str(CREDIT_HISTORY_DAYS // 2)])
 
     print("\n[3/5] replaying the last hours with alerting ON")
     print("      whatever case count falls out is what the budget implies")
@@ -215,6 +220,21 @@ def stage_data(args: argparse.Namespace) -> None:
 
     print("\n[5/5] summary")
     summarise()
+
+
+def load_history(args: argparse.Namespace, sim: Path, anchor: str) -> None:
+    print("[1/5] loading history with alerting OFF")
+    print("      (baselines need history; nobody needs paging about last week)")
+    run(
+        [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed),
+         "history", "--profile", "demo", "--batch-size", "500",
+         "--alerting-tail-hours", str(args.alerting_hours), "--skip-tail",
+         "--anchor", anchor],
+        cwd=sim,
+    )
+    # D76c: thirty days of history is about 360,000 payments plus credits and
+    # events to score (D77, D78); half an hour is no longer enough to drain it.
+    wait_for_drain("history", timeout_s=6 * 3600)
 
 
 def seed_worked_cases(seed: int) -> None:
@@ -389,7 +409,13 @@ def main() -> None:
         "--alerting-hours", type=float, default=24.0,
         help="how much recent traffic is allowed to raise alerts",
     )
+    parser.add_argument("--anchor", default=None,
+                        help="the history's anchor, printed by the run being resumed")
+    parser.add_argument("--from-step", type=int, choices=[1, 2, 3], default=1,
+                        help="resume the data stage at this step (2 or 3 need --anchor)")
     args = parser.parse_args()
+    if args.from_step > 1 and not args.anchor:
+        parser.error("--from-step 2 or 3 resumes an existing history: pass its --anchor")
 
     if args.stage == "schema":
         stage_schema()

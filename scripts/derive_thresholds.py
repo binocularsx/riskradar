@@ -42,6 +42,10 @@ def main() -> None:
     parser.add_argument("--budget", type=int, default=None, help="alerts/day (default: app_config)")
     parser.add_argument("--publish", action="store_true", help="write a new threshold version")
     parser.add_argument("--min-sample", type=int, default=2000)
+    parser.add_argument(
+        "--last-days", type=float, default=None,
+        help="measure only the most recent N days of traffic (default: all of it)",
+    )
     args = parser.parse_args()
 
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
@@ -58,9 +62,13 @@ def main() -> None:
               FROM decisions d
               JOIN transactions t ON t.id = d.transaction_id
              WHERE d.rule_only_mode = false
+               AND (%(last_days)s::float IS NULL
+                    OR t.occurred_at >= (SELECT max(occurred_at) FROM transactions)
+                                        - make_interval(secs => %(last_days)s::float * 86400))
              ORDER BY d.decided_at DESC
              LIMIT 500000
-            """
+            """,
+            {"last_days": args.last_days},
         ).fetchall()
 
         if len(rows) < args.min_sample:

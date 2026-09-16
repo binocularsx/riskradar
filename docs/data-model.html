@@ -40,7 +40,8 @@ p { margin: 0 0 3px; }
           border-radius: 3px; margin: 2px 0 3px; line-height: 1.5; }
 .dec td.k { color: var(--accent); }
 .dec td.t { font-weight: 600; white-space: nowrap; }
-.feat { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.feat { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.feat > div { display: grid; gap: 10px; }
 footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; font-size: 6.2pt; color: var(--ink-3); }
 @media print {
   @page { size: A4; margin: 10mm 13mm; }
@@ -53,7 +54,7 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
 <div class="page">
   <header>
     <h1>Risk Radar Data Model</h1>
-    <div class="meta">DEFINITIONS AND DECISIONS · ONE PAGE<br>FEATURE SPEC 1.1.0 · 11 SEPTEMBER 2026</div>
+    <div class="meta">DEFINITIONS AND DECISIONS<br>FEATURE SPEC 1.3.0 · 15 SEPTEMBER 2026</div>
   </header>
 
   <section>
@@ -67,7 +68,7 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
       <div class="arrow">correlated</div>
       <div class="node"><b>Case</b><span>the investigation · the only mutable record</span></div>
     </div>
-    <p><b>Decision</b> stores the probability, risk level, the rules' signals, the full feature snapshot and the versions of model, ruleset, thresholds and feature spec, so any decision can be reproduced months later. <b>Case</b> holds many alerts: a new alert joins an <b>open</b> case with the same <span class="mono">subject_token</span> (the customer, not the account) within <b>24 hours</b>; otherwise it opens a new case.</p>
+    <p><b>Decision</b> stores the probability, risk level, the rules' signals, the full feature snapshot and the versions of model, ruleset, thresholds and feature spec, so any decision can be reproduced months later. <b>Case</b> holds many alerts: a new alert joins an <b>open</b> case with the same <span class="mono">subject_token</span> (the customer, not the account) within <b>24 hours</b>; otherwise it opens a new case. Since spec 1.2.0 a payment is one type of <b>event</b> (D72): logins, device binding, credential and SIM changes, payee additions and credits share one envelope, are tokenised at the same boundary, and are read by measurements; only payments and credits are decided.</p>
   </section>
 
   <div class="cols">
@@ -87,7 +88,10 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
           <tr><td class="k">auth_result</td><td class="enum">APPROVED · DECLINED · FAILED · REVERSED — <b>an attempt</b></td></tr>
           <tr><td class="k">decline_reason</td><td>Coarse category, e.g. INSUFFICIENT_FUNDS; else empty</td></tr>
           <tr><td class="k">subject_token</td><td>One-way hash of the <b>customer</b>: what a case is about</td></tr>
-          <tr><td class="k">account_token</td><td>One-way hash of the <b>sending account</b>: what a baseline is about</td></tr>
+          <tr><td class="k">account_token</td><td>One-way hash of <b>our customer's account</b>: what a baseline is about</td></tr>
+          <tr><td class="k">direction</td><td class="enum">OUTBOUND (a payment) · INBOUND (a credit, D78)</td></tr>
+          <tr><td class="k">remitter_token</td><td>Credits only: hashed sending account, with its bank code</td></tr>
+          <tr><td class="k">bvn_token</td><td>Hashed BVN, stamped at intake from the core system (D75); keys the industry watch-list</td></tr>
           <tr><td class="k">beneficiary_token</td><td>One-way hash of the receiving account; empty for card, cash</td></tr>
           <tr><td class="k">device_token</td><td>Hashed device fingerprint</td></tr>
           <tr><td class="k">ip_region</td><td>Coarse region, never a raw IP address</td></tr>
@@ -119,7 +123,8 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
             <tr><td class="k">D21</td><td class="t">Attempts, not successes</td><td>Without refusals, card testing is invisible and reversals count money twice.</td></tr>
             <tr><td class="k">D22</td><td class="t">Stamp, never join</td><td>Joining today's account table would leak the future into training and change old decisions.</td></tr>
             <tr><td class="k">D15</td><td class="t">One measurement package</td><td>Training and live call the same functions; a test proves identical numbers.</td></tr>
-            <tr><td class="k">D25</td><td class="t">Twelve measurements</td><td>Cut from about fifteen to pay for the identity work.</td></tr>
+            <tr><td class="k">D25, D77–78</td><td class="t">Twelve, then twenty-two</td><td>Twelve cut from fifteen to pay for the identity work; five event and five credit measurements added once their data existed.</td></tr>
+            <tr><td class="k">D78b</td><td class="t">The model reads seventeen</td><td>The five receiving-side measurements made unseen takeover worse (0.991 to 0.857); rules read them, every decision stores all.</td></tr>
             <tr><td class="k">D64</td><td class="t">−1 and the cap</td><td>The old marker 999 read as a trusted old payee and helped hide card-testing fraud.</td></tr>
             <tr><td class="k">D10f</td><td class="t">No borrowed scores</td><td>Never train on another party's "risk", "score", "rate" or "fraud" column unless its code can be read.</td></tr>
           </tbody>
@@ -129,9 +134,10 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
   </div>
 
   <section>
-    <h2>The twelve measurements taken on every payment (feature spec 1.1.0)</h2>
+    <h2>The twenty-two measurements taken on every payment and credit (feature spec 1.3.0)</h2>
     <div class="feat">
       <table>
+        <thead><tr><th colspan="2">The payment and the account · D25, D64</th></tr></thead>
         <tbody>
           <tr><td class="k">amount_log10</td><td>Size of the payment, log scale</td></tr>
           <tr><td class="k">amount_ratio_to_account_p95_30d</td><td>÷ the account's largest usual payment</td></tr>
@@ -139,10 +145,6 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
           <tr><td class="k">approved_value_ratio_24h_vs_daily_mean_30d</td><td>Money out today ÷ a normal day</td></tr>
           <tr><td class="k">failed_attempts_1h_account</td><td>Refused or failed, last hour</td></tr>
           <tr><td class="k">decline_rate_24h_account</td><td>Share of today's attempts refused</td></tr>
-        </tbody>
-      </table>
-      <table>
-        <tbody>
           <tr><td class="k">distinct_beneficiaries_1h_account</td><td>Destinations paid, last hour</td></tr>
           <tr><td class="k">beneficiary_is_new_to_account</td><td>1 if never paid by this account</td></tr>
           <tr><td class="k">beneficiary_first_seen_days</td><td>Days since the bank first saw it (0 = new)</td></tr>
@@ -151,8 +153,30 @@ footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; f
           <tr><td class="k">days_since_account_activity</td><td>Days the account had been quiet</td></tr>
         </tbody>
       </table>
+      <div>
+      <table>
+        <thead><tr><th colspan="2">Before the money moved · events · D77</th></tr></thead>
+        <tbody>
+          <tr><td class="k">failed_logins_1h_subject</td><td>Failed logins for the customer, last hour</td></tr>
+          <tr><td class="k">device_bound_hours</td><td>Hours since this device was bound; capped at 72</td></tr>
+          <tr><td class="k">credential_changed_hours</td><td>Hours since a PIN or password change; capped at 72</td></tr>
+          <tr><td class="k">sim_changed_hours</td><td>Hours since a SIM swap; capped at 72</td></tr>
+          <tr><td class="k">payee_added_minutes</td><td>Minutes since this destination was enrolled</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th colspan="2">Money coming in · credits · D78, rules only</th></tr></thead>
+        <tbody>
+          <tr><td class="k">credits_24h_account</td><td>Credits into the account, last day</td></tr>
+          <tr><td class="k">distinct_remitters_24h_account</td><td>Different senders, last day</td></tr>
+          <tr><td class="k">inbound_count_ratio_24h_vs_daily_mean_30d</td><td>Credits today ÷ a normal day</td></tr>
+          <tr><td class="k">minutes_since_last_credit</td><td>Since money last arrived; capped at a day</td></tr>
+          <tr><td class="k">pass_through_ratio_24h</td><td>Money out ÷ money in, last day</td></tr>
+        </tbody>
+      </table>
+      </div>
     </div>
-    <p style="margin-top:3px"><b>−1 means "does not apply"</b> (no destination, no date) and sits outside every real range. <b>Ratios are capped at 100.</b> History looked at: account 30 days, customer 30 days, destinations 90 days. The spec version is stored on every decision.</p>
+    <p style="margin-top:3px"><b>−1 means "does not apply"</b> (no destination, no date) and sits outside every real range. <b>Ratios are capped at 100.</b> History looked at: account 30 days, customer 30 days, destinations 90 days, events 72 hours, credits 30 days. Outgoing history reads OUTBOUND only, so no older measurement changed meaning when credits arrived. The spec version is stored on every decision.</p>
   </section>
 
   <footer>Sources: PRD §6 and §10, <span class="mono">backend/riskradar/features/spec.py</span>, <span class="mono">docs/decisions.md</span>. Synthetic data only; before any real data, an NDPA 2023 lawful-basis assessment and retention schedule are required.</footer>

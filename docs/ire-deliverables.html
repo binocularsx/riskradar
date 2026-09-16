@@ -63,15 +63,15 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
 <body>
 <div class="wrap">
 
-  <div class="kicker">Risk Radar · work deliverables · ML and data · 11 September 2026</div>
+  <div class="kicker">Risk Radar · work deliverables · ML and data · updated 15 September 2026</div>
   <h1>Ire's Deliverables</h1>
   <p class="lede">What Ire owns, what is finished, what is still to do, and the number
   that says each item is done.</p>
 
   <div class="box">
     <p><strong>Ire owns the data foundation and the evidence for detection:</strong> the
-    simulator that generates the bank's customers and its fraud, the twelve measurements
-    taken on every payment, the trained model, and every evaluation that says how well
+    simulator that generates the bank's customers and its fraud, the twenty-two measurements
+    taken on every payment, the sign-in and credit events behind them, the trained model, and every evaluation that says how well
     the rules and the model work. Chidera wires these into the live system; Ire's job is
     to make sure what goes in is realistic and what comes out is measured honestly.</p>
   </div>
@@ -80,34 +80,42 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
   <table>
     <thead><tr><th>Area</th><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td>Simulator</td><td>Fraud rate against Nigeria's interbank settlement body (NIBSS)</td><td class="v">≈ 0.30%</td><td class="v">0.296%</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Simulator</td><td>Fraud incidents available to test on</td><td class="v">≥ 600</td><td class="v">604</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Simulator</td><td>Measurements that give fraud away on their own</td><td class="v">0 over 15%</td><td class="v">0 · worst 5.6%</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Simulator</td><td>Fraud rate against Nigeria's interbank settlement body (NIBSS)</td><td class="v">≈ 0.30%</td><td class="v">0.305%</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Simulator</td><td>Fraud incidents available to test on</td><td class="v">≥ 600</td><td class="v">600</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Simulator</td><td>Measurements that give fraud away on their own</td><td class="v">0 over 15%</td><td class="v">0 · worst 5.6% (first twelve)</td><td><span class="chip part">re-run for the ten new</span></td></tr>
       <tr><td>Simulator</td><td>Normal behaviour checked against published Nigerian figures</td><td class="v">key shares</td><td class="v">fraud rate only</td><td><span class="chip part">partly</span></td></tr>
-      <tr><td>Measurements</td><td>Same twelve numbers in training and live</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Model</td><td>Honesty of its probability (stated ÷ actual, where alerts are raised)</td><td class="v">≥ 0.90</td><td class="v">0.92</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Measurements</td><td>Same twenty-two numbers in training and live (spec 1.3.0, events and credits included)</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Model</td><td>Honesty of its probability (stated ÷ actual, where alerts are raised)</td><td class="v">≥ 0.90</td><td class="v">0.919</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Model</td><td>Calibration error where alerts are raised</td><td class="v">≤ 0.04</td><td class="v">0.032</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Evaluation</td><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.777</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Evaluation</td><td>Mule fan-out caught, never seen in training</td><td class="v">—</td><td class="v">0.909</td><td><span class="chip met">up from 0.649</span></td></tr>
-      <tr><td>Evaluation</td><td>Card testing caught, never seen in training</td><td class="v">≥ 0.90</td><td class="v">0.990</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Evaluation</td><td>Every rule measured on its own</td><td class="v">all six</td><td class="v">three</td><td><span class="chip part">partly</span></td></tr>
+      <tr><td>Evaluation</td><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.991</td><td><span class="chip met">met · partly written in (D77d)</span></td></tr>
+      <tr><td>Evaluation</td><td>Mule fan-out caught, never seen in training</td><td class="v">—</td><td class="v">0.913</td><td><span class="chip met">up from 0.874 with the second leg</span></td></tr>
+      <tr><td>Evaluation</td><td>Card testing caught, never seen in training</td><td class="v">≥ 0.90</td><td class="v">0.976</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Evaluation</td><td>False alerts per fraud incident, time-ordered test at 75 a day</td><td class="v">below 12–14</td><td class="v">2.9 : 1</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Evaluation</td><td>Share of fraud value detected</td><td class="v">60–70%</td><td class="v">90.4%</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Evaluation</td><td>Analyst reviews a day after machine actions, detection unchanged</td><td class="v">below 75</td><td class="v">50.9</td><td><span class="chip part">shadow first (D80c)</span></td></tr>
+      <tr><td>Evaluation</td><td>Every rule measured on its own</td><td class="v">all nine</td><td class="v">six</td><td><span class="chip part">partly</span></td></tr>
       <tr><td>Validation</td><td>Public dataset with invented labels (PaySim)</td><td class="v">run</td><td class="v">done</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Validation</td><td>Public dataset with real fraud labels (IEEE-CIS)</td><td class="v">run</td><td class="v">blocked</td><td><span class="chip not">blocked</span></td></tr>
     </tbody>
   </table>
   <p style="font-size:9.5pt;color:var(--ink-2)">"Never seen in training" means that kind of fraud was hidden from the model while it
-  learned, with the team held to 120 alerts a day. Average across the three: <strong>0.892</strong>
-  (decision D67a). On its own the model scores 0.403, below a single raw measurement; it is useful
-  only alongside the rules, and must always be described that way.</p>
+  learned, with the team held to 75 alerts a day (D76). Average across the three: <strong>0.960</strong>
+  (decision D79a; it was 0.892 at 120 a day before the event, credit and second-leg work). On its own the
+  model scores 0.430, below a single raw measurement (0.494); it is useful only alongside the rules, and
+  must always be described that way. The takeover figure is partly shaped by the simulator, which writes
+  the sign-in events the new rule reads (D77d).</p>
 
   <h2>Finished — Ire presents these at the defence</h2>
   <ul>
     <li><strong>The simulator.</strong> Customers of four kinds (ordinary, salary earner, small business, trader) who own one to three accounts, keep habits, pay known and new people. Three kinds of fraud generated as criminal processes, not as rule thresholds: account takeover, mule fan-out, card testing. Identities now come from the seed, so the same seed rebuilds the same bank (D68).</li>
-    <li><strong>The twelve measurements</strong>, one shared package for training and live, with a test proving they match. Version 1.1.0: "does not apply" is marked −1, ratios are capped at 100 (D64).</li>
+    <li><strong>The twenty-two measurements</strong>, one shared package for training and live, with a test proving they match. Version 1.3.0: five read sign-in, device, SIM and payee events (D77), five read money coming in (D78); "does not apply" is marked −1, ratios are capped at 100 (D64). The model reads seventeen: giving it the five receiving-side measurements cut unseen takeover from 0.991 to 0.857, so they stay with the rules (D78b).</li>
+    <li><strong>The event and credit layers</strong> in the simulator: sign-in failures, device binding, credential and SIM changes, payee additions, and inbound credits with mule rings, each on its own random stream so the payments stay byte-identical (D77c, D78d). The corpus is now anchored to a date, so it rebuilds exactly.</li>
+    <li><strong>The three new detectors, each tuned and measured before going live</strong>: account takeover sequence (D77b), inbound fan-in on a month of history (D78c), and the second leg, which took mule-ring value flagged from 63.5% to 84.9% (D79a).</li>
+    <li><strong>The budget menu and the tier study</strong>: detection, false alerts and fraud value at every budget on a time-ordered test (D70a), and the measurement that machine actions take 24 alerts a day off the analysts at precision 0.992 with detection unchanged; refilling and auto-close were tested and rejected (D80a, D80b).</li>
     <li><strong>The calibrated model</strong>: gradient-boosted trees, trained on older data and adjusted on newer data it never saw, so its probability means what it says (D60–D61).</li>
     <li><strong>The held-out evaluation</strong>: six approaches compared on identical data at the same alert budget, with 95% ranges on every figure (D59, D63, D65, D67a).</li>
     <li><strong>The self-audit</strong> that caught eight "giveaway" measurements in our own data and led to the realistic population (D57), and the reproduction of the earlier dataset's result (D56).</li>
-    <li><strong>PaySim validation</strong>: 65% of fraud value caught while catching 18% of fraud transactions; six of our twelve measurements cannot fire on PaySim, which we state rather than hide.</li>
+    <li><strong>PaySim validation</strong>: 65% of fraud value caught while catching 18% of fraud transactions; six of the original twelve measurements cannot fire on PaySim, and none of the ten event and credit measurements can, which we state rather than hide.</li>
   </ul>
 
   <h2>Still to do</h2>
@@ -131,29 +139,29 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
   </div>
 
   <div class="task">
-    <h3><span class="n">3</span> Measure the last three rules one at a time <span class="chip part">3 of 6 done</span></h3>
+    <h3><span class="n">3</span> Measure the last three rules one at a time <span class="chip part">6 of 9 done</span></h3>
     <dl>
-      <dt>Why</dt><dd>The Blueprint requires every rule to be tested on its own and dropped if the data does not support it. Card testing (right 99.8% of the time), the payment-burst rule (D67) and the familiar-payee rule (D64) are done.</dd>
+      <dt>Why</dt><dd>The Blueprint requires every rule to be tested on its own and dropped if the data does not support it. Card testing (right 99.8% of the time), the payment-burst rule (D67), the familiar-payee rule (D64), and the three added since (D77b, D78c, D79) are done.</dd>
       <dt>What</dt><dd>For "saved payee" (lowers risk): how often it fires on fraud, which would hide it. For "sanctioned destination" and "known mule destination" (override everything): seed test lists and confirm they fire on every listed destination and nowhere else.</dd>
       <dt>Done when</dt><dd>Each of the three has a firing rate, a share of fraud it wrongly lowers or correctly catches, and a keep-or-drop recommendation logged in the decision log.</dd>
     </dl>
   </div>
 
   <div class="task">
-    <h3><span class="n">4</span> Give the demo bank a longer memory <span class="chip part">cause found</span></h3>
+    <h3><span class="n">4</span> Give the demo bank a longer memory <span class="chip met">done · burst rule 37/day</span></h3>
     <dl>
       <dt>Why</dt><dd>The payment-burst rule now fires only on payments to a destination new to the bank. The demo bank remembers about 3 days, so a third of its payments look "new" and the rule fires about 50 times a day, 5 of them on fraud; in the 30-day training data it fires about 34 times a day (D67d).</dd>
-      <dt>What</dt><dd>Lengthen the demo profile's history (in <span class="mono">simulator/riskradar_sim/generate.py</span>) from 4 days towards 21–30, and measure how long the demo rebuild then takes.</dd>
-      <dt>Done when</dt><dd>On a rebuilt demo the rule fires at most about 35 times a day, the whole system stays within 120 alerts a day, and the rebuild time is written in the README.</dd>
+      <dt>What</dt><dd>Lengthen the demo profile's history (in <span class="mono">simulator/riskradar_sim/generate.py</span>) from 4 days towards 21–30, and measure how long the demo rebuild then takes. <strong>Done: 30 days (D76c).</strong> Rebuilt on 15 September: 414,239 history transactions (payments and credits) took 1 h 47 min to load and 34 min to score. In the live day the burst rule raised 37 alerts, just over the 35 aimed for; the whole system raised 72 against 75 and caught all three incidents. The receiving-side rules need the history's second half to settle (D78f).</dd>
+      <dt>Done when</dt><dd>On a rebuilt demo the rule fires at most about 35 times a day, the whole system stays within its alert budget (now 75 a day), and the rebuild time is written in the README.</dd>
     </dl>
   </div>
 
   <div class="task">
-    <h3><span class="n">5</span> Support the team's alert-budget decision <span class="chip part">evidence ready</span></h3>
+    <h3><span class="n">5</span> Support the team's alert-budget decision <span class="chip met">done · 75 a day</span></h3>
     <dl>
       <dt>Why</dt><dd>With the new rule, a smaller budget cuts false alarms sharply: 120 a day gives about 75 false alarms, 75 a day about 33, 60 a day about 20. The cost is account takeover never seen before: 0.777 at 120, 0.703 at 75, 0.658 at 60 (D67c).</dd>
       <dt>What</dt><dd>Walk the team through the trade-off; once they choose, re-run <span class="mono">ml/evaluate_system.py</span> at the chosen budget and confirm the figures quoted in the Blueprint.</dd>
-      <dt>Done when</dt><dd>The team's choice is logged as a decision and every document quotes the figures for that budget.</dd>
+      <dt>Done when</dt><dd>The team's choice is logged as a decision and every document quotes the figures for that budget. <strong>Done: 75 a day (D76); the held-out figures above are at 75.</strong></dd>
     </dl>
   </div>
 
@@ -167,9 +175,9 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
   </ul>
 
   <footer>
-    Sources: <span class="mono">ml/artifacts/system-evaluation.json</span>, <span class="mono">calibration.json</span>,
+    Sources: <span class="mono">ml/artifacts/evaluation-20260915.1334-final.json</span>,
     <span class="mono">own-corpus-audit.json</span>, <span class="mono">public-validation-paysim.json</span>,
-    <span class="mono">budget-sweep-gated.json</span>; <span class="mono">docs/validation-plan.md</span>; decisions D56–D68 in
+    <span class="mono">system-evaluation-75.json</span>, <span class="mono">budget-menu.json</span>, <span class="mono">tiers.json</span>; <span class="mono">docs/validation-plan.md</span>; decisions D56–D80 in
     <span class="mono">docs/decisions.md</span>. Companion: Risk Radar Blueprint.
   </footer>
 </div>

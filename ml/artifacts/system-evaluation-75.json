@@ -257,6 +257,6 @@
   "limitations": [
     "The card-testing rule gates on instrument == CARD; the offline evaluation approximates that gate from the decline signature, so this measures the architecture rather than replaying the live path exactly.",
     "Rule list membership (sanctioned, known mule, allowlist) is empty offline, so the two OVERRIDE rules and one SUPPRESS rule contribute nothing here. In production they would.",
-    "47 to 57 incidents per typology. Wilson intervals are roughly 0.17 wide, so any two arms within about 0.10 of each other are not distinguishable on this corpus."
+    "183 to 210 incidents per typology. 95% intervals are up to about 0.14 wide, so arms whose intervals overlap are not distinguishable on this corpus."
   ]
 }

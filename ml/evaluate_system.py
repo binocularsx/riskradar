@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -187,6 +188,19 @@ def score(y: np.ndarray, flagged: np.ndarray, incident_id: np.ndarray, label: st
         "ci95": [round(lo, 3), round(hi, 3)],
         "alerts": int(flagged.sum()),
     }
+
+
+def _size_limitation(counts: list[int]) -> str:
+    """The sample-size caveat, from the incidents actually counted.
+
+    It used to be a fixed sentence written for a corpus of about 50 incidents a
+    typology, and stayed in every report after the corpus grew fourfold.
+    """
+    lo, hi = min(counts), max(counts)
+    width = 2 * 1.96 * math.sqrt(0.25 / lo)  # widest Wilson-like interval, at p = 0.5
+    return (f"{lo} to {hi} incidents per typology. 95% intervals are up to about "
+            f"{width:.2f} wide, so arms whose intervals overlap are not "
+            "distinguishable on this corpus.")
 
 
 def main() -> None:
@@ -373,9 +387,7 @@ def main() -> None:
             "Rule list membership (sanctioned, known mule, allowlist) is empty "
             "offline, so the two OVERRIDE rules and one SUPPRESS rule contribute "
             "nothing here. In production they would.",
-            "47 to 57 incidents per typology. Wilson intervals are roughly 0.17 "
-            "wide, so any two arms within about 0.10 of each other are not "
-            "distinguishable on this corpus.",
+            _size_limitation([arms[0]["incidents"] for arms in results.values()]),
         ],
     }
 
