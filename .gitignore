@@ -1,8 +1,15 @@
 # data
 data/raw/*
 data/processed/*
+data/public/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/public/.gitkeep
+
+# archives someone may drop in data/ (e.g. manual backups) - never committed
+*.rar
+*.zip
+*.7z
 
 # models
 models/*.pkl

@@ -1,5 +1,7 @@
 # RiskRadar — ML / Data Engineering Progress Update #3
 
+> **Correction notice (2026-09-17):** the detection-capability claims in this update (recall/precision as evidence of a strong signal) were found to be misleading. See [ml-progress-update-5.md](ml-progress-update-5.md) for the full correction — the underlying dataset/leakage/engineering work described below remains valid.
+
 **Author:** Ire (ML / Data Engineer)
 **Covers:** PRD reconciliation, leakage removal, model swap, held-out evaluation, unseen-typology test
 **Status:** Third addition — calibration and alert-budget decision to follow next
