@@ -150,7 +150,7 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
 <div class="wrap">
 
   <header>
-    <div class="num">Risk Radar · scope and requirements · 10 September 2026 · results updated 15 September 2026</div>
+    <div class="num">Risk Radar · scope and requirements · 10 September 2026 · results updated 17 September 2026</div>
     <h1>What We Are Building</h1>
     <p class="standfirst">
       A plain-language description of the whole project: what it is, who uses it,
@@ -236,7 +236,7 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       </div>
       <div>
         <span class="mark y">it does</span>
-        <h4>Measures twenty-two things about each one</h4>
+        <h4>Measures twenty-six things about each one</h4>
         <p>Not "is this a big payment" but "is this big <em>for this customer</em>" — compared against their own history. It also reads what happened before the money moved (a new phone, a changed PIN, a swapped SIM) and money coming in to the account.</p>
       </div>
       <div>
@@ -290,10 +290,12 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
   <!-- ============================================= -->
   <section>
     <div class="num">04</div>
-    <h2>The three kinds of fraud we detect</h2>
+    <h2>The seven kinds of fraud we detect</h2>
     <p>
-      We model three, chosen because they are structurally different from one
-      another — which matters for testing, as section 6 explains.
+      We started with three, chosen because they are structurally different from
+      one another, which matters for testing, as section 6 explains. We added four
+      more because they are what Nigerian banks report losing money to, and none
+      of the first three covers them.
     </p>
 
     <div class="tablewrap">
@@ -314,6 +316,26 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
             <td><strong>Card testing</strong></td>
             <td>A thief with a stolen card makes many tiny payments to find out whether it still works, then one large one.</td>
             <td>A run of small payments, most of them refused, followed by a big one that goes through.</td>
+          </tr>
+          <tr>
+            <td><strong>Scams (social engineering)</strong></td>
+            <td>A caller posing as the bank, a relative or an investment persuades real customers to send money themselves.</td>
+            <td>Several customers, on their own phones, paying the same brand-new account on the same day, larger sums than usual.</td>
+          </tr>
+          <tr>
+            <td><strong>SIM swap</strong></td>
+            <td>The thief moves the customer's phone number to a new SIM, receives the one-time codes, and drains the account.</td>
+            <td>A SIM change, then within hours transfers over USSD or the app to people the customer never paid, often at night.</td>
+          </tr>
+          <tr>
+            <td><strong>Dormant accounts</strong></td>
+            <td>Someone who knows an account has been forgotten changes its phone number or email and empties it.</td>
+            <td>An account quiet for months suddenly sending a large sum somewhere new.</td>
+          </tr>
+          <tr>
+            <td><strong>Cloned cards</strong></td>
+            <td>A skimmed card is used at ATM after ATM, shops and agents, away from home, before the owner notices.</td>
+            <td>Several card uses within the hour in a state the customer has not been to this month.</td>
           </tr>
         </tbody>
       </table>
@@ -387,42 +409,46 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
       <table>
         <thead><tr><th>Crime hidden from training</th><th>Trained model alone</th><th>Model plus written rules</th></tr></thead>
         <tbody>
-          <tr><td>Account takeover</td><td>0.92</td><td>0.99</td></tr>
-          <tr><td>Mule fan-out</td><td>0.36</td><td>0.91</td></tr>
-          <tr><td>Card testing</td><td><strong>0.00</strong></td><td>0.98</td></tr>
-          <tr style="background:var(--surface-2)"><td><strong>Average</strong></td><td><strong>0.43</strong></td><td><strong>0.96</strong></td></tr>
+          <tr><td>Account takeover</td><td>1.00</td><td>1.00</td></tr>
+          <tr><td>Mule fan-out</td><td>0.71</td><td>0.96</td></tr>
+          <tr><td>Card testing</td><td>0.47</td><td>1.00</td></tr>
+          <tr><td>SIM swap</td><td>0.93</td><td>0.97</td></tr>
+          <tr><td>Dormant account</td><td>0.67</td><td>0.87</td></tr>
+          <tr><td>Social engineering (scams)</td><td>0.42</td><td>0.52</td></tr>
+          <tr><td>Card cloning</td><td>0.20</td><td>0.43</td></tr>
+          <tr style="background:var(--surface-2)"><td><strong>Average</strong></td><td><strong>0.63</strong></td><td><strong>0.82</strong></td></tr>
         </tbody>
       </table>
     </div>
     <p>
       Read that as: <em>of every ten fraud incidents of a type it had never seen,
-      the trained model on its own caught about four; the full system caught
-      more than nine.</em> These figures are measured with the system held to the
-      team's chosen capacity of 75 alerts a day, on about 200 incidents of each
-      kind. On 10 September, before the system could see warning events and
-      incoming money, the full system averaged 0.89 at 120 alerts a day.
-      Held to that capacity it now raises about three false alerts for each
-      fraud, and flags nine-tenths of the money stolen.
+      the trained model on its own caught about six; the full system caught about
+      eight.</em> These figures are measured with the system held to the team's
+      chosen capacity of 75 alerts a day, on 141 to 544 incidents of each kind. The
+      first three kinds did not fall when the other four were added (before: 0.99,
+      0.91, 0.98). Held to that capacity it raises two false alerts for each fraud,
+      and flags about four-fifths of the money stolen.
     </p>
     <p>
-      <strong>The zero is the most useful number here.</strong> Shown card
-      testing, a pattern completely absent from its training, the model caught
-      one of 207. That is exactly what this kind of model does with something
-      new, and it is the reason we keep a set of plainly written rules alongside
-      it rather than relying on the model alone. The rules caught 202 of 207.
-      Earlier, on a previous set of test data, they went from 185 to 192 of 194 once we fixed a bug that had been letting a "familiar payee"
-      rule lower the risk on card payments, which have no payee at all.
+      <strong>The weakest rows are the most useful here.</strong> Shown cloned cards
+      it had never seen, the model on its own caught one in five; shown card testing,
+      under half. That is what this kind of model does with something new, and it is
+      the reason we keep plainly written rules alongside it. The rules caught every
+      card-testing incident. Scams are the honest hard case: a school's fees account
+      or a funeral collection is also paid by many customers in a day, so the rule
+      is deliberately narrow and the pair catches only half. That is the kind of
+      fraud where real outcomes from a bank would help most.
     </p>
     <p>
       The two halves divide the work. <strong>The model carries account
-      takeover</strong>: on its own it catches 0.92 of it. A new rule that watches
+      takeover</strong>: on its own it catches all of it. A new rule that watches
       for warning signs before the money moves (a new phone and a changed PIN,
-      then a payment somewhere new) now catches 0.84 by itself, and together they
-      miss two in 210. That rule reads events our own program writes, so it is
+      then a payment somewhere new) catches 0.88 by itself. That rule reads events our own program writes, so it is
       the figure most likely to fall on a real bank's data.
       <strong>The rules are what catch card testing,</strong> and most mule
-      fan-out: on their own they catch 0.89 of it. A rule that follows the money
-      in and then out again flags 85% of the money in mule rings, up from 64%.
+      fan-out: on their own they catch 0.94 of it. Some of these new figures are
+      partly written in too: every simulated SIM swap has a SIM change before it,
+      because every real one does.
     </p>
     <h3>Two trade-offs we chose, stated openly</h3>
     <ul>
@@ -433,8 +459,8 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
     <h3>Three numbers we refuse to publish as proven</h3>
     <ul>
       <li><strong>Accuracy.</strong> Roughly three payments in a thousand are fraud. A system that answers "not fraud" to everything is 99.7% accurate and completely useless. A measure that rewards doing nothing is worse than no measure.</li>
-      <li><strong>Any figure that reached 100%.</strong> We had one — the system caught every mule fan-out. The check described in section 5 showed the rule was matching something our own program did every time, by construction. It has been withdrawn. Measured honestly, on a pattern hidden from training and with the workload capped, it now reads 0.91.</li>
-      <li><strong>How many analysts we would save, as a bank figure.</strong> Letting the system act on its two most precise warnings takes a third of the reviews off the desk (75 to 51 a day) with nothing missed, on our data. Right about 99 times in 100 on invented data is not a figure a bank should trust unread, so it waits for a trial alongside a real bank.</li>
+      <li><strong>Any figure that reached 100%.</strong> We had one — the system caught every mule fan-out. The check described in section 5 showed the rule was matching something our own program did every time, by construction. It has been withdrawn. Measured honestly, on a pattern hidden from training and with the workload capped, it now reads 0.96.</li>
+      <li><strong>How many analysts we would save, as a bank figure.</strong> Letting the system act on its two most precise warnings takes about a quarter of the reviews off the desk (75 to 58 a day) with nothing missed, on our data. Right about 96 times in 100 on invented data is not a figure a bank should trust unread, so it waits for a trial alongside a real bank.</li>
     </ul>
   </section>
 
@@ -460,7 +486,7 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
 
     <h3>What would settle it properly</h3>
     <ol>
-      <li><strong>Test on real fraud labels.</strong> One public set exists with genuine outcomes, and it is behind an account check that a person has to complete.</li>
+      <li><strong>Test on real fraud labels.</strong> One public set exists with genuine outcomes (IEEE-CIS). The tool that runs our system on anybody's data is built, and has already run on three files we did not make: on PaySim a model retrained there ranks fraud a hundred times better than chance, and two Nigerian transaction files turned out to have fraud labels unrelated to anything in them, so no detector could be measured on them. IEEE-CIS is next.</li>
       <li><strong>Check our invented normal against published statistics.</strong> Partly done; more to do.</li>
       <li><strong>Run it alongside a real bank's system for a month or two, alerting nobody.</strong> This is the only thing that truly answers the question, and it needs a bank.</li>
     </ol>
@@ -475,7 +501,10 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
         <thead><tr><th>Area</th><th>Decision</th></tr></thead>
         <tbody>
           <tr><td>Receiving payments, checking them, storing them</td><td>In. Built and working.</td></tr>
-          <tr><td>The twenty-two measurements, the trained model, the nine written rules, the verdict</td><td>In. Built and working.</td></tr>
+          <tr><td>The twenty-six measurements, the trained model, the thirteen written rules, the verdict</td><td>In. Built and working.</td></tr>
+          <tr><td>Scams, SIM swaps, dormant accounts and cloned cards</td><td>In. Built and measured; scams and cloned cards are the weakest.</td></tr>
+          <tr><td>Running the system on somebody else's transaction data</td><td>In. Built; three files run, one with real labels to come.</td></tr>
+          <tr><td>Following a case from alert to closed, and seeing who else is linked to it</td><td>In. Built and working.</td></tr>
           <tr><td>Warning events before a payment, and money coming in</td><td>In. Built and working.</td></tr>
           <tr><td>Nigerian refund and notification clocks, the 24-hour customer flag</td><td>In. Built and working; the clock values still to confirm against the regulator's circular.</td></tr>
           <tr><td>Sharing that flag with other banks, identity by BVN</td><td>In. Built up to the connection; the live link needs a bank.</td></tr>
@@ -485,7 +514,7 @@ footer { border-top: 1px solid var(--line); margin-top: 44px; padding-top: 26px;
           <tr><td>Sign-in, the four roles, the permanent record</td><td>In. Built and working.</td></tr>
           <tr><td>Settings screens for the administrator</td><td>In. Built and working.</td></tr>
           <tr><td>Making our invented customers realistic and checking for giveaways</td><td><strong>In. Done for payments; the ten newer measurements still to check.</strong></td></tr>
-          <tr><td>Testing each written rule individually against the data</td><td><strong>In. Six of nine done.</strong></td></tr>
+          <tr><td>Testing each written rule individually against the data</td><td><strong>In. Ten of thirteen done.</strong></td></tr>
           <tr><td>Nigerian geography in the invented data</td><td><strong>In. Not yet started.</strong></td></tr>
           <tr><td>Blocking or reversing payments</td><td>Out. Advisory only, permanently.</td></tr>
           <tr><td>Connecting to a bank's real systems</td><td>Out. Separate project.</td></tr>

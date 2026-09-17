@@ -205,36 +205,36 @@
   </section>
 
   <section class="standing" id="where-it-stands">
-    <p class="kicker">Where the build stands · 15 September 2026, all nine built, demo rebuilt</p>
-    <h2>All nine packages built, plus one the team added</h2>
-    <p class="narrow">Built, in order: WP-09, WP-05, WP-01, WP-06, WP-07, WP-02, WP-03, WP-04 and WP-08, and WP-06b, BVN identity with the industry watch-list, added because REG-NG-04 is a BVN list shared across banks. The desk runs at <strong>75 alerts a day</strong> (D76). Figures come from the anchored 120-day corpus with events and credits (D78d); earlier write-ups used a previous corpus, so small differences are the data, not a regression.</p>
+    <p class="kicker">Where the build stands · 17 September 2026</p>
+    <h2>All nine packages built, plus four the team added</h2>
+    <p class="narrow">Built, in order: WP-09, WP-05, WP-01, WP-06, WP-07, WP-02, WP-03, WP-04 and WP-08; then WP-06b (BVN identity), WP-10 (running the system on data we did not make), WP-11 (four Nigerian fraud types) and WP-12 (following a case to resolution, and who it is linked to). The desk runs at <strong>75 alerts a day</strong> (D76). Figures come from the 150-day corpus with seven fraud types (D82); earlier write-ups used three types on a 120-day corpus.</p>
 
     <div class="verdicts">
       <div class="vcard">
-        <div class="v">0.960</div>
-        <div class="k">Mean recall across the three fraud types, each hidden from training in turn: takeover 0.991, mule rings 0.913, card testing 0.976</div>
-        <span class="band mid">Partly shaped by the simulator (D77d)</span>
+        <div class="v">0.822</div>
+        <div class="k">Mean recall across seven fraud types, each hidden from training in turn: takeover 1.000, mule 0.960, card testing 1.000, SIM swap 0.972, dormant 0.872, scams 0.516, cloned cards 0.432</div>
+        <span class="band mid">Partly shaped by the simulator (D77d, D82c)</span>
       </div>
       <div class="vcard">
-        <div class="v">2.9 : 1</div>
-        <div class="k">False alerts per fraud incident on payments at 75/day, credit alerts reserved out of the budget</div>
+        <div class="v">2.0 : 1</div>
+        <div class="k">False alerts per fraud incident on a time-ordered test at 75/day, all seven types present</div>
         <span class="band good">Better than best-in-class 12–14</span>
       </div>
       <div class="vcard">
-        <div class="v">90.4%</div>
-        <div class="k">Share of fraud value detected; mule-ring value held on the onward payment rose from 63.5% to 84.9% with the second leg</div>
+        <div class="v">82.3%</div>
+        <div class="k">Share of fraud value flagged; lower than three types' 90.4% because seven now share the same 75 alerts</div>
         <span class="band good">Above the 60–70% band</span>
       </div>
       <div class="vcard">
-        <div class="v">51 / day</div>
-        <div class="k">Analyst reviews, down from 75: 24 machine actions a day at precision 0.992 handle the rest, detection unchanged</div>
-        <span class="band mid">Re-measure in shadow first (D80c)</span>
+        <div class="v">101.6×</div>
+        <div class="k">Ranking better than random on PaySim, data we did not write, after retraining there; the model as shipped reaches 1.9×</div>
+        <span class="band mid">Retrain on each bank's outcomes</span>
       </div>
     </div>
 
     <div class="note">
       <span class="tag">What the build measured and refused</span>
-      <p>Giving the payment model the receiving-side features made it <strong>worse</strong> on account takeover it had never seen (0.991 fell to 0.857), so they stay with the rules (D78b). Refilling the analysts' freed capacity with model alerts more than doubled false reviews for 2.6 points of value, so the capacity is kept (D80a). Auto-closing the lowest model alerts lost no incident but cost fraud value, so it is built and switched off (D80b).</p>
+      <p>The first three fraud types did not fall when four were added (0.991, 0.913, 0.976 before). Tuning the new rules caught three faults before anything shipped: a region check that hid a cloned card's own run, dormant accounts that were not dormant, and a giveaway check comparing card cash-outs with transfers (D82a). Two Nigerian transaction files, 5.09 and 1 million rows, have fraud labels no detector can learn from, even with their own score columns (D81a). Closing a confirmed-fraud case was failing and is fixed (D83a).</p>
     </div>
 
     <div class="tablewrap">
@@ -243,9 +243,9 @@
           <tr><th>Next</th><th>What it does</th><th>Can start</th><th>Why it waits or goes</th></tr>
         </thead>
         <tbody>
-          <tr><td class="v">Reset</td><td>Rebuild the demo on 30 days of history</td><td><span class="chip ok">Done 15 Sep</span></td><td>72 alerts in the live day against 75; all three fraud incidents caught. Thresholds come from the history's second half, because the credit rules need that long to settle (D78f).</td></tr>
-          <tr><td class="v">Documents</td><td>Refresh the Blueprint, What We Are Building, deliverables, data model and PDFs</td><td><span class="chip ok">Done 15 Sep</span></td><td>Every figure now at 75 a day on the anchored corpus; the demo's own numbers come from the reset.</td></tr>
-          <tr class="now"><td class="v">Before the defence</td><td>Re-run the speed test; audit the ten new measurements for giveaways</td><td><span class="chip">Open</span></td><td>The 0.88 s figure predates events and credits; the giveaway check covered the first twelve only.</td></tr>
+          <tr class="now"><td class="v">IEEE-CIS</td><td>Run the system on real chargeback labels</td><td><span class="chip ok">When the files arrive</span></td><td>Mapping and join script are ready (D81c). Confirms the model and method on labels we did not write; the Nigerian transfer rules mostly cannot fire on card e-commerce data.</td></tr>
+          <tr><td class="v">Demo rebuild</td><td>Rebuild the simulated demo bank with seven fraud types</td><td><span class="chip chg">When the replay is done</span></td><td>The database holds the Nigerian dataset replay; a rebuild takes about three hours and replaces it.</td></tr>
+          <tr><td class="v">Before the defence</td><td>Re-run the speed test and calibration on the new corpus</td><td><span class="chip">Open</span></td><td>The 0.88 s and 0.919 figures predate events, credits and the new types.</td></tr>
           <tr><td class="v">Bank track</td><td>Finacle, NIBSS, synchronous directives, shadow traffic</td><td><span class="chip">With a sponsor</span></td><td>Deferred, not undecided: D71e, D74c, D75d, D77d, D78e, D80c.</td></tr>
         </tbody>
       </table>
@@ -607,6 +607,9 @@
           <tr><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D78 · credits scored by rules · 73% of mule rings at 7.3/day</td></tr>
           <tr><td class="v">WP-04</td><td>The second leg</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D79 · mule value flagged 63.5% to 84.9% at 75/day</td></tr>
           <tr><td class="v">WP-08</td><td>Spend the budget by tier</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D80 · analyst reviews 75 to 51/day, detection unchanged</td></tr>
+          <tr><td class="v">WP-10</td><td>Measure the system on data we did not make</td><td><span class="chip ok">Built</span></td><td class="v">17 Sep 2026</td><td>D81 · PaySim retrained 101.6x random · Nigerian files unusable · IEEE-CIS mapped</td></tr>
+          <tr><td class="v">WP-11</td><td>Four Nigerian fraud types</td><td><span class="chip ok">Built</span></td><td class="v">17 Sep 2026</td><td>D82 · seven types held out, mean 0.822 at 75/day · first three did not fall</td></tr>
+          <tr><td class="v">WP-12</td><td>Follow a case to resolution, and who it is linked to</td><td><span class="chip ok">Built</span></td><td class="v">17 Sep 2026</td><td>D83, D84 · migration 0015 · live desk, case tracker, connections</td></tr>
         </tbody>
       </table>
     </div>
@@ -791,7 +794,7 @@
     <strong>Sources.</strong> Benchmarks: <a href="https://www.feedzai.com/blog/fraud-benchmarking/">Feedzai, How Top Banks Benchmark Fraud Performance</a> (value detection rate tiers; false-positive ratios of 12:1–14:1 best-in-class, strong banks beyond 30:1) · <a href="https://www.ibm.com/think/insights/fraud-detection-no-longer-limited-models-limited-by-operations">IBM, Why operational capacity is becoming the binding constraint in fraud detection</a>.
     Regulation: <a href="https://techcabal.com/2025/12/02/nigerian-banks-16-days-fraud-refund-cbn/">CBN Exposure Draft, Guidelines for Handling Authorised Push Payment Fraud, 26 Nov 2025</a> · <a href="https://nairametrics.com/2026/03/13/cbn-tightens-bvn-rules-introduces-fraud-watchlist-for-banking-customers/">CBN Addendum to the Revised BVN Framework, 12 Mar 2026, effective 1 May 2026</a> · <a href="https://www.outseer.com/blog/2026-nacha-rule-change-proactive-fraud-monitoring-requirement">Nacha 2026 fraud-monitoring rule, receiving-side monitoring phased Mar–Jun 2026</a>.
     Practice: <a href="https://www.trustsphere.ai/post/mule-detection-at-the-receive-side-receiving-bank-real-time-defence-playbook">Mule detection at the receive side</a> · <a href="https://www.adaptivesecurity.com/blog/account-takeover-detection">Account takeover detection signals and controls</a>.
-    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k, D70–D80 · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
+    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k, D70–D84 · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
     <br><br>
     The APP guidelines are an exposure draft — clock values are as published in the draft and in reporting on it, and should be re-checked against the final circular before any of WP-05 is treated as settled. The BVN addendum is in force.
   </footer>

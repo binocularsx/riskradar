@@ -63,7 +63,7 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
 <body>
 <div class="wrap">
 
-  <div class="kicker">Risk Radar · work deliverables · backend and database · updated 15 September 2026</div>
+  <div class="kicker">Risk Radar · work deliverables · backend and database · updated 17 September 2026</div>
   <h1>Chidera's Deliverables</h1>
   <p class="lede">What Chidera owns, what is finished, what is still to do, and the number
   that says each item is done. The endpoints Paul's dashboard depends on are in the
@@ -85,9 +85,9 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
     <tbody>
       <tr><td>Speed</td><td>Payment to decision, 95% of the time (NFR-001)</td><td class="v">under 2 s</td><td class="v">0.88 s</td><td><span class="chip part">pass · re-run after events</span></td></tr>
       <tr><td>Load</td><td>Payments lost in a five-times burst (NFR-002)</td><td class="v">0</td><td class="v">0</td><td><span class="chip met">pass</span></td></tr>
-      <tr><td>Workload</td><td>Alerts per day, whole system</td><td class="v">≤ 75</td><td class="v">72 in the rebuilt demo day (15 Sep)</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Workload</td><td>Alerts per day, whole system</td><td class="v">≤ 75</td><td class="v">72 in the rebuilt demo day (15 Sep, before D82)</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Record</td><td>Entries that can be edited or deleted</td><td class="v">none</td><td class="v">none · hash-chained, checkable</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Measurements</td><td>Same twenty-two numbers live as in training, events and credits included</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Measurements</td><td>Same twenty-six numbers live as in training, events and credits included (spec 1.4.1)</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Roles</td><td>Administrator can open a case</td><td class="v">never</td><td class="v">never (refused by the server)</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Sign-in</td><td>Two-step sign-in for lead and administrator</td><td class="v">mandatory</td><td class="v">mandatory</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Advice</td><td>Every case has an action, steps and a reason</td><td class="v">100%</td><td class="v">100%</td><td><span class="chip met">met</span></td></tr>
@@ -95,12 +95,14 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
       <tr><td>Advice</td><td>Bank's own procedure loaded</td><td class="v">yes</td><td class="v">our playbook, replaceable</td><td><span class="chip part">partly</span></td></tr>
       <tr><td>Dashboard</td><td>Endpoints the full dashboard needs</td><td class="v">all</td><td class="v">four gaps listed</td><td><span class="chip part">partly</span></td></tr>
       <tr><td>Governance</td><td>False alarms per rule and per model (base PRD FR-505)</td><td class="v">reported</td><td class="v">built; demo evidence thin</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Governance</td><td>Every rule has an owner, reason and review date (FR-504)</td><td class="v">all</td><td class="v">all nine</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Governance</td><td>Every rule has an owner, reason and review date (FR-504)</td><td class="v">all</td><td class="v">all thirteen</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Record</td><td>Who opened each case is recorded (FR-408)</td><td class="v">every view</td><td class="v">every view</td><td><span class="chip met">met</span></td></tr>
-      <tr><td>Quality</td><td>Automated tests, against a real database</td><td class="v">all pass</td><td class="v">198 pass</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Quality</td><td>Automated tests, against a real database</td><td class="v">all pass</td><td class="v">215 pass</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Regulation</td><td>Refund and notification clocks in working days (REG-NG-05, -06)</td><td class="v">built</td><td class="v">built, breaches recorded once</td><td><span class="chip met">met</span></td></tr>
       <tr><td>Regulation</td><td>24-hour BVN flag, shared across banks (REG-NG-04)</td><td class="v">built</td><td class="v">built to the connection; NIBSS link needs a bank</td><td><span class="chip part">partly</span></td></tr>
-      <tr><td>Workload</td><td>Analyst reviews a day after machine actions</td><td class="v">below 75</td><td class="v">51 (measured, D80a)</td><td><span class="chip part">shadow first</span></td></tr>
+      <tr><td>Workflow</td><td>A case followed from alert to closed, through escalation and back (FR-404)</td><td class="v">every stage</td><td class="v">tested as analyst, InfoSec and lead</td><td><span class="chip met">met</span></td></tr>
+      <tr><td>Workflow</td><td>Closing a confirmed-fraud case</td><td class="v">works</td><td class="v">was failing; fixed (D83a)</td><td><span class="chip met">fixed</span></td></tr>
+      <tr><td>Workload</td><td>Analyst reviews a day after machine actions</td><td class="v">below 75</td><td class="v">57.9 (measured, D82b)</td><td><span class="chip part">shadow first</span></td></tr>
     </tbody>
   </table>
 
@@ -109,13 +111,17 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
     <li><strong>Intake.</strong> Single and batch payment endpoints; a repeated reference is recognised as a duplicate, not a second payment. Identities are one-way hashed on arrival and never stored readable (D9c, D19a).</li>
     <li><strong>Queue and workers.</strong> A database-backed queue with leases, so no payment is handed to two workers; a test proves it. Three workers keep up with a five-times burst without losing a payment.</li>
     <li><strong>Scoring.</strong> Measurements are computed once, then go to the rules and the model at the same time; the policy step alone combines their answers (see the Blueprint diagram). Every decision stores the versions that produced it, so it can be reproduced months later.</li>
-    <li><strong>Rules and policy.</strong> Nine rules of three powers (raise, override, lower), each for the direction it reads: outgoing payments, incoming credits, or both. The payment-burst rule looks at where money is going (D67). The whole-system alert budget, 75 a day (D76), spends rule alerts first and gives the model what is left.</li>
+    <li><strong>Rules and policy.</strong> Thirteen rules of three powers (raise, override, lower), each for the direction it reads: outgoing payments, incoming credits, or both. The payment-burst rule looks at where money is going (D67). The whole-system alert budget, 75 a day (D76), spends rule alerts first and gives the model what is left.</li>
     <li><strong>One event, not one transaction (D72).</strong> An event envelope for sign-ins, device binding, credential and SIM changes, payee additions and credits, validated and tokenised at the same boundary as payments; the account takeover sequence rule reads them (D77).</li>
     <li><strong>Money coming in (D78, D79).</strong> Credits are ingested and decided by receiving-side rules, never by the payment model; the payment that moves a fan-in on is caught as the second leg and lands in the same case.</li>
     <li><strong>Regulatory clocks (D71).</strong> Customer report time, milestones recorded once, clocks in Lagos working days with public holidays, and a breach recorded once and escalated.</li>
     <li><strong>The 24-hour flag and BVN identity (D73, D75).</strong> A flag that ends on its own and escalates a missed contact; BVN tokens stamped at intake through replaceable adapters for the core banking system, the identity registry and the industry watch-list, each running on a stand-in until a bank connects.</li>
     <li><strong>Directives a bank can act on (D74).</strong> A signed, versioned decision per payment written in the scoring transaction, with fetch, feed and acknowledgement endpoints, failing open, in shadow until a bank turns it on.</li>
     <li><strong>Dispositions (D80).</strong> Every actionable decision is marked machine action, analyst review or auto-close from a versioned policy; machine-handled cases stay out of "take next", and Operations shows the day by tier.</li>
+    <li><strong>Four Nigerian fraud types (D82).</strong> Rules for a scam's collection account, a transfer hours after a SIM swap, a dormant account moving money, and a card used at terminal after terminal somewhere new, with the four measurements they read, tuned by a stated criterion, and a migration that adds them to an existing database.</li>
+    <li><strong>The case workflow (D83).</strong> Recommendations as checklists of steps recorded with their results; escalation with a required reason into the receiving team's own queue; hand-back with findings; awaiting-close for leads; the live desk and the case tracker. Four faults fixed on the way, including closing a confirmed-fraud case, which failed.</li>
+    <li><strong>Connections (D84).</strong> Who else paid a case's destinations or used its devices, with their case outcomes and a reputation line per identifier.</li>
+    <li><strong>Running the system on anybody's data (D81).</strong> The dataset evaluator and replay: map a file, measure every layer at the budget, and stream it into the live desk.</li>
     <li><strong>Case system.</strong> Alerts about one customer group into one case within 24 hours; response clocks per severity; a worklist ordered by severity, money and lateness; "take the next case" assigns it so two analysts never work the same one.</li>
     <li><strong>Recommendation engine.</strong> One action, numbered steps and a reason for every case, from a written playbook; the analyst's choice of whether they followed it is saved with every outcome.</li>
     <li><strong>Sign-in, roles and the record.</strong> Four roles, server-side sessions in a cookie scripts cannot read, two-step sign-in, and a permanent record where every entry is chained to the last; a check endpoint proves nothing was altered.</li>
@@ -191,7 +197,7 @@ footer { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 10px;
 
   <footer>
     Sources: <span class="mono">docs/qa-report.md</span> (NFR-001, NFR-002), <span class="mono">backend/riskradar/api/</span>,
-    <span class="mono">backend/riskradar/security/rbac.py</span>, decisions D9–D80 in <span class="mono">docs/decisions.md</span>.
+    <span class="mono">backend/riskradar/security/rbac.py</span>, decisions D9–D84 in <span class="mono">docs/decisions.md</span>.
     Companions: Dashboard API Contract, Ire's Deliverables, Risk Radar Blueprint, base-prd-alignment.md.
   </footer>
 </div>

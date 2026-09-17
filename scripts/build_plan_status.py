@@ -27,6 +27,13 @@ STATUS = [
     ("WP-03", "Watch the money coming in", "built", "15 Sep 2026", "D78 · credits scored by rules · 73% of mule rings at 7.3/day"),
     ("WP-04", "The second leg", "built", "15 Sep 2026", "D79 · mule value flagged 63.5% to 84.9% at 75/day"),
     ("WP-08", "Spend the budget by tier", "built", "15 Sep 2026", "D80 · analyst reviews 75 to 51/day, detection unchanged"),
+    # Added after the nine, on 16-17 September.
+    ("WP-10", "Measure the system on data we did not make", "built", "17 Sep 2026",
+     "D81 · PaySim retrained 101.6x random · Nigerian files unusable · IEEE-CIS mapped"),
+    ("WP-11", "Four Nigerian fraud types", "built", "17 Sep 2026",
+     "D82 · seven types held out, mean 0.822 at 75/day · first three did not fall"),
+    ("WP-12", "Follow a case to resolution, and who it is linked to", "built", "17 Sep 2026",
+     "D83, D84 · migration 0015 · live desk, case tracker, connections"),
 ]
 CHIP = {"built": ('ok', 'Built'), "doing": ('chg', 'In progress'), "todo": ('', 'Not started')}
 
@@ -44,8 +51,8 @@ def main() -> None:
         f'<td>{chip(s)}</td><td class="v">{date}</td><td>{ev}</td></tr>'
         for wp, title, s, date, ev in STATUS
     )
-    # Counted against the plan's nine; an added package (WP-06b) shows in the table.
-    planned = [row for row in STATUS if len(row[0]) == 5]
+    # Counted against the plan's nine; packages added later (WP-06b, WP-10 onward) show in the table.
+    planned = [row for row in STATUS if len(row[0]) == 5 and row[0] <= "WP-09"]
     built = sum(s == "built" for _, _, s, _, _ in planned)
     block = (
         "<!-- progress:start -->\n"

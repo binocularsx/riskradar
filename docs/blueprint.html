@@ -138,7 +138,7 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
 <div class="wrap">
 
   <header class="narrow">
-    <div class="kicker">Risk Radar · scope statement and product requirements · 11 September 2026 · figures updated 15 September 2026</div>
+    <div class="kicker">Risk Radar · scope statement and product requirements · 11 September 2026 · figures updated 17 September 2026</div>
     <h1>Risk Radar Blueprint</h1>
     <p class="lede">
       What we are building, in six parts. What each part is for, what it must do,
@@ -169,7 +169,7 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
     <h2>How the parts connect</h2>
     <figure>
       <div class="figframe">
-        <svg viewBox="0 0 980 410" role="img" aria-label="Payments flow left to right from the data foundation through the ingestion service into twenty-two measurements. At a fork, the same measurements go to the rules checklist and the trained model at once; the two work independently and neither sees the other's answer. Their answers meet for the first time at the policy step, which produces a verdict held to the team's alert budget. The verdict flows down to the recommendation engine, then leftwards into the case system and the dashboard, where analysts read and decide. Analyst outcomes flow back to the model as training labels. Every step writes to a permanent, uneditable record.">
+        <svg viewBox="0 0 980 410" role="img" aria-label="Payments flow left to right from the data foundation through the ingestion service into twenty-six measurements. At a fork, the same measurements go to the rules checklist and the trained model at once; the two work independently and neither sees the other's answer. Their answers meet for the first time at the policy step, which produces a verdict held to the team's alert budget. The verdict flows down to the recommendation engine, then leftwards into the case system and the dashboard, where analysts read and decide. Analyst outcomes flow back to the model as training labels. Every step writes to a permanent, uneditable record.">
           <defs>
             <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0 0 L10 5 L0 10 z" fill="currentColor"></path>
@@ -191,7 +191,7 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
 
             <rect x="375" y="70" width="130" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line-2)"></rect>
             <text x="440" y="95" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Measurements</text>
-            <text x="440" y="113" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">22 per event</text>
+            <text x="440" y="113" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">26 per event</text>
 
             <rect x="565" y="22" width="150" height="54" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"></rect>
             <text x="640" y="45" text-anchor="middle" font-size="13" font-weight="650" fill="var(--ink)">Rules checklist</text>
@@ -290,9 +290,11 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
         Every payment runs left to right along the top, and the result runs back
         along the bottom to the people who act on it. At the fork (the blue
         dot), the <em>same</em> measurements go to the rules and to the
-        model at once. The rules read all twenty-two; the model reads seventeen, because
+        model at once. The rules read all twenty-six; the model reads twenty-one, because
         the five about money coming in made it worse at fraud it had not seen, so they
-        are kept for the rules (D78b). Since 11 September the intake also takes sign-in,
+        are kept for the rules (D78b). Four measurements were added on 17 September for
+        the Nigerian fraud types below: a region new to the customer, card uses in the
+        hour, other customers paying the same destination, and the local hour (D82). Since 11 September the intake also takes sign-in,
         device, SIM and payee events and incoming credits (D72, D78), which is where
         those extra measurements come from. Neither waits for the other or sees the other's answer,
         which is what lets us measure what each one catches on its own. Their
@@ -330,9 +332,9 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
         <div class="tablewrap"><table>
           <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>Fraud rate</td><td class="v">≈ 0.30% (NIBSS)</td><td class="v">0.305%</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Fraud incidents to test on</td><td class="v">≥ 600</td><td class="v">600</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Measurements that give fraud away on their own</td><td class="v">0 over 15%</td><td class="v">0 · one at 5.6%, explained (first twelve)</td><td><span class="chip part">re-run for the ten new</span></td></tr>
+            <tr><td>Fraud rate</td><td class="v">≈ 0.30% (NIBSS)</td><td class="v">0.279%</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Fraud incidents to test on</td><td class="v">≥ 600</td><td class="v">1,455 · seven kinds</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Measurements that give fraud away on their own</td><td class="v">0 over 15%</td><td class="v">0 on the first twelve; three new ones separate their fraud type by definition</td><td><span class="chip part">stated (D82c)</span></td></tr>
             <tr><td>Checked against published channel and state figures</td><td class="v">all key shares</td><td class="v">fraud rate only</td><td><span class="chip part">partly</span></td></tr>
           </tbody>
         </table></div>
@@ -358,7 +360,12 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
           takeover sequence (two warning events such as a new device and a PIN change,
           then a payment to a new destination, D77b), money fanning in to an account
           from many senders (D78), and the payment that moves that money on, the
-          second leg (D79).
+          second leg (D79). Four more were added on 17 September for fraud Nigerian banks
+          report losing money to (D82): a new account several customers paid today (the
+          collection account of a scam), a new destination hours after the SIM changed,
+          a long-dormant account moving a large sum, and a card used at terminal after
+          terminal somewhere new. Each was tuned by a stated rule: the most of its own
+          fraud type at no more than five false alerts a day.
         </p>
         <h3>Must do</h3>
         <ul class="tight">
@@ -370,12 +377,14 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
           <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
           <tbody>
             <tr><td>Card-testing rule: how often it is right</td><td class="v">≥ 0.95</td><td class="v">0.998</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Card testing caught, new variant, rules alone</td><td class="v">≥ 0.90</td><td class="v">202 of 207 · 0.98</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Card testing caught, new variant, rules alone</td><td class="v">≥ 0.90</td><td class="v">165 of 165 · 1.00</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Payment-burst rule: share of daily budget</td><td class="v">≤ 60%</td><td class="v">~28% at 120 a day (5+ in an hour, to a destination new to the bank)</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>New mule fan-out caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.89 (was 0.41)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>New mule fan-out caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.94 (was 0.41)</td><td><span class="chip met">met</span></td></tr>
             <tr><td>"Familiar payee" rule firing where there is no payee</td><td class="v">never</td><td class="v">never (was 84% of its firings)</td><td><span class="chip met">fixed</span></td></tr>
-            <tr><td>Mule-ring fraud value flagged, with the second leg</td><td class="v">as high as budget allows</td><td class="v">84.9% (was 63.5%)</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Every rule measured on its own</td><td class="v">all nine</td><td class="v">six</td><td><span class="chip part">partly</span></td></tr>
+            <tr><td>Mule-ring fraud value flagged, with the second leg</td><td class="v">as high as budget allows</td><td class="v">72.3% · seven types now share the budget (was 84.9% for three)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>SIM swap caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.85 · by construction partly (D82c)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Scams caught by the rules alone</td><td class="v">as high as budget allows</td><td class="v">0.15 · group collections look the same</td><td><span class="chip not">left to the model</span></td></tr>
+            <tr><td>Every rule measured on its own</td><td class="v">all thirteen</td><td class="v">ten</td><td><span class="chip part">partly</span></td></tr>
           </tbody>
         </table></div>
       </div>
@@ -406,11 +415,12 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
         <div class="tablewrap"><table>
           <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">0.99 (rules alone 0.84, model alone 0.92)</td><td><span class="chip met">met · partly written in (D77d)</span></td></tr>
-            <tr><td>Honesty of its probability (stated ÷ actual)</td><td class="v">≥ 0.90</td><td class="v">0.919</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Account takeover caught, never seen in training</td><td class="v">≥ 0.70</td><td class="v">1.00 (rules alone 0.88, model alone 1.00)</td><td><span class="chip met">met · partly written in (D77d)</span></td></tr>
+            <tr><td>Honesty of its probability (stated ÷ actual)</td><td class="v">≥ 0.90</td><td class="v">0.919 (15 Sep corpus)</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Calibration error where alerts are raised</td><td class="v">≤ 0.04</td><td class="v">0.032</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Same numbers in training and live</td><td class="v">identical</td><td class="v">identical, tested</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Useful on its own</td><td class="v">—</td><td class="v">0.43 · below one raw measurement</td><td><span class="chip part">by design</span></td></tr>
+            <tr><td>Useful on its own</td><td class="v">—</td><td class="v">0.63 across seven types, below the rules and model together (0.82)</td><td><span class="chip part">by design</span></td></tr>
+            <tr><td>Works on data somebody else made, retrained there</td><td class="v">better than random</td><td class="v">PaySim: 101.6× random; as shipped 1.9×</td><td><span class="chip part">must be retrained per bank</td></tr>
           </tbody>
         </table></div>
       </div>
@@ -475,9 +485,9 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
           <tbody>
             <tr><td>Time from payment to decision (95% of the time)</td><td class="v">under 2 s</td><td class="v">0.88 s (11 Sep)</td><td><span class="chip part">met · re-run after events</span></td></tr>
             <tr><td>Payments lost in a 5× burst</td><td class="v">0</td><td class="v">0</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Alerts per day, whole system</td><td class="v">≤ 75</td><td class="v">72 in the rebuilt demo day (15 Sep)</td><td><span class="chip met">met</span></td></tr>
-            <tr><td>Analyst reviews a day, after machine actions</td><td class="v">below 75</td><td class="v">51 · detection unchanged (D80a)</td><td><span class="chip part">shadow first</span></td></tr>
-            <tr><td>False alerts per fraud incident</td><td class="v">below 12–14</td><td class="v">2.9 : 1</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Alerts per day, whole system</td><td class="v">≤ 75</td><td class="v">72 in the rebuilt demo day (15 Sep, before D82)</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>Analyst reviews a day, after machine actions</td><td class="v">below 75</td><td class="v">57.9 · detection unchanged (D82b)</td><td><span class="chip part">shadow first</span></td></tr>
+            <tr><td>False alerts per fraud incident</td><td class="v">below 12–14</td><td class="v">2.0 : 1</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Record edits possible</td><td class="v">none</td><td class="v">none · tamper-evident</td><td><span class="chip met">met</span></td></tr>
           </tbody>
         </table></div>
@@ -495,15 +505,16 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
         <h2>Dashboard — where the department works</h2>
         <p class="objective"><strong>Objective:</strong> let each person in the fraud department do their day's job from one screen: analysts clear cases, the lead sees whether the desk is coping, security handles break-ins, the administrator tunes settings.</p>
         <div class="grid2">
-          <div class="card"><h3>Fraud analyst</h3><ul><li>The next case handed to them, largest risk first</li><li>Money at risk, the recommendation, why it fired</li><li>One key to record the outcome</li></ul></div>
-          <div class="card"><h3>Fraud operations lead</h3><ul><li>Backlog, waiting times, who carries what</li><li>How many alerts turned out to be false</li><li>Signs off analysts' outcomes</li></ul></div>
-          <div class="card"><h3>Information security</h3><ul><li>Cases showing a break-in — new device, dormant account</li><li>Escalations routed to them</li></ul></div>
+          <div class="card"><h3>Fraud analyst</h3><ul><li>The live desk: what is arriving, waiting and expected this hour</li><li>The next case handed to them, largest risk first, with who else shares its destinations and devices</li><li>The recommendation as a checklist of steps, each recorded with its result; escalation with a reason</li></ul></div>
+          <div class="card"><h3>Fraud operations lead</h3><ul><li>The case tracker: every case by stage and how long it has waited</li><li>How many alerts turned out to be false</li><li>Closes cases whose outcome is recorded</li></ul></div>
+          <div class="card"><h3>Information security</h3><ul><li>Their own escalated queue, with the analyst's reason</li><li>Hands a case back with findings</li></ul></div>
           <div class="card"><h3>Administrator</h3><ul><li>Rules, thresholds, models, the record</li><li>No access to any case, by design</li></ul></div>
         </div>
         <div class="tablewrap"><table>
           <thead><tr><th>Measure</th><th>Target</th><th>Now</th><th>Status</th></tr></thead>
           <tbody>
             <tr><td>Keystrokes to record an outcome</td><td class="v">1</td><td class="v">1</td><td><span class="chip met">met</span></td></tr>
+            <tr><td>A case followed from alert to closed, through escalation and back</td><td class="v">every stage visible</td><td class="v">tested as analyst, InfoSec and lead (D83)</td><td><span class="chip met">met</span></td></tr>
             <tr><td>Cases past their response clock</td><td class="v">under 10%</td><td class="v">not yet measured with real users</td><td><span class="chip not">not yet</span></td></tr>
             <tr><td>Median time to decide a case</td><td class="v">under 3 min</td><td class="v">not yet measured</td><td><span class="chip not">not yet</span></td></tr>
           </tbody>
@@ -517,13 +528,23 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
     <h2>The number that sums it up</h2>
     <p>
       Shown a kind of fraud hidden from its training, with the team held to 75
-      alerts a day, the whole system catches <strong>about ninety-six incidents in
-      a hundred</strong> (0.96): account takeover 0.99, mule fan-out 0.91, card testing
-      0.98. It raises about three false alerts for every fraud incident, where the
-      best desks report twelve to fourteen, and it flags 90.4% of the money stolen.
-      The model is what carries account takeover; the rules carry card testing and
-      mule fan-out. Part of the takeover gain comes from warning events our own
-      simulator writes, so that figure is the one most likely to fall on real data (D77d).
+      alerts a day, the whole system catches <strong>about eight incidents in ten</strong>
+      (0.82) across seven kinds of fraud: account takeover 1.00, mule fan-out 0.96,
+      card testing 1.00, SIM swap 0.97, dormant accounts 0.87, scams 0.52, card
+      cloning 0.43. The first three did not fall when the other four were added. It
+      raises two false alerts for every fraud incident, where the best desks report
+      twelve to fourteen, and flags 82% of the money stolen. Scams and cloned cards
+      are the hard cases, because group payments and travellers look like them.
+      Several of these figures are partly written in: our own program writes the
+      warning signs our rules read (D77d, D82c).
+    </p>
+    <p>
+      On data we did not write, the picture is plainer. Retrained on PaySim, the
+      model ranks fraud a hundred times better than chance; the model trained on our
+      simulator, used as it ships, barely better than chance, so a bank must retrain
+      it on its own outcomes. Two Nigerian transaction files turned out to have
+      fraud labels no detector could learn from (D81a). A dataset with real
+      chargeback labels, IEEE-CIS, is ready to run.
     </p>
     <p>
       We can claim the method is sound and measured. We cannot yet claim it
@@ -553,8 +574,9 @@ footer { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 22px;
     </table></div>
 
     <footer>
-      Figures from the project's own measurements, updated 15 September 2026:
-      <span class="mono">system-evaluation-75.json</span>, <span class="mono">evaluation-20260915.1334-final.json</span>,
+      Figures from the project's own measurements, updated 17 September 2026:
+      <span class="mono">system-evaluation-75.json</span>, <span class="mono">evaluation-20260917.1500-final.json</span>,
+      <span class="mono">fraud-types-d82.json</span>, <span class="mono">datasets/*.evaluation.json</span>,
       <span class="mono">budget-menu.json</span>, <span class="mono">tiers.json</span>, <span class="mono">own-corpus-audit.json</span>
       and the load test. Each decision behind them is in the project decision log.
       Companions: <em>What We Are Building</em> and <em>What We Learned From Testing Both Approaches</em>.
