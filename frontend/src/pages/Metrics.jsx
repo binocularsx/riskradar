@@ -28,6 +28,11 @@ const DRIVER_NAME = {
   ACCOUNT_TAKEOVER_SEQUENCE: 'Takeover signs, then a new destination',
   MULE_INBOUND_FANIN: 'Credits from many senders',
   CARD_TESTING_PROBES: 'Card-testing probes',
+  SECOND_LEG_ONWARD_PAYMENT: 'Received money moving on',
+  SCAM_BENEFICIARY_FANIN: 'New account many customers paid today',
+  SIM_SWAP_TRANSFER: 'New destination after a SIM change',
+  DORMANT_ACCOUNT_REACTIVATION: 'Dormant account moving money',
+  CARD_PRESENT_NEW_REGION_CASHOUT: 'Card run somewhere new',
   SANCTIONED_BENEFICIARY: 'Sanctioned destination',
   KNOWN_MULE_BENEFICIARY: 'Known mule destination',
 }

@@ -49,7 +49,7 @@ def load_or_build(corpus_path: Path, *, rebuild: bool):
     cache = cache_path(corpus_path)
     if cache.exists() and not rebuild:
         blob = np.load(cache, allow_pickle=True)
-        if str(blob["spec_version"]) == FEATURE_SPEC_VERSION:
+        if str(blob["spec_version"]) == FEATURE_SPEC_VERSION and "instrument" in blob:
             print(f"  using cached features ({cache.name})")
 
             class Cached:
@@ -58,6 +58,11 @@ def load_or_build(corpus_path: Path, *, rebuild: bool):
                 typology = blob["typology"]
                 incident_id = blob["incident_id"]
                 occurred_at = blob["occurred_at"]
+                instrument = blob["instrument"]
+                channel = blob["channel"]
+                ip_region = blob["ip_region"]
+                has_beneficiary = blob["has_beneficiary"]
+                amount_minor = blob["amount_minor"]
 
             return Cached()
         print("  cache is for a different feature spec — rebuilding")
@@ -70,6 +75,11 @@ def load_or_build(corpus_path: Path, *, rebuild: bool):
         typology=corpus.typology,
         incident_id=corpus.incident_id,
         occurred_at=corpus.occurred_at,
+        instrument=corpus.instrument,
+        channel=corpus.channel,
+        ip_region=corpus.ip_region,
+        has_beneficiary=corpus.has_beneficiary,
+        amount_minor=corpus.amount_minor,
         spec_version=FEATURE_SPEC_VERSION,
     )
     print(f"  cached features to {cache.name}")

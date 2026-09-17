@@ -95,6 +95,27 @@ core's customer file, which the API reads to learn each customer's BVN. The
 identity and industry adapters are chosen in `.env` (see `.env.example`); the
 real Finacle and NIBSS adapters wait, visibly, until configured.
 
+### 6. Test it on somebody else's transactions (D81)
+
+Any transaction file (CSV, TSV, JSON lines; Parquet or Excel with pyarrow or
+openpyxl) can be run through the same measurements, rules and policy the live
+system uses:
+
+```bash
+# draft a column mapping, then read it, correct it and set reviewed: true
+python ml/evaluate_dataset.py suggest path/to/transactions.csv
+python ml/evaluate_dataset.py run path/to/transactions.csv --mapping path/to/transactions.mapping.yaml
+```
+
+It writes an HTML report, JSON and the alert list to `ml/artifacts/datasets/`:
+which of the 26 measurements and 13 rules the data can feed at all, then rules
+alone, the shipped model, a model retrained on the older part of the file, an
+anomaly score that never sees a label and amount alone, all at the same alert
+budget, with 95% ranges; and, when the file labels fraud types, a test that
+hides each type from training in turn. Columns somebody else computed (scores,
+risk, flags) are never used as inputs. Reviewed mappings for PaySim and the
+ElectricSheep Nigerian dataset are in `ml/datasets/`.
+
 ---
 
 ## Layout

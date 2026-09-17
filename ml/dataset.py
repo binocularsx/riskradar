@@ -42,6 +42,12 @@ class Corpus:
     typology: np.ndarray       # None for legitimate rows
     incident_id: np.ndarray
     occurred_at: np.ndarray
+    # D82: what the rules read from the transaction itself, not its features.
+    instrument: np.ndarray | None = None
+    channel: np.ndarray | None = None
+    ip_region: np.ndarray | None = None
+    has_beneficiary: np.ndarray | None = None
+    amount_minor: np.ndarray | None = None
     feature_names: tuple[str, ...] = FEATURE_NAMES
     spec_version: str = FEATURE_SPEC_VERSION
 
@@ -126,6 +132,10 @@ def _row(r: dict) -> dict:
         "direction": "INBOUND" if inbound else "OUTBOUND",
         # D78: a remitter shares the account namespace, as at ingestion.
         "remitter_token": account_token(r["remitter_account_id"]) if r.get("remitter_account_id") else None,
+        # D82: region and channel travel into history for region novelty and card-present counts.
+        "ip_region": r.get("ip_region"),
+        "channel": r.get("channel"),
+        "instrument": r.get("instrument"),
     }
 
 
@@ -190,6 +200,11 @@ def load_corpus(path: Path, limit: int | None = None, target: str = "payments") 
     typology = np.empty(len(records), dtype=object)
     incident = np.empty(len(records), dtype=object)
     occurred = np.empty(len(records), dtype=object)
+    instrument = np.empty(len(records), dtype=object)
+    channel = np.empty(len(records), dtype=object)
+    region = np.empty(len(records), dtype=object)
+    has_ben = np.zeros(len(records), dtype=bool)
+    amount = np.zeros(len(records), dtype=np.int64)
 
     for i, (record, row) in enumerate(zip(records, scored_rows)):
         tx = _tx(record, row)
@@ -198,10 +213,17 @@ def load_corpus(path: Path, limit: int | None = None, target: str = "payments") 
         typology[i] = record.get("typology")
         incident[i] = record.get("incident_id")
         occurred[i] = row["occurred_at"]
+        instrument[i] = record["instrument"]
+        channel[i] = record["channel"]
+        region[i] = record.get("ip_region")
+        has_ben[i] = bool(row["beneficiary_token"])
+        amount[i] = record["amount_minor"]
         if i and i % 50_000 == 0:
             print(f"    {i} / {len(records)}")
 
-    return Corpus(X=X, y=y, typology=typology, incident_id=incident, occurred_at=occurred)
+    return Corpus(X=X, y=y, typology=typology, incident_id=incident, occurred_at=occurred,
+                  instrument=instrument, channel=channel, ip_region=region, has_beneficiary=has_ben,
+                  amount_minor=amount)
 
 
 def holdout_typology_split(corpus: Corpus, held_out: str, rng_seed: int = 20260909):

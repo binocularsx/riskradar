@@ -118,11 +118,105 @@ class EventLayer:
                 out.extend(self._takeover_prelude(events))
             elif events[0].typology == "MULE_FANOUT":
                 out.extend(self._mule_enrolment(events))
+            elif events[0].typology == "SOCIAL_ENGINEERING":
+                out.extend(self._scam_prelude(events))
+            elif events[0].typology == "SIM_SWAP":
+                out.extend(self._sim_swap_prelude(events))
+            elif events[0].typology == "DORMANT_ACCOUNT":
+                out.extend(self._dormant_prelude(events))
 
         for pay in sorted(payments, key=lambda e: e.payload["occurred_at"]):
+            if pay.context:
+                out.extend(self._ordinary_context(pay))
             self._login(out, pay, fraud=pay.is_fraud)
             if not pay.is_fraud:
                 self._legit_payee(out, pay)
+        return out
+
+    # ------------------------------------------------------------ D82
+
+    def _ordinary_context(self, pay: Event) -> list[Event]:
+        """The legitimate twins' own history: a replaced SIM, a PIN reset at the branch."""
+        p = pay.payload
+        when = datetime.fromisoformat(p["occurred_at"])
+        cid = p["customer_id"]
+        if pay.context == "SIM_REPLACED":
+            return [self._event("SIM_CHANGED", when - timedelta(minutes=self.rng.uniform(20, 480)), cid,
+                                detail={"msisdn": _msisdn(cid), "carrier": self.rng.choice(["MTN", "AIRTEL", "GLO", "9MOBILE"])})]
+        if pay.context == "OWNER_RETURNING" and self.rng.random() < 0.3:
+            return [self._event("CREDENTIAL_CHANGED", when - timedelta(hours=self.rng.uniform(1, 30)), cid,
+                                detail={"credential": self.rng.choice(["PIN", "PASSWORD"]),
+                                        "initiated_by": self.rng.choice(["BRANCH", "CUSTOMER"])},
+                                channel="BRANCH" if self.rng.random() < 0.5 else "MOBILE_APP")]
+        return []
+
+    def _scam_prelude(self, events: list[Event]) -> list[Event]:
+        """The victim, coached on the phone, enrols the scammer's account and sometimes raises a limit."""
+        first = events[0].payload
+        cid = first["customer_id"]
+        start = datetime.fromisoformat(first["occurred_at"])
+        common = dict(device=first.get("device_fingerprint"), region=first.get("ip_region"),
+                      channel=first["channel"], fraud=events[0])
+        out: list[Event] = []
+        if self.rng.random() < 0.15:
+            old = self.rng.choice([200_000, 500_000]) * 100
+            out.append(self._event("LIMIT_CHANGED", start - timedelta(minutes=self.rng.uniform(5, 30)), cid,
+                                   account_id=first["account_id"],
+                                   detail={"limit": "DAILY_TRANSFER", "from_minor": old, "to_minor": old * 5}, **common))
+        seen: set[str] = set()
+        for e in events:
+            ben = e.payload.get("beneficiary_account_id")
+            if not ben or ben in seen or ben in self.payees[cid]:
+                continue
+            seen.add(ben)
+            if self.rng.random() < 0.75:
+                when = datetime.fromisoformat(e.payload["occurred_at"]) - timedelta(minutes=self.rng.uniform(1, 10))
+                out.append(self._event("PAYEE_ADDED", when, cid, account_id=e.payload["account_id"],
+                                       detail={"beneficiary_account_id": ben}, **common))
+        self.payees[cid] |= seen
+        return out
+
+    def _sim_swap_prelude(self, events: list[Event]) -> list[Event]:
+        """The number moves to the attacker's SIM; on the app, they log in with an OTP and bind their phone."""
+        first = events[0].payload
+        cid = first["customer_id"]
+        start = datetime.fromisoformat(first["occurred_at"])
+        out = [self._event("SIM_CHANGED", start - timedelta(minutes=self.rng.uniform(20, 480)), cid,
+                           detail={"msisdn": _msisdn(cid), "carrier": self.rng.choice(["MTN", "AIRTEL", "GLO", "9MOBILE"])},
+                           fraud=events[0])]
+        device = first.get("device_fingerprint")
+        if first["channel"] == "MOBILE_APP" and device:
+            login_at = start - timedelta(minutes=self.rng.uniform(2, 15))
+            common = dict(device=device, region=first.get("ip_region"), channel="MOBILE_APP", fraud=events[0])
+            out.append(self._event("LOGIN", login_at, cid, detail={"result": "SUCCESS", "method": "OTP"}, **common))
+            self.last_login[(cid, device)] = login_at
+            if self.rng.random() < 0.5:
+                out.append(self._event("DEVICE_BOUND", login_at + timedelta(minutes=1), cid,
+                                       detail={"binding": "BOUND"}, **common))
+        self.payees[cid] |= {e.payload.get("beneficiary_account_id") for e in events} - {None}
+        return out
+
+    def _dormant_prelude(self, events: list[Event]) -> list[Event]:
+        """The contact details change so no alert reaches the owner; then a login from somewhere new."""
+        first = events[0].payload
+        cid = first["customer_id"]
+        start = datetime.fromisoformat(first["occurred_at"])
+        out: list[Event] = []
+        if self.rng.random() < 0.55:
+            out.append(self._event("CREDENTIAL_CHANGED", start - timedelta(hours=self.rng.uniform(1, 48)), cid,
+                                   detail={"credential": self.rng.choice(["PHONE", "EMAIL"]),
+                                           "initiated_by": self.rng.choice(["BRANCH", "CONTACT_CENTRE"])},
+                                   channel="BRANCH", fraud=events[0]))
+        device = first.get("device_fingerprint")
+        if device and first["channel"] in LOGIN_METHOD:
+            login_at = start - timedelta(minutes=self.rng.uniform(2, 20))
+            common = dict(device=device, region=first.get("ip_region"), channel=first["channel"], fraud=events[0])
+            out.append(self._event("LOGIN", login_at, cid, detail={"result": "SUCCESS", "method": "OTP"}, **common))
+            self.last_login[(cid, device)] = login_at
+            if first["channel"] == "MOBILE_APP" and self.rng.random() < 0.7:
+                out.append(self._event("DEVICE_BOUND", login_at + timedelta(minutes=1), cid,
+                                       detail={"binding": "BOUND"}, **common))
+        self.payees[cid] |= {e.payload.get("beneficiary_account_id") for e in events} - {None}
         return out
 
     def _legit_payee(self, out: list[Event], pay: Event) -> None:

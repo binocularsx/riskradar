@@ -19,3 +19,11 @@ logs/
 # fixed seed, and far too large for version control:
 #   python -m riskradar_sim corpus --profile training --out ml/data/corpus.jsonl
 ml/data/
+
+# D81: dataset evaluation by-products. The JSON and HTML reports are kept; the
+# feature caches, alert lists, replay labels and service logs are rebuilt on demand.
+ml/artifacts/datasets/*.npz
+ml/artifacts/datasets/*.alerts.csv
+ml/artifacts/datasets/*.jsonl
+ml/artifacts/datasets/*.log
+ml/artifacts/*.log

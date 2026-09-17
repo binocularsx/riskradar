@@ -63,10 +63,8 @@ from sklearn.preprocessing import StandardScaler  # noqa: E402
 from dataset import holdout_typology_split  # noqa: E402
 from evaluate import load_or_build  # noqa: E402
 from metrics import threshold_for_alert_budget  # noqa: E402
-from riskradar.features.spec import FEATURE_NAMES  # noqa: E402
-from riskradar.features.types import TxView  # noqa: E402
+from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION  # noqa: E402
 from riskradar.policy.engine import Thresholds, apply as apply_policy  # noqa: E402
-from riskradar.rules.engine import RuleContext, evaluate as evaluate_rules  # noqa: E402
 from train import ALERT_BUDGET_PER_DAY, TYPOLOGIES, build_model  # noqa: E402
 
 # D77. The features read from non-payment events. ``--without-events`` removes
@@ -74,7 +72,7 @@ from train import ALERT_BUDGET_PER_DAY, TYPOLOGIES, build_model  # noqa: E402
 # was before WP-02.
 EVENT_FEATURES = ("failed_logins_1h_subject", "device_bound_hours", "credential_changed_hours",
                   "sim_changed_hours", "payee_added_minutes")
-EVENT_RULES = ("ACCOUNT_TAKEOVER_SEQUENCE",)
+EVENT_RULES = ("ACCOUNT_TAKEOVER_SEQUENCE", "SIM_SWAP_TRANSFER")
 # D78. The receiving-side features; ``--without-credits`` removes them.
 CREDIT_FEATURES = ("credits_24h_account", "distinct_remitters_24h_account",
                    "inbound_count_ratio_24h_vs_daily_mean_30d", "minutes_since_last_credit",
@@ -85,26 +83,10 @@ CREDIT_FEATURES = ("credits_24h_account", "distinct_remitters_24h_account",
 # the most obvious operational meaning.
 BASELINE_FEATURE = "txn_count_1h_account"
 
-# The seeded ruleset (scripts/seed.py). Read here rather than invented, so the
-# evaluation measures the rules that actually ship.
-RULE_CONFIGS = {
-    "VELOCITY_BURST_1H": {"enabled": True, "params": {"min_count": 5, "new_destination_days": 1, "no_destination_min_count": 10}},  # D67
-    "ACCOUNT_TAKEOVER_SEQUENCE": {"enabled": True, "params": {"within_hours": 24, "min_failed_logins": 3, "min_precursors": 2}},  # D77
-    "MULE_INBOUND_FANIN": {"enabled": True, "params": {"min_remitters": 3, "min_count_ratio": 5.0}},  # D78 (credits only)
-    "SECOND_LEG_ONWARD_PAYMENT": {"enabled": True, "params": {"min_remitters": 3, "min_count_ratio": 5.0,
-                                  "max_minutes_since_credit": 180, "min_pass_through": 0.5}},  # D79
-    "CARD_TESTING_PROBES": {
-        "enabled": True,
-        "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3},
-    },
-    "SANCTIONED_BENEFICIARY": {"enabled": True, "params": {}},
-    "KNOWN_MULE_BENEFICIARY": {"enabled": True, "params": {}},
-    "PRE_REGISTERED_BENEFICIARY": {"enabled": True, "params": {}},
-    "ESTABLISHED_PAYEE_NORMAL": {
-        "enabled": True,
-        "params": {"min_beneficiary_age_days": 60, "max_amount_ratio": 1.0},
-    },
-}
+# The seeded ruleset (scripts/seed.py), kept in ml/offline_rules.py so every
+# offline script measures the same rules (D82). Re-exported here for callers.
+from offline_rules import RULE_CONFIGS, compute_signals  # noqa: E402,F401
+
 
 # A probability the model can never reach, used to switch the model layer off
 # entirely so the rules can be measured on their own.
@@ -124,46 +106,6 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     centre = (phat + z * z / (2 * n)) / denom
     half = z * np.sqrt(phat * (1 - phat) / n + z * z / (4 * n * n)) / denom
     return (max(0.0, centre - half), min(1.0, centre + half))
-
-
-def _minimal_tx(instrument: str) -> TxView:
-    """The rules need a transaction; only ``instrument`` is read by any of them."""
-    from datetime import datetime, timezone
-
-    return TxView(
-        transaction_ref="eval",
-        occurred_at=datetime.now(timezone.utc),
-        amount_minor=0,
-        currency="NGN",
-        channel="WEB",
-        instrument=instrument,
-        rail="CARD_SCHEME" if instrument == "CARD" else "NIP",
-        subject_token="s",
-        account_token="a",
-        beneficiary_token="b",
-    )
-
-
-def compute_signals(X: np.ndarray, instruments: np.ndarray, names=FEATURE_NAMES, configs=None) -> list:
-    """Evaluate the rules once for a whole test set.
-
-    The rules read features and instrument, never the model's probability — so
-    the signals are identical across every arm that uses the same rows. Computing
-    them once and reusing them is what keeps six arms as cheap as the old two.
-    """
-    configs = configs or RULE_CONFIGS
-    out = []
-    for i in range(len(X)):
-        features = {name: float(X[i, j]) for j, name in enumerate(names)}
-        out.append(
-            evaluate_rules(
-                RuleContext(tx=_minimal_tx(instruments[i]), features=features),
-                configs,
-            )
-        )
-        if i and i % 150_000 == 0:
-            print(f"      rules {i:,}/{len(X):,}")
-    return out
 
 
 def decide(p: np.ndarray, signals: list, thresholds: Thresholds) -> np.ndarray:
@@ -237,12 +179,10 @@ def main() -> None:
         print(f"  model features: {len(names)} (receiving-side features left to the rules)")
     span_days = (max(corpus.occurred_at) - min(corpus.occurred_at)).total_seconds() / 86400.0
 
-    # The card-testing rule gates on instrument == CARD. Recovering that from the
-    # cached matrix is not possible, so it is approximated from the decline
-    # signature the typology produces. Stated plainly because it is the one place
-    # this offline evaluation is not the live path.
-    card_like = X_rules[:, rule_names.index("decline_rate_24h_account")] > 0.0
-    instruments = np.where(card_like, "CARD", "ACCOUNT_TRANSFER")
+    # D82: the transaction's own instrument, channel and region travel with the
+    # cached matrix now, so the rules read what the live path reads.
+    meta = {"instrument": corpus.instrument, "channel": corpus.channel, "ip_region": corpus.ip_region,
+            "has_beneficiary": corpus.has_beneficiary}
     baseline_col = names.index(BASELINE_FEATURE)
 
     results: dict = {}
@@ -270,7 +210,7 @@ def main() -> None:
         p_one = Xte[:, baseline_col].astype(float)
 
         print("   evaluating rules (once, reused by every arm) …")
-        signals = compute_signals(X_rules[test_idx], instruments[test_idx], rule_names, configs)
+        signals = compute_signals(X_rules[test_idx], {k: v[test_idx] for k, v in meta.items()}, rule_names, configs)
 
         arms: list[dict] = []
 
@@ -372,8 +312,8 @@ def main() -> None:
     report = {
         "alert_budget_per_day": budget,
         "feature_spec": ("without event features (D77 ablation)" if args.without_events
-                         else "1.3.0 with receiving-side features in the model (D78 rejected)" if args.with_credit_features
-                         else "1.3.0"),
+                         else f"{FEATURE_SPEC_VERSION} with receiving-side features in the model (D78 rejected)"
+                         if args.with_credit_features else FEATURE_SPEC_VERSION),
         "features": names,
         "rules": sorted(configs),
         "incidents_per_typology": {t: arms[0]["incidents"] for t, arms in results.items()},
@@ -381,9 +321,6 @@ def main() -> None:
         "mean_incident_recall": means,
         "verdict": verdict,
         "limitations": [
-            "The card-testing rule gates on instrument == CARD; the offline "
-            "evaluation approximates that gate from the decline signature, so this "
-            "measures the architecture rather than replaying the live path exactly.",
             "Rule list membership (sanctioned, known mule, allowlist) is empty "
             "offline, so the two OVERRIDE rules and one SUPPRESS rule contribute "
             "nothing here. In production they would.",
@@ -395,7 +332,7 @@ def main() -> None:
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     print("\n" + "=" * 72)
-    print("MEAN INCIDENT RECALL ACROSS THE THREE HELD-OUT TYPOLOGIES")
+    print(f"MEAN INCIDENT RECALL ACROSS THE {len(results)} HELD-OUT TYPOLOGIES")
     print("=" * 72)
     for name in arm_names:
         bar = "#" * int(round(means[name] * 40))

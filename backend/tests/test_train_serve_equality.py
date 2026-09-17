@@ -44,22 +44,25 @@ def _fixture_rows(subject: str, account: str, now: datetime) -> list[dict]:
     ben_b = f"acc_{uuid.uuid4().hex[:20]}"
     dev_known = f"dev_{uuid.uuid4().hex[:20]}"
 
-    def row(minutes_ago: float, amount: int, result: str, ben: str | None, dev: str | None):
+    def row(minutes_ago: float, amount: int, result: str, ben: str | None, dev: str | None,
+            channel: str = "MOBILE_APP", instrument: str = "ACCOUNT_TRANSFER", region: str | None = "NG-LA",
+            subject_token: str | None = None, account_token: str | None = None):
         return {
             "transaction_ref": uuid.uuid4().hex,
             "occurred_at": now - timedelta(minutes=minutes_ago),
             "amount_minor": amount,
             "currency": "NGN",
-            "channel": "MOBILE_APP",
-            "instrument": "ACCOUNT_TRANSFER",
+            "channel": channel,
+            "instrument": instrument,
             "rail": "NIP",
-            "subject_token": subject,
-            "account_token": account,
+            "subject_token": subject_token or subject,
+            "account_token": account_token or account,
             "beneficiary_token": ben,
             "device_token": dev,
             "auth_result": result,
             "direction": "OUTBOUND",
             "remitter_token": None,
+            "ip_region": region,
         }
 
     def credit(minutes_ago: float, amount: int, result: str, remitter: str):
@@ -68,6 +71,8 @@ def _fixture_rows(subject: str, account: str, now: datetime) -> list[dict]:
         r.update(direction="INBOUND", remitter_token=remitter)
         return r
 
+    other = f"sub_{uuid.uuid4().hex[:20]}"
+    other_acc = f"acc_{uuid.uuid4().hex[:20]}"
     rem_x = f"acc_{uuid.uuid4().hex[:20]}"
     rem_y = f"acc_{uuid.uuid4().hex[:20]}"
 
@@ -79,14 +84,21 @@ def _fixture_rows(subject: str, account: str, now: datetime) -> list[dict]:
         credit(60 * 24 * 10, 300_000, "APPROVED", rem_x),       # inside 30d, outside the day
         credit(60 * 24 * 40, 9_000_000, "APPROVED", rem_x),     # OUTSIDE 30d
         row(5, 120_000, "APPROVED", ben_a, dev_known),
-        row(12, 90_000, "DECLINED", ben_b, dev_known),
+        row(12, 90_000, "DECLINED", ben_b, dev_known, "POS", "CARD"),      # D82: card present
         row(25, 4_500_000, "APPROVED", ben_a, dev_known),
-        row(48, 60_000, "FAILED", ben_b, dev_known),
+        row(48, 60_000, "FAILED", ben_b, dev_known, "ATM", "CARD"),        # D82: card present
         row(55, 75_000, "REVERSED", ben_a, dev_known),
-        row(59.5, 30_000, "APPROVED", None, dev_known),          # boundary of the 1h window
+        row(59.5, 30_000, "APPROVED", None, dev_known, region="NG-AB"),  # boundary of the 1h window
         row(60 * 26, 250_000, "APPROVED", ben_a, dev_known),     # outside 1h, inside 24h
         row(60 * 24 * 20, 1_000_000, "APPROVED", ben_a, dev_known),  # inside 30d
-        row(60 * 24 * 45, 9_000_000, "APPROVED", ben_a, dev_known),  # OUTSIDE 30d — must not count
+        row(60 * 24 * 45, 9_000_000, "APPROVED", ben_a, dev_known, region="NG-KN"),  # OUTSIDE 30d — must not count
+        # D82: other customers paying ben_a. Two inside the day (one twice), one outside it.
+        row(30, 50_000, "APPROVED", ben_a, None, subject_token=f"sub_{uuid.uuid4().hex[:20]}",
+            account_token=f"acc_{uuid.uuid4().hex[:20]}"),
+        *[row(m, 50_000, "APPROVED", ben_a, None, subject_token=other, account_token=other_acc)
+          for m in (60 * 5, 60 * 6)],
+        row(60 * 30, 50_000, "APPROVED", ben_a, None, subject_token=f"sub_{uuid.uuid4().hex[:20]}",
+            account_token=f"acc_{uuid.uuid4().hex[:20]}"),
     ]
 
 
@@ -159,11 +171,11 @@ def scenario(conn):
                 INSERT INTO transactions
                     (transaction_ref, occurred_at, amount_minor, currency, channel,
                      instrument, rail, subject_token, account_token, beneficiary_token,
-                     device_token, auth_result, direction, remitter_token)
+                     device_token, auth_result, direction, remitter_token, ip_region)
                 VALUES (%(transaction_ref)s, %(occurred_at)s, %(amount_minor)s, %(currency)s,
                         %(channel)s, %(instrument)s, %(rail)s, %(subject_token)s,
                         %(account_token)s, %(beneficiary_token)s, %(device_token)s,
-                        %(auth_result)s, %(direction)s, %(remitter_token)s)
+                        %(auth_result)s, %(direction)s, %(remitter_token)s, %(ip_region)s)
                 """,
                 r,
             )
@@ -189,6 +201,7 @@ def scenario(conn):
         account_token=account,
         beneficiary_token=next(r for r in rows if r["direction"] == "OUTBOUND")["beneficiary_token"],
         device_token=device,
+        ip_region="NG-KN",
         auth_result="APPROVED",
         account_opened_at=now - timedelta(days=365),
         last_activity_at=now - timedelta(days=3),
@@ -250,6 +263,11 @@ def test_features_are_actually_exercised(scenario):
     assert f["inbound_count_ratio_24h_vs_daily_mean_30d"] == pytest.approx(4 / (5 / 30), rel=1e-6)
     # Out: approved outgoing in the day (NGN 1,200 + 45,000 + 300, the 26-hour payment excluded, plus this
     # payment's 30,000) over approved in (20,000 + 15,000 + 5,000; the declined credit moved nothing).
+    # D82
+    assert f["region_is_new_to_subject"] == 1.0, "NG-KN was used 45 days ago only, outside the month"
+    assert f["card_present_count_1h_account"] == 2, "the POS and ATM attempts; this payment is a transfer"
+    assert f["beneficiary_distinct_senders_24h"] == 2, "two other customers in the day; the 30-hour one is out"
+    assert 0 <= f["hour_of_day_local"] <= 23
     assert f["pass_through_ratio_24h"] == pytest.approx((120_000 + 4_500_000 + 30_000 + 3_000_000)
                                                          / (2_000_000 + 1_500_000 + 500_000), rel=1e-6)
 

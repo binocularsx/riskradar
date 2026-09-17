@@ -6,7 +6,8 @@ import RegulatoryClocks from './RegulatoryClocks'
 import WatchlistFlag from './WatchlistFlag'
 import Timeline from './Timeline'
 import Why, { VersusNormal } from './Why'
-import { CONSEQUENCES, NextSteps, OwnershipBanner, RoleCapability } from './Actions'
+import { CONSEQUENCES, OwnershipBanner, RoleCapability } from './Actions'
+import CaseFlow from './CaseFlow'
 
 /**
  * The investigation panel — everything needed to decide, on one screen, in the
@@ -61,7 +62,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
       setFlash(result.closed
         ? `Case #${caseId} closed as ${outcome.replace(/_/g, ' ').toLowerCase()}.`
         : `Outcome recorded. A Fraud Ops Lead will close it.`)
-      onDisposed?.(result)
+      onDisposed?.({ ...result, outcome })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }, [caseId, busy, note, summary, onDisposed, can])
 
@@ -159,8 +160,12 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         <div className="because">{rec.because}</div>
       </div>
 
-      <div className="grid cols-2" style={{ marginBottom: 14 }}>
-        <NextSteps recommendation={rec} />
+      {/* D83: where the case is, the steps as a checklist, escalation and closing. */}
+      <div style={{ marginBottom: 14 }}>
+        <CaseFlow caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
         <Why
           alerts={detail?.alerts}
           features={first?.features}
@@ -290,7 +295,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
       )}
 
       {/* --------------------------------------------- 6. record the answer */}
-      {!closed && (
+      {!closed && !summary.outcome && (
         <div className="disposition">
           <RoleCapability user={user} />
           <div className="between wrap" style={{ gap: 14 }}>
@@ -309,11 +314,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
                 </span>
               )}
               {can('cases:escalate') && (
-                <button disabled={busy} onClick={async () => {
-                  setBusy(true)
-                  try { await api.escalate(summary.id, 'INFOSEC', note.trim() || null); onDisposed?.({}) }
-                  catch (e) { setError(e.message) } finally { setBusy(false) }
-                }}>Escalate to InfoSec</button>
+                <span className="dim" style={{ fontSize: 12 }}>To escalate, use <strong>Escalate…</strong> in the steps above.</span>
               )}
               <button className="ghost" onClick={() => onSkip?.()}>Skip <kbd>n</kbd></button>
             </div>

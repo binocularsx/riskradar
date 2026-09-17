@@ -172,7 +172,7 @@ def _clock_context(conn: Any) -> dict[str, Any]:
 
 @router.get("/worklist")
 def worklist(
-    scope: str = Query("all", pattern="^(all|mine|unassigned|breaching|machine)$"),
+    scope: str = Query("all", pattern="^(all|mine|unassigned|breaching|machine|escalated|awaiting_close)$"),
     risk_level: str | None = None,
     limit: int = Query(60, ge=1, le=200),
     user: dict = Depends(requires(Permission.CASES_READ)),
@@ -188,13 +188,27 @@ def worklist(
     params: dict[str, Any] = {"open_states": list(OPEN_STATES)}
 
     if scope == "mine":
-        where.append("c.assignee_id = %(uid)s")
+        # D83: a case whose outcome is recorded is no longer the analyst's work;
+        # it waits for a lead in "awaiting close".
+        where.append("c.assignee_id = %(uid)s AND c.outcome IS NULL")
         params["uid"] = user["id"]
     elif scope == "unassigned":
         # D80: machine-handled cases wait for a contact, not an investigation.
-        where.append("c.assignee_id IS NULL AND c.handling = 'HUMAN'")
+        # D83: escalated cases wait for their team, not for the general pool.
+        where.append("c.assignee_id IS NULL AND c.handling = 'HUMAN' AND c.state <> 'ESCALATED'")
     elif scope == "machine":
         where.append("c.handling = 'MACHINE'")
+    elif scope == "escalated":
+        # D83: the receiving team sees what was sent to it; an analyst sees what they sent.
+        team = {"INFOSEC_ANALYST": "INFOSEC", "FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
+        if team:
+            where.append("c.state = 'ESCALATED' AND c.escalated_to = %(team)s")
+            params["team"] = team
+        else:
+            where.append("c.state = 'ESCALATED' AND c.escalated_by = %(uid)s")
+            params["uid"] = user["id"]
+    elif scope == "awaiting_close":
+        where.append("c.outcome IS NOT NULL")
     if risk_level:
         where.append("c.risk_level = %(risk_level)s")
         params["risk_level"] = risk_level
@@ -231,6 +245,8 @@ def worklist(
             "unassigned": sum(1 for r in rows if not r["assignee_id"]),
             "mine": sum(1 for r in rows if r["assignee_id"] == user["id"]),
             "machine": sum(1 for r in rows if r["handling"] == "MACHINE"),
+            "escalated": sum(1 for r in rows if r["state"] == "ESCALATED"),
+            "awaiting_close": sum(1 for r in rows if r["outcome"]),
         },
     }
 
@@ -252,7 +268,7 @@ def next_case(
         _enrich(r, context)
         for r in _rows(
             conn,
-            WORKLIST_SQL.format(where="c.state = 'UNDER_REVIEW' AND c.assignee_id = %(uid)s"),
+            WORKLIST_SQL.format(where="c.state = 'UNDER_REVIEW' AND c.assignee_id = %(uid)s AND c.outcome IS NULL"),
             {"uid": user["id"]},
         )
     ]
@@ -260,16 +276,19 @@ def next_case(
         mine.sort(key=lambda r: r["priority"], reverse=True)
         return {"case": mine[0], "resumed": True}
 
-    available = [
-        _enrich(r, context)
-        for r in _rows(
-            conn,
-            WORKLIST_SQL.format(
-                where="c.state = ANY(%(open_states)s) AND c.assignee_id IS NULL AND c.handling = 'HUMAN'"
-            ),
-            {"open_states": list(OPEN_STATES)},
-        )
-    ]
+    # D83: InfoSec and leads are handed what was escalated to them first; an
+    # analyst is never handed someone else's escalation.
+    team = {"INFOSEC_ANALYST": "INFOSEC", "FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
+    pools = ([("c.state = 'ESCALATED' AND c.assignee_id IS NULL AND c.escalated_to = %(team)s", {"team": team})]
+             if team else [])
+    if user["role"] != "INFOSEC_ANALYST":
+        pools.append(("c.state IN ('OPEN', 'UNDER_REVIEW') AND c.assignee_id IS NULL AND c.handling = 'HUMAN' "
+                      "AND c.outcome IS NULL", {}))
+    available = []
+    for where, pool_params in pools:
+        available = [_enrich(r, context) for r in _rows(conn, WORKLIST_SQL.format(where=where), pool_params)]
+        if available:
+            break
     if not available:
         return {"case": None, "resumed": False}
 
@@ -282,7 +301,8 @@ def next_case(
             """
             UPDATE cases
                SET assignee_id = %s,
-                   state = CASE WHEN state = 'OPEN' THEN 'UNDER_REVIEW' ELSE state END
+                   escalated_to = CASE WHEN state = 'ESCALATED' THEN NULL ELSE escalated_to END,
+                   state = CASE WHEN state IN ('OPEN', 'ESCALATED') THEN 'UNDER_REVIEW' ELSE state END
              WHERE id = %s AND assignee_id IS NULL
             RETURNING id
             """,
@@ -382,7 +402,7 @@ def disposition(
                     cur.execute(
                         """
                         INSERT INTO beneficiary_lists (kind, token, note, added_by)
-                        SELECT DISTINCT 'KNOWN_MULE', t.beneficiary_token,
+                        SELECT DISTINCT 'KNOWN_MULE'::beneficiary_list_kind, t.beneficiary_token,
                                'auto: confirmed fraud on case ' || %s, %s
                           FROM alerts a JOIN transactions t ON t.id = a.transaction_id
                          WHERE a.case_id = %s AND t.beneficiary_token IS NOT NULL

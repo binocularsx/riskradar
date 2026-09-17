@@ -56,6 +56,10 @@ class PriorTx:
     auth_result: str
     beneficiary_token: str | None = None
     device_token: str | None = None
+    # D82: where and how, for region novelty and card-present counts.
+    ip_region: str | None = None
+    channel: str | None = None
+    instrument: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,3 +101,6 @@ class HistoryBundle:
     # D78: credits into this account in the lookback window. A credit is a
     # PriorTx whose ``beneficiary_token`` holds the remitter, the other party.
     credits: list[PriorTx] = field(default_factory=list)
+    # D82: how many *other* customers paid this transaction's destination in the
+    # day before it. Bank-wide, so it is a count, not rows.
+    beneficiary_other_senders_24h: int = 0

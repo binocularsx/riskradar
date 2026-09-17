@@ -9,6 +9,8 @@ import Metrics from './pages/Metrics'
 import Transactions from './pages/Transactions'
 import Admin from './pages/Admin'
 import Roles from './pages/Roles'
+import Intake from './pages/Intake'
+import Tracker from './pages/Tracker'
 
 /**
  * Navigation is built from the permissions the *server* returned, so the menu
@@ -19,7 +21,9 @@ import Roles from './pages/Roles'
 function nav(permissions) {
   const can = (p) => permissions.includes(p)
   return [
+    can('cases:read') && { to: '/live', label: 'Live desk', hint: 'what is arriving, what is waiting, what to expect' },
     can('cases:read') && { to: '/triage', label: 'Triage', hint: 'work the queue' },
+    can('cases:read') && { to: '/tracker', label: 'Case tracker', hint: 'every case, from alert to closed' },
     can('metrics:read') && { to: '/operations', label: 'Operations', hint: 'is the desk coping' },
     can('cases:read') && { to: '/transactions', label: 'Search', hint: 'find a transaction' },
     can('metrics:read') && { to: '/analytics', label: 'Analytics', hint: 'volume and model' },
@@ -45,7 +49,7 @@ export default function App() {
   if (!user) return <Login onSignedIn={refresh} />
 
   const links = nav(user.permissions)
-  const landing = links[0]?.to ?? '/triage'
+  const landing = links.find((l) => l.to === '/triage')?.to ?? links[0]?.to ?? '/triage'
   const active = links.find((l) => location.pathname.startsWith(l.to))
   // Triage manages its own scrolling columns; every other page scrolls normally.
   const flush = location.pathname.startsWith('/triage')
@@ -94,6 +98,8 @@ export default function App() {
              style={flush ? { flexDirection: 'column' } : undefined}>
           <Routes>
             <Route path="/" element={<Navigate to={landing} replace />} />
+            <Route path="/live" element={<Intake />} />
+            <Route path="/tracker" element={<Tracker />} />
             <Route path="/triage" element={<Triage user={user} />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/transactions" element={<Transactions />} />

@@ -347,6 +347,20 @@ class EscalateIn(Strict):
     note: Annotated[str | None, Field(max_length=4000)] = None
 
 
+class CaseActionIn(Strict):
+    """D83: a recommended step done in the bank's systems, recorded with its result."""
+
+    action_code: Annotated[str, Field(min_length=3, max_length=64)]
+    result: Annotated[str, Field(min_length=2, max_length=64)]
+    detail: Annotated[str | None, Field(max_length=2000)] = None
+
+
+class ReturnIn(Strict):
+    """D83: an escalated case handed back to the analyst who raised it."""
+
+    findings: Annotated[str, Field(min_length=5, max_length=4000)]
+
+
 class AssignIn(Strict):
     assignee_id: int | None
 

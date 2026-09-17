@@ -46,6 +46,13 @@ SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
 # D25: six rules, two of each power; D77, D78 and D79 added three escalating rules. Every rule *power* in D11a is retained,
 # including suppression — the primary false-positive control, which had to be
 # built rather than deferred.
+D82_PARAMS = {
+    "SCAM_BENEFICIARY_FANIN": {"min_other_senders": 2, "max_beneficiary_age_days": 7},
+    "SIM_SWAP_TRANSFER": {"within_hours": 12},
+    "DORMANT_ACCOUNT_REACTIVATION": {"min_dormant_days": 60, "min_amount_log10": 5.0},
+    "CARD_PRESENT_NEW_REGION_CASHOUT": {"min_count_1h": 3},
+}
+
 RULES = [
     # D67: 5 or more in an hour AND the destination first appeared in the bank's
     # traffic within the last day. Speed alone (D62) was mostly traders.
@@ -63,6 +70,13 @@ RULES = [
     # 63.5% to 84.9% and total value detected from 84.8% to 90.4%.
     ("SECOND_LEG_ONWARD_PAYMENT", "ESCALATE", "HIGH",
      {"min_remitters": 3, "min_count_ratio": 5.0, "max_minutes_since_credit": 180, "min_pass_through": 0.5}),
+    # D82: four fraud types a Nigerian desk loses money to that the first three
+    # did not cover. Parameters from ml/fraud_types_d82.py; identical to
+    # ml/offline_rules.py, which a test holds equal.
+    ("SCAM_BENEFICIARY_FANIN", "ESCALATE", "HIGH", D82_PARAMS["SCAM_BENEFICIARY_FANIN"]),
+    ("SIM_SWAP_TRANSFER", "ESCALATE", "HIGH", D82_PARAMS["SIM_SWAP_TRANSFER"]),
+    ("DORMANT_ACCOUNT_REACTIVATION", "ESCALATE", "HIGH", D82_PARAMS["DORMANT_ACCOUNT_REACTIVATION"]),
+    ("CARD_PRESENT_NEW_REGION_CASHOUT", "ESCALATE", "HIGH", D82_PARAMS["CARD_PRESENT_NEW_REGION_CASHOUT"]),
     (
         "CARD_TESTING_PROBES",
         "ESCALATE",
@@ -88,6 +102,10 @@ RULE_GOVERNANCE = {
     "MULE_INBOUND_FANIN": ("Chidera", "D78: credits from 3+ senders on a day 5x the account's normal; the receiving side of a mule ring. 7.3 alerts/day, 73% of rings.", "2026-09-15"),
     "SECOND_LEG_ONWARD_PAYMENT": ("Chidera", "D79: an account that took a credit fan-in, paying half or more of it on within 3 hours. Mule value flagged 63.5% -> 84.9% at 75/day.", "2026-09-15"),
     "CARD_TESTING_PROBES": ("Chidera", "D21, D62b: refused small card attempts before a large one. Right 99.8% of the time.", "2026-09-09"),
+    "SCAM_BENEFICIARY_FANIN": ("Chidera", "D82: a new destination several other customers paid today; the collection account of a social-engineering scam.", "2026-09-17"),
+    "SIM_SWAP_TRANSFER": ("Chidera", "D82: a new destination within hours of the SIM changing; the USSD drain after a SIM swap.", "2026-09-17"),
+    "DORMANT_ACCOUNT_REACTIVATION": ("Chidera", "D82: a long-dormant account sending a large sum somewhere new.", "2026-09-17"),
+    "CARD_PRESENT_NEW_REGION_CASHOUT": ("Chidera", "D82: card-present attempts in a run, in a region the customer has not used; a cloned card cashed out.", "2026-09-17"),
     "SANCTIONED_BENEFICIARY": ("Chidera", "D11a: a sanctioned destination is not a matter of probability.", "2026-09-09"),
     "KNOWN_MULE_BENEFICIARY": ("Chidera", "D11a: a destination an analyst confirmed as fraudulent.", "2026-09-09"),
     "PRE_REGISTERED_BENEFICIARY": ("Chidera", "D11a: the customer set this payee up on purpose; the main false-alarm control.", "2026-09-09"),

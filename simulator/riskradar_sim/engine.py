@@ -28,6 +28,23 @@ precondition for held-out-typology evaluation meaning anything:
 * **Card testing** — low-value authorisation probes, mostly declined, preceding
   a large authorisation.
 
+D82 adds four more, chosen because they are what Nigerian banks and the
+interbank settlement body describe losing money to, and because none of the
+first three covers them:
+
+* **Social engineering (authorised push payment)** — the real customer, on
+  their own phone, is talked into paying a scammer's collection account.
+* **SIM swap** — the attacker takes the phone number, then drains the account
+  over USSD or the app within hours.
+* **Dormant account fraud** — an account quiet for months is emptied, often
+  after its phone number or email is changed from inside the bank.
+* **Card cloning cash-out** — a skimmed card at ATM after ATM, POS and agents,
+  away from its owner's home, before the owner notices.
+
+Each has a legitimate twin written beside it (group collections, SIM
+replacements, owners returning to old accounts, travel), because without them
+the new fraud would be the only thing in the data that looks like itself (D57).
+
 Note what the third one needs: ``auth_result``. Before D21 added it, card
 testing was literally unrepresentable and would have had to be faked as a run of
 tiny *approved* transactions — which is a different phenomenon wearing the same
@@ -70,6 +87,9 @@ class Event:
     # D77: PAYMENT, or a non-payment event type from signals.py. Payments keep
     # the canonical transaction payload; the others carry the event envelope.
     kind: str = "PAYMENT"
+    # D82: what ordinary life was doing, for the event layer only (a replaced
+    # SIM, a returning owner). Never in the payload, never sent to the API.
+    context: str | None = None
 
 
 def _rails_for(channel: str, instrument: str, rng: random.Random) -> str:
@@ -88,6 +108,13 @@ def _instrument_for(channel: str, rng: random.Random) -> str:
     if channel == "BRANCH":
         return rng.choices(["CASH", "ACCOUNT_TRANSFER"], [0.5, 0.5])[0]
     return rng.choices(["ACCOUNT_TRANSFER", "WALLET"], [0.88, 0.12])[0]
+
+
+NIGHT_HOURS = (0, 4)
+
+
+def _night(rng: random.Random, when: datetime) -> datetime:
+    return when.replace(hour=rng.randint(*NIGHT_HOURS), minute=rng.randint(0, 59), second=rng.randint(0, 59))
 
 
 def _base_payload(
@@ -257,7 +284,7 @@ def disbursement_burst(
 
 def account_takeover(
     rng: random.Random, customer: Customer, start: datetime,
-    recruited_pool: list[str] | None = None,
+    recruited_pool: list[str] | None = None, **_,
 ) -> Iterator[Event]:
     """Compromise -> new device -> reconnaissance -> pause -> extraction.
 
@@ -340,7 +367,7 @@ def account_takeover(
 
 def mule_fanout(
     rng: random.Random, customer: Customer, start: datetime,
-    recruited_pool: list[str] | None = None,
+    recruited_pool: list[str] | None = None, **_,
 ) -> Iterator[Event]:
     """One account pushing funds out to many destinations within minutes.
 
@@ -429,7 +456,7 @@ def mule_fanout(
 
 def card_testing(
     rng: random.Random, customer: Customer, start: datetime,
-    recruited_pool: list[str] | None = None,
+    recruited_pool: list[str] | None = None, **_,
 ) -> Iterator[Event]:
     """Low-value authorisation probes, mostly declined, then the real charge.
 
@@ -483,8 +510,325 @@ def card_testing(
         now += timedelta(minutes=rng.uniform(1, 6))
 
 
+# ---------------------------------------------------------------------------
+# D82 — Typology 4: social engineering (authorised push payment)
+# ---------------------------------------------------------------------------
+
+
+def social_engineering(
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None, *, customers: list[Customer] | None = None, **_,
+) -> Iterator[Event]:
+    """A caller talks real customers into paying one collection account themselves.
+
+    Posing as the bank ("your BVN is blocked"), a regulator, a relative in
+    trouble or an investment, the scammer works through several victims in the
+    same few hours and has them all pay the same account. Every victim uses
+    their own phone, from home, in their own waking hours: nothing about the
+    session is wrong, which is exactly why this is the fraud a takeover
+    detector cannot see. Each victim is their own incident; the ring is not.
+    """
+    ring = hex_id(8)
+    pool = recruited_pool or []
+    collection = [rng.choice(pool) if pool and rng.random() < 0.25 else f"BEN{hex_id(12).upper()}"
+                  for _ in range(rng.choices([1, 2], [0.75, 0.25])[0])]
+    others = [c for c in (customers or []) if c.customer_id != customer.customer_id]
+    victims = [customer] + (rng.sample(others, min(len(others), rng.randint(1, 5))) if others else [])
+
+    for n, victim in enumerate(victims):
+        incident = f"SCAM-{ring}-{n}"
+        account = victim.primary
+        channel = rng.choices(["MOBILE_APP", "WEB", "USSD"], [0.62, 0.13, 0.25])[0]
+        device = rng.choice(victim.devices) if victim.devices else None
+        lo, hi = victim.active_hours
+        now = start + timedelta(minutes=rng.uniform(0, 420)) if n else start
+        if not lo <= now.hour <= min(hi, 23):
+            now = now.replace(hour=rng.randint(lo, min(hi, 23)))
+        # What the victim is persuaded to send: often their savings, sometimes in parts.
+        target = rng.choice([rng.uniform(30_000, 150_000), rng.uniform(150_000, 600_000),
+                             rng.uniform(600_000, 2_500_000)])
+        parts = rng.choices([1, 2, 3], [0.55, 0.30, 0.15])[0]
+        for i in range(parts):
+            naira = target / parts * rng.uniform(0.8, 1.2)
+            blocked = rng.random() < 0.10
+            yield Event(
+                _base_payload(
+                    victim, account, now,
+                    amount_minor=int(naira * 100),
+                    channel=channel,
+                    instrument="ACCOUNT_TRANSFER",
+                    rail="NIP",
+                    device=device,
+                    beneficiary=collection[i % len(collection)],
+                    region=victim.home_region,
+                    auth_result="DECLINED" if blocked else "APPROVED",
+                    decline_reason="LIMIT_EXCEEDED" if blocked else None,
+                ),
+                is_fraud=True, typology="SOCIAL_ENGINEERING", incident_id=incident,
+            )
+            now += timedelta(minutes=rng.uniform(3, 40))
+
+
+def group_collection(rng: random.Random, customers: list[Customer], day: datetime) -> Iterator[Event]:
+    """Not fraud: many customers paying one new account on the same day.
+
+    School fees to a new term's account, a funeral contribution, an event
+    vendor, an ajo group's new collector. Without these, "several of our
+    customers paid this fresh account today" would belong to scams alone.
+    """
+    payee = f"BEN{hex_id(12).upper()}"
+    for payer in rng.sample(customers, min(len(customers), rng.randint(3, 15))):
+        account = payer.primary
+        lo, hi = payer.active_hours
+        when = day.replace(hour=rng.randint(lo, min(hi, 23)), minute=rng.randint(0, 59), second=rng.randint(0, 59))
+        channel = rng.choices(["MOBILE_APP", "WEB", "USSD"], [0.65, 0.15, 0.20])[0]
+        yield Event(
+            _base_payload(
+                payer, account, when,
+                amount_minor=int(rng.choice([rng.uniform(2_000, 30_000), rng.uniform(30_000, 250_000)]) * 100),
+                channel=channel, instrument="ACCOUNT_TRANSFER", rail="NIP",
+                device=rng.choice(payer.devices) if payer.devices else None,
+                beneficiary=payee, region=payer.home_region,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# D82 — Typology 5: SIM swap
+# ---------------------------------------------------------------------------
+
+
+def sim_swap(
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None, **_,
+) -> Iterator[Event]:
+    """The number is ported to the attacker's SIM; the account is drained within hours.
+
+    With the SIM the attacker receives the OTPs and dials the victim's USSD
+    string from their own handset, where there is no app to bind and no device
+    history to trip over. Often overnight, when the victim is asleep and does
+    not notice the phone has lost signal. The SIM change itself is written by
+    the event layer (signals.py).
+    """
+    incident = f"SIM-{hex_id(10)}"
+    account = customer.primary
+    channel = rng.choices(["USSD", "MOBILE_APP"], [0.6, 0.4])[0]
+    attacker_device = f"DEV{hex_id(12)}"
+    now = _night(rng, start) if rng.random() < 0.45 else start
+    pool = recruited_pool or []
+    mules = [rng.choice(pool) if pool and rng.random() < 0.3 else f"BEN{hex_id(12).upper()}"
+             for _ in range(rng.randint(1, 3))]
+    naira = rng.uniform(20_000, 150_000)
+    for _ in range(rng.randint(2, 6)):
+        blocked = rng.random() < 0.25
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int(naira * 100),
+                channel=channel, instrument="ACCOUNT_TRANSFER", rail="NIP",
+                device=attacker_device,
+                beneficiary=rng.choice(mules),
+                region=customer.home_region if channel == "USSD" else rng.choice(IP_REGIONS),
+                auth_result="DECLINED" if blocked else "APPROVED",
+                decline_reason="LIMIT_EXCEEDED" if blocked else None,
+            ),
+            is_fraud=True, typology="SIM_SWAP", incident_id=incident,
+        )
+        if not blocked:
+            naira *= rng.uniform(1.0, 1.8)
+        else:
+            naira *= rng.uniform(0.4, 0.7)
+        now += timedelta(minutes=rng.uniform(2, 25))
+
+
+def sim_replacement_errands(rng: random.Random, customer: Customer, start: datetime) -> Iterator[Event]:
+    """Not fraud: a customer replaces a lost or damaged SIM, then gets on with the day.
+
+    The SIM change is real and recent, and the payments after it sometimes go
+    to someone new (the phone shop, a friend who lent money for a new handset).
+    The event layer writes the SIM change from ``context``.
+    """
+    account = customer.primary
+    now = start
+    for i in range(rng.randint(1, 3)):
+        new = rng.random() < 0.35 or not customer.known_beneficiaries
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int(rng.uniform(2_000, 180_000) * 100),
+                channel=rng.choices(["MOBILE_APP", "USSD"], [0.6, 0.4])[0],
+                instrument="ACCOUNT_TRANSFER", rail="NIP",
+                device=rng.choice(customer.devices) if customer.devices else None,
+                beneficiary=f"BEN{hex_id(12).upper()}" if new else rng.choice(customer.known_beneficiaries),
+                region=customer.home_region,
+            ),
+            context="SIM_REPLACED" if i == 0 else None,
+        )
+        now += timedelta(minutes=rng.uniform(10, 300))
+
+
+# ---------------------------------------------------------------------------
+# D82 — Typology 6: dormant account fraud
+# ---------------------------------------------------------------------------
+
+
+def _dormant_account(customer: Customer):
+    return next((a for a in customer.accounts if a.is_dormant),
+                next((a for a in customer.accounts if a.is_naturally_dormant), customer.accounts[-1]))
+
+
+def dormant_account(
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None, **_,
+) -> Iterator[Event]:
+    """A forgotten account is emptied, often after its contact details are changed.
+
+    Somebody who knows the account is dormant (inside the bank, or holding its
+    old credentials) changes the phone number or email so no alert reaches the
+    owner, then moves the balance out in a few large transfers. The contact
+    change is written by the event layer. The account was already dormant,
+    drawn from the population (D20c); the process only selects it.
+    """
+    incident = f"DORM-{hex_id(10)}"
+    account = _dormant_account(customer)
+    channel = rng.choices(["WEB", "MOBILE_APP", "BRANCH"], [0.40, 0.35, 0.25])[0]
+    device = None if channel == "BRANCH" else f"DEV{hex_id(12)}"
+    region = customer.home_region if rng.random() < 0.5 else rng.choice(IP_REGIONS)
+    pool = recruited_pool or []
+    now = start
+    balance = rng.choice([rng.uniform(150_000, 600_000), rng.uniform(600_000, 4_000_000)])
+    for _ in range(rng.randint(1, 4)):
+        naira = min(balance, balance * rng.uniform(0.3, 1.0))
+        balance -= naira
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int(naira * 100),
+                channel=channel, instrument="ACCOUNT_TRANSFER", rail=rng.choice(["NIP", "INTRABANK"]),
+                device=device,
+                beneficiary=rng.choice(pool) if pool and rng.random() < 0.3 else f"BEN{hex_id(12).upper()}",
+                region=region,
+            ),
+            is_fraud=True, typology="DORMANT_ACCOUNT", incident_id=incident,
+        )
+        account.last_activity_at = now
+        now += timedelta(minutes=rng.uniform(5, 90))
+        if balance < 20_000:
+            break
+
+
+def returning_owner(rng: random.Random, customer: Customer, start: datetime) -> Iterator[Event]:
+    """Not fraud: the owner of a quiet account comes back and moves real money.
+
+    Relocating savings, paying a builder, sending school fees from an old
+    account. Sometimes to someone new, sometimes after resetting a forgotten
+    PIN at the branch (the event layer writes that from ``context``).
+    """
+    account = _dormant_account(customer)
+    now = start
+    for i in range(rng.randint(1, 3)):
+        new = rng.random() < 0.45 or not customer.known_beneficiaries
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int(rng.choice([rng.uniform(5_000, 120_000), rng.uniform(120_000, 1_500_000)]) * 100),
+                channel=rng.choices(["MOBILE_APP", "WEB", "BRANCH", "USSD"], [0.45, 0.2, 0.15, 0.2])[0],
+                instrument="ACCOUNT_TRANSFER", rail="NIP",
+                device=rng.choice(customer.devices) if customer.devices else None,
+                beneficiary=f"BEN{hex_id(12).upper()}" if new else rng.choice(customer.known_beneficiaries),
+                region=customer.home_region,
+            ),
+            context="OWNER_RETURNING" if i == 0 else None,
+        )
+        account.last_activity_at = now
+        now += timedelta(minutes=rng.uniform(5, 240))
+
+
+# ---------------------------------------------------------------------------
+# D82 — Typology 7: card cloning cash-out
+# ---------------------------------------------------------------------------
+
+
+ATM_WITHDRAWAL_MAX_NAIRA = 20_000   # per withdrawal, as Nigerian ATMs dispense
+CARD_DAILY_LIMIT_NAIRA = (100_000, 300_000)
+
+
+def card_cloning(
+    rng: random.Random, customer: Customer, start: datetime,
+    recruited_pool: list[str] | None = None, **_,
+) -> Iterator[Event]:
+    """A skimmed card, cashed out at terminal after terminal away from home.
+
+    ATM withdrawals at the machine's maximum, POS purchases of things that
+    resell, agent cash-outs, until the daily limit declines them. Often at
+    night. The genuine card is still in the owner's wallet in another state.
+    """
+    incident = f"CLONE-{hex_id(10)}"
+    account = customer.primary
+    region = rng.choice([r for r in IP_REGIONS if r != customer.home_region])
+    now = _night(rng, start) if rng.random() < 0.35 else start
+    limit = rng.uniform(*CARD_DAILY_LIMIT_NAIRA)
+    spent = 0.0
+    for _ in range(rng.randint(3, 8)):
+        channel = rng.choices(["ATM", "POS", "AGENT"], [0.55, 0.25, 0.20])[0]
+        naira = {"ATM": rng.uniform(10_000, ATM_WITHDRAWAL_MAX_NAIRA), "POS": rng.uniform(20_000, 300_000),
+                 "AGENT": rng.uniform(20_000, 100_000)}[channel]
+        over = spent + naira > limit
+        declined = over and rng.random() < 0.8
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int(naira * 100),
+                channel=channel, instrument="CARD", rail="ATM_NETWORK" if channel == "ATM" else "CARD_SCHEME",
+                device=None, beneficiary=None, region=region,
+                auth_result="DECLINED" if declined else "APPROVED",
+                decline_reason="LIMIT_EXCEEDED" if declined else None,
+                merchant_category=rng.choice(MERCHANT_CATEGORIES) if channel == "POS" else None,
+            ),
+            is_fraud=True, typology="CARD_CLONING", incident_id=incident,
+        )
+        if not declined:
+            spent += naira
+        now += timedelta(minutes=rng.uniform(3, 20))
+
+
+def travel_day(rng: random.Random, customer: Customer, start: datetime) -> Iterator[Event]:
+    """Not fraud: a customer away from home using their card.
+
+    A trip to Abuja or Port Harcourt: an ATM on arrival, a hotel, a restaurant,
+    sometimes a second ATM when the first runs out of cash. Several
+    card-present payments in a region the customer has not used this month.
+    """
+    account = customer.primary
+    region = rng.choice([r for r in IP_REGIONS if r != customer.home_region])
+    now = start
+    for _ in range(rng.randint(2, 6)):
+        channel = rng.choices(["ATM", "POS", "AGENT"], [0.4, 0.5, 0.1])[0]
+        declined = rng.random() < 0.06
+        yield Event(
+            _base_payload(
+                customer, account, now,
+                amount_minor=int({"ATM": rng.uniform(5_000, ATM_WITHDRAWAL_MAX_NAIRA),
+                                  "POS": rng.uniform(1_500, 120_000),
+                                  "AGENT": rng.uniform(5_000, 50_000)}[channel] * 100),
+                channel=channel, instrument="CARD", rail="ATM_NETWORK" if channel == "ATM" else "CARD_SCHEME",
+                device=None, beneficiary=None, region=region,
+                auth_result="DECLINED" if declined else "APPROVED",
+                decline_reason=rng.choice(DECLINE_REASONS) if declined else None,
+                merchant_category=rng.choice(MERCHANT_CATEGORIES) if channel == "POS" else None,
+            )
+        )
+        # Usually spread over the day; sometimes a quick run (ATM out of cash, the next one).
+        now += timedelta(minutes=rng.uniform(2, 25) if rng.random() < 0.3 else rng.uniform(40, 300))
+
+
 TYPOLOGIES = {
     "ACCOUNT_TAKEOVER": account_takeover,
     "MULE_FANOUT": mule_fanout,
     "CARD_TESTING": card_testing,
+    # D82
+    "SOCIAL_ENGINEERING": social_engineering,
+    "SIM_SWAP": sim_swap,
+    "DORMANT_ACCOUNT": dormant_account,
+    "CARD_CLONING": card_cloning,
 }

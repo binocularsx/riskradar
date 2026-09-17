@@ -56,7 +56,9 @@ from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION, MODEL_F
 # D78: the columns of the feature matrix the model is trained on.
 MODEL_COLUMNS = [FEATURE_NAMES.index(n) for n in MODEL_FEATURE_NAMES]
 
-TYPOLOGIES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
+TYPOLOGIES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING",
+              # D82: the four a Nigerian desk also loses money to.
+              "SOCIAL_ENGINEERING", "SIM_SWAP", "DORMANT_ACCOUNT", "CARD_CLONING")
 ALERT_BUDGET_PER_DAY = 75  # D76 (was 120, D24)
 
 

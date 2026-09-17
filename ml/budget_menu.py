@@ -48,11 +48,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT / "ml"))
 
-from riskradar.features.spec import FEATURE_NAMES  # noqa: E402
+from offline_rules import RULE_CONFIGS, compute_signals, rule_masks  # noqa: E402
+from riskradar.features.spec import FEATURE_NAMES, FEATURE_SPEC_VERSION  # noqa: E402
 from riskradar.model.calibrated import TimeSplitCalibratedBooster  # noqa: E402
+from train import TYPOLOGIES  # noqa: E402
 
 BUDGETS = (120, 75, 60)
-TYPES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
+TYPES = TYPOLOGIES
 ARTIFACTS = REPO_ROOT / "ml" / "artifacts"
 CORPUS = REPO_ROOT / "ml" / "data"
 HELD_OUT = {120: "system-evaluation.json", 75: "system-evaluation-75.json", 60: "system-evaluation-60.json"}
@@ -77,7 +79,7 @@ def held_out(budget: int, without_events: bool = False, without_credits: bool = 
     if not (ARTIFACTS / name).exists():
         return None
     evaluation = json.loads((ARTIFACTS / name).read_text(encoding="utf-8"))
-    if evaluation.get("feature_spec") != "1.3.0":
+    if evaluation.get("feature_spec") != FEATURE_SPEC_VERSION:
         # Written before D77, on the previous corpus. Its recall belongs to a
         # different bank and must not sit in a row measured on this one.
         return None
@@ -97,6 +99,7 @@ def main() -> None:
                         help="D78: no credit alerts reserved (the receiving side switched off)")
     parser.add_argument("--no-second-leg", action="store_true",
                         help="D79 ablation: without the rule on the payment that moves received money on")
+    parser.add_argument("--without-rule", action="append", help="D82 ablation: switch a rule off (repeatable)")
     parser.add_argument("--out", default=str(ARTIFACTS / "budget-menu.json"))
     args = parser.parse_args()
 
@@ -115,47 +118,37 @@ def main() -> None:
     keep = [j for j, n in enumerate(names) if n not in CREDIT_FEATURES]
     X, names = X[:, keep], [names[j] for j in keep]
 
-    print("reading instruments and amounts ...", flush=True)
-    inst, amount = [], []
-    with open(CORPUS / "corpus.jsonl", encoding="utf-8") as fh:
-        for line in fh:
-            row = json.loads(line)
-            inst.append(row["instrument"])
-            amount.append(row["amount_minor"])
-    inst, amount = np.array(inst), np.array(amount, dtype=np.int64)
+    # D82: the transaction fields the rules read travel in the cache.
+    meta_all = {k: d[k] for k in ("instrument", "channel", "ip_region", "has_beneficiary")}
+    amount = d["amount_minor"]
 
     order = np.argsort(occ)
-    X, y, typ, occ, inc, inst, amount = (a[order] for a in (X, y, typ, occ, inc, inst, amount))
+    X, y, typ, occ, inc, amount = (a[order] for a in (X, y, typ, occ, inc, amount))
+    meta_all = {k: v[order] for k, v in meta_all.items()}
     cut = int(0.75 * len(y))
     days = (occ[-1] - occ[cut]).total_seconds() / 86400.0
 
     print(f"training on the oldest 75% ({cut:,} rows) ...", flush=True)
     p = TimeSplitCalibratedBooster().fit(X[:cut], y[:cut], times=occ[:cut]).predict_proba(X[cut:])[:, 1]
 
-    Xt, yt, tt, it, nt, at = X[cut:], y[cut:], typ[cut:], inc[cut:], inst[cut:], amount[cut:]
-    col = lambda name: Xt[:, names.index(name)]  # noqa: E731
-    count, first_seen = col("txn_count_1h_account"), col("beneficiary_first_seen_days")
-    card = (nt == "CARD") & (col("decline_rate_24h_account") >= 0.5) & (col("failed_attempts_1h_account") >= 3)
-    # D67, as seeded: 5+ to a destination new to the bank within a day; 10+ with none.
-    velocity = ((count >= 5) & (first_seen >= 0) & (first_seen < 1)) | ((count >= 10) & (first_seen < 0))
-    rules = card | velocity
-    if not args.without_events and "device_bound_hours" in names:
-        # D77, as seeded: two precursors within 24 hours, then a destination new to the account.
-        precursors = (((col("device_bound_hours") >= 0) & (col("device_bound_hours") < 24)).astype(int)
-                      + (col("sim_changed_hours") < 24) + (col("credential_changed_hours") < 24)
-                      + (col("failed_logins_1h_subject") >= 3))
-        rules = rules | ((precursors >= 2) & (col("beneficiary_is_new_to_account") == 1))
-    if not args.no_second_leg and "pass_through_ratio_24h" in FEATURE_NAMES:
-        # D79, as seeded: read from the full feature matrix, since the model's
-        # inputs no longer carry the receiving-side features (D78b).
-        full = d["X"][order][cut:]
-        fcol = lambda name: full[:, FEATURE_NAMES.index(name)]  # noqa: E731
-        second_leg = ((fcol("distinct_remitters_24h_account") >= 3)
-                      & (fcol("inbound_count_ratio_24h_vs_daily_mean_30d") >= 5.0)
-                      & (fcol("minutes_since_last_credit") <= 180)
-                      & (fcol("pass_through_ratio_24h") >= 0.5))
-        rules = rules | second_leg
-        print(f"second leg: {second_leg.sum() / days:.1f} payments a day", flush=True)
+    yt, tt, it, at = y[cut:], typ[cut:], inc[cut:], amount[cut:]
+    # D82: the shipped rules, run by the real engine over the full feature matrix
+    # (the rules read features the model is not given, D78b), one copy for every script.
+    configs = dict(RULE_CONFIGS)
+    if args.without_events:
+        from evaluate_system import EVENT_RULES
+
+        configs = {k: v for k, v in configs.items() if k not in EVENT_RULES}
+    if args.no_second_leg:
+        configs.pop("SECOND_LEG_ONWARD_PAYMENT", None)
+    for code in args.without_rule or []:
+        configs.pop(code, None)
+    print("evaluating the rules on the test period ...", flush=True)
+    full = d["X"][order][cut:]
+    signals = compute_signals(full, {k: v[cut:] for k, v in meta_all.items()}, FEATURE_NAMES, configs)
+    rules, by_code = rule_masks(signals)
+    for code, mask in sorted(by_code.items()):
+        print(f"  {code:<34}{mask.sum() / days:7.1f} a day", flush=True)
 
     # D78: credits raise alerts too, from the same desk. Their measured volume is
     # reserved first, so the model only spends what payments and credits leave.
@@ -210,16 +203,21 @@ def main() -> None:
             "mule_value_detection_rate": round(
                 float(at[system & fraud & (tt == "MULE_FANOUT")].sum())
                 / max(float(at[fraud & (tt == "MULE_FANOUT")].sum()), 1.0), 3),
+            # D82: money flagged, fraud type by fraud type.
+            "value_detection_rate_by_type": {
+                t: round(float(at[system & fraud & (tt == t)].sum()) / max(float(at[fraud & (tt == t)].sum()), 1.0), 3)
+                for t in TYPES},
+            "rule_alerts_per_day": {code: round(float(mask.sum()) / days, 1) for code, mask in sorted(by_code.items())},
             "held_out": held_out(budget, args.without_events, args.without_credits),
         })
 
-    print(f"{'budget':>6}{'false/day':>10}{'ratio':>8}{'VDR':>7}{'mule VDR':>9}{'VDR inc':>9}   seen ATO  MULE  CARD   held-out mean")
+    print(f"{'budget':>6}{'false/day':>10}{'ratio':>8}{'VDR':>7}{'mule VDR':>9}{'VDR inc':>9}   seen, by type   held-out mean")
     for o in options:
         s = o["seen_fraud"]
         print(f"{o['budget_per_day']:>6}{o['false_alerts_per_day']:>10}{o['false_alerts_per_incident']:>7}:1"
               f"{o['value_detection_rate']:>7}{o['mule_value_detection_rate']:>9}{o['value_in_caught_incidents']:>9}   "
-              f"{s['ACCOUNT_TAKEOVER']['caught']:>7}{s['MULE_FANOUT']['caught']:>6}{s['CARD_TESTING']['caught']:>6}"
-              f"   {o['held_out']['mean'] if o['held_out'] else '-'}")
+              + " ".join(f"{s[t]['caught']}/{s[t]['incidents']}" for t in TYPES)
+              + f"   {o['held_out']['mean'] if o['held_out'] else '-'}")
 
     out = Path(args.out)
     out.write_text(json.dumps({

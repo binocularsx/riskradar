@@ -54,6 +54,13 @@ export const api = {
   nextCase: () => post('/v1/worklist/next'),
   disposition: (id, data) => post(`/v1/cases/${id}/disposition`, data),
   operations: () => get('/v1/metrics/operations'),
+  // D83: the live desk, the case tracker and the workflow of one case
+  intake: (minutes = 60) => get(`/v1/metrics/intake?minutes=${minutes}`),
+  pipeline: () => get('/v1/workflow/pipeline'),
+  workflowCatalog: () => get('/v1/workflow/catalog'),
+  caseWorkflow: (id) => get(`/v1/cases/${id}/workflow`),
+  recordAction: (id, data) => post(`/v1/cases/${id}/actions`, data),
+  returnCase: (id, findings) => post(`/v1/cases/${id}/return`, { findings }),
 
   // queue and cases
   cases: (params) => get(`/v1/cases?${new URLSearchParams(params)}`),

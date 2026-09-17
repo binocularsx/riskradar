@@ -113,7 +113,7 @@ button.unsure  { background: rgba(240,180,41,.12); border-color: rgba(240,180,41
 button.unsure:hover:not(:disabled)  { background: rgba(240,180,41,.2); border-color: rgba(240,180,41,.68); }
 
 /* Segmented pill group, from reference 1's period selector. */
-.segmented { display: inline-flex; background: var(--bg-2); border: 1px solid var(--line);
+.segmented { display: inline-flex; flex-wrap: wrap; max-width: 100%; background: var(--bg-2); border: 1px solid var(--line);
              border-radius: 999px; padding: 3px; gap: 2px; }
 .segmented button {
   border: none; background: transparent; color: var(--text-2);
@@ -403,3 +403,57 @@ details[open] > summary::before { content: '▾ '; }
   .workspace { flex-direction: column; }
   .worklist { width: 100%; max-height: 42vh; border-right: none; border-bottom: 1px solid var(--line); }
 }
+
+/* ------------------------------------------------------ D83: live desk */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px 16px; }
+.kpi.warn { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.kpi .stat-value { font-size: 24px; font-variant-numeric: tabular-nums; }
+.hbars { display: flex; flex-direction: column; gap: 7px; }
+.hbar { display: grid; grid-template-columns: minmax(90px, 40%) 1fr auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.hbar-label { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 8px; background: var(--bg-2); border-radius: 999px; overflow: hidden; }
+.hbar-fill { display: block; height: 100%; border-radius: 999px; min-width: 2px; }
+.hbar-n { font-size: 12px; }
+.pipeline-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.pipe-stage { display: block; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md);
+              background: var(--bg-2); color: inherit; text-decoration: none; }
+.pipe-stage:hover { border-color: var(--line-2); }
+tr.flagged td { background: color-mix(in srgb, var(--high) 7%, transparent); }
+
+/* ---------------------------------------------------- D83: case tracker */
+.tracker { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; }
+.tracker-col { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-md);
+               display: flex; flex-direction: column; min-height: 300px; }
+.tracker-col header { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.tracker-count { font-family: var(--mono); font-size: 18px; }
+.tracker-items { padding: 8px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 70vh; }
+.tracker-card { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm);
+                padding: 10px 12px; color: inherit; text-decoration: none; font-size: 13px; }
+.tracker-card:hover { border-color: var(--accent); }
+
+/* ---------------------------------------------------- D83: case workflow */
+.stagebar { display: flex; flex-wrap: wrap; gap: 6px; }
+.stagebar .stage { display: flex; align-items: center; gap: 7px; padding: 6px 12px 6px 6px; border-radius: 999px;
+                   border: 1px solid var(--line); font-size: 12px; color: var(--text-3); }
+.stagebar .stage .dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+                        background: var(--bg-2); font-size: 11px; }
+.stagebar .stage.done { color: var(--text-2); }
+.stagebar .stage.done .dot { background: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
+.stagebar .stage.current { color: var(--text); border-color: var(--accent); background: var(--accent-dim); }
+.stagebar .stage.current .dot { background: var(--accent); color: #04121f; }
+.caseflow .next { margin: 12px 0 0; font-size: 13.5px; }
+.escalation-note { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm); font-size: 12.5px;
+                   background: color-mix(in srgb, var(--warn) 9%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.step { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 13.5px; background: var(--bg-2); }
+.step .tick { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border-radius: 50%;
+              border: 1px solid var(--line-2); font-size: 11px; color: var(--text-3); }
+.step.done { border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.step.done .tick { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); border-color: transparent; }
+.step.info { color: var(--text-2); }
+.step .recorded { margin: 6px 0 0 28px; font-size: 12px; color: var(--text-2); }
+.record-form, .dialog { margin-top: 10px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); }
+.dialog ul.tight { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
+.lifecycle { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; }
+.lifecycle li { margin-bottom: 4px; }

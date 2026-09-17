@@ -35,12 +35,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 sys.path.insert(0, str(REPO_ROOT / "ml"))
 
+from offline_rules import compute_signals, rule_masks  # noqa: E402
 from riskradar.features.spec import FEATURE_NAMES, MODEL_FEATURE_NAMES  # noqa: E402
 from riskradar.model.calibrated import TimeSplitCalibratedBooster  # noqa: E402
+from train import TYPOLOGIES  # noqa: E402
 
 ARTIFACTS = REPO_ROOT / "ml" / "artifacts"
 DATA = REPO_ROOT / "ml" / "data"
-TYPES = ("ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING")
+TYPES = TYPOLOGIES
 BUDGET = 75
 MACHINE_SIGNALS = ("CARD_TESTING_PROBES", "ACCOUNT_TAKEOVER_SEQUENCE")
 
@@ -48,15 +50,11 @@ MACHINE_SIGNALS = ("CARD_TESTING_PROBES", "ACCOUNT_TAKEOVER_SEQUENCE")
 def main() -> None:
     d = np.load(DATA / "corpus.features.npz", allow_pickle=True)
     X, y, typ, occ, inc = d["X"], d["y"].astype(int), d["typology"], d["occurred_at"], d["incident_id"]
-    inst, amount = [], []
-    with open(DATA / "corpus.jsonl", encoding="utf-8") as fh:
-        for line in fh:
-            r = json.loads(line)
-            inst.append(r["instrument"])
-            amount.append(r["amount_minor"])
-    inst, amount = np.array(inst), np.array(amount, dtype=np.int64)
+    meta = {k: d[k] for k in ("instrument", "channel", "ip_region", "has_beneficiary")}
+    amount = d["amount_minor"]
     order = np.argsort(occ)
-    X, y, typ, occ, inc, inst, amount = (a[order] for a in (X, y, typ, occ, inc, inst, amount))
+    X, y, typ, occ, inc, amount = (a[order] for a in (X, y, typ, occ, inc, amount))
+    meta = {k: v[order] for k, v in meta.items()}
     cut = int(0.75 * len(y))
     days = (occ[-1] - occ[cut]).total_seconds() / 86400.0
     model_cols = [FEATURE_NAMES.index(n) for n in MODEL_FEATURE_NAMES]
@@ -65,24 +63,18 @@ def main() -> None:
     p = TimeSplitCalibratedBooster().fit(X[:cut][:, model_cols], y[:cut], times=occ[:cut]).predict_proba(
         X[cut:][:, model_cols])[:, 1]
 
-    Xt, yt, tt, it, nt, at = X[cut:], y[cut:], typ[cut:], inc[cut:], inst[cut:], amount[cut:]
-    col = lambda n: Xt[:, FEATURE_NAMES.index(n)]  # noqa: E731
-    count, first_seen = col("txn_count_1h_account"), col("beneficiary_first_seen_days")
-    signals = {
-        "CARD_TESTING_PROBES": (nt == "CARD") & (col("decline_rate_24h_account") >= 0.5) & (col("failed_attempts_1h_account") >= 3),
-        "VELOCITY_BURST_1H": ((count >= 5) & (first_seen >= 0) & (first_seen < 1)) | ((count >= 10) & (first_seen < 0)),
-        "ACCOUNT_TAKEOVER_SEQUENCE": ((((col("device_bound_hours") >= 0) & (col("device_bound_hours") < 24)).astype(int)
-                                      + (col("sim_changed_hours") < 24) + (col("credential_changed_hours") < 24)
-                                      + (col("failed_logins_1h_subject") >= 3)) >= 2) & (col("beneficiary_is_new_to_account") == 1),
-        "SECOND_LEG_ONWARD_PAYMENT": (col("distinct_remitters_24h_account") >= 3) & (col("inbound_count_ratio_24h_vs_daily_mean_30d") >= 5)
-                                     & (col("minutes_since_last_credit") <= 180) & (col("pass_through_ratio_24h") >= 0.5),
-    }
-    rules = np.zeros(len(yt), bool)
-    for m in signals.values():
-        rules |= m
+    yt, tt, it, at = y[cut:], typ[cut:], inc[cut:], amount[cut:]
+    # D82: the shipped rules through the real engine (ml/offline_rules.py).
+    print("evaluating the rules on the test period ...", flush=True)
+    rules, signals = rule_masks(compute_signals(X[cut:], {k: v[cut:] for k, v in meta.items()}))
     machine = np.zeros(len(yt), bool)
     for code in MACHINE_SIGNALS:
-        machine |= signals[code]
+        machine |= signals.get(code, np.zeros(len(yt), bool))
+    fraud_rows = yt == 1
+    rule_precision = {code: {"per_day": round(float(m.sum()) / days, 1),
+                             "precision": round(float((m & fraud_rows).sum()) / max(int(m.sum()), 1), 3)}
+                      for code, m in sorted(signals.items())}
+    print("rule precision on the test period:", rule_precision, flush=True)
 
     receiving = json.loads((ARTIFACTS / "receiving-side.json").read_text(encoding="utf-8"))["chosen"]
     credit_per_day = receiving["alerts_per_day"]
@@ -169,6 +161,7 @@ def main() -> None:
     out = ARTIFACTS / "tiers.json"
     out.write_text(json.dumps({"budget_per_day": BUDGET, "test_days": round(days, 1), "machine_signals": MACHINE_SIGNALS,
                                "credit_reviews_reserved_per_day": credit_per_day, "arms": rows,
+                               "rule_precision": rule_precision,
                                "auto_close_candidate": auto_close,
                                "auto_close_probability_cut": auto_close_cut,
                                "incidents_lost_to_auto_close_in_kept_arm": len(kept_lost)}, indent=2), encoding="utf-8")

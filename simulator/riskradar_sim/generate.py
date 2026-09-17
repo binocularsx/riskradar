@@ -27,7 +27,26 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from .engine import TYPOLOGIES, Event, disbursement_burst, legitimate_event
+from .engine import (
+    TYPOLOGIES,
+    Event,
+    _night,
+    disbursement_burst,
+    group_collection,
+    legitimate_event,
+    returning_owner,
+    sim_replacement_errands,
+    travel_day,
+)
+
+# D82: ordinary life that looks like the four added fraud types, per customer per
+# day, and the share of ordinary payments made at night (airtime at 1am, a bar's
+# POS, a night-shift worker's transfer).
+NIGHT_SHARE = 0.03
+GROUP_COLLECTIONS_PER_10K_CUSTOMERS = 12
+SIM_REPLACEMENT_RATE = 0.0006
+OWNER_RETURNING_RATE = 0.0008
+TRAVEL_RATE = 0.004
 from .credits import CreditLayer
 from .signals import EventLayer
 from . import ids
@@ -72,8 +91,11 @@ class SimulationConfig:
             # transactions lands near the 0.3% fraud rate of D23, while still
             # producing ~150 incidents — roughly 50 per typology, which is the
             # floor for held-out-typology evaluation (D10b) to say anything.
+            # D82: seven typologies, four of them shorter (a scam is one to three
+            # payments), so seven draws a day keep fraud near 0.3% of rows and
+            # give every typology about as many incidents a day as three did.
             return cls(n_customers=3_000, days=30, transactions_per_day=20_000,
-                       fraud_incidents_per_day=5)
+                       fraud_incidents_per_day=7)
         if name == "reference":
             # D23 as written. Large; used for the load test and nothing else.
             return cls(n_customers=50_000, days=14, transactions_per_day=100_000,
@@ -129,7 +151,7 @@ def generate(config: SimulationConfig, *, with_events: bool = False, with_credit
     for customer in customers:
         for account in customer.accounts:
             pairs.append((customer, account))
-            weights.append(account.daily_rate)
+            weights.append(account.daily_rate)  # 0 for an abandoned account: ordinary life skips it
 
     # D57: accounts a mule network could plausibly have recruited — ordinary
     # people's real payees, which therefore carry ordinary history. Drawing some
@@ -141,6 +163,9 @@ def generate(config: SimulationConfig, *, with_events: bool = False, with_credit
             recruited_pool.append(rng.choice(customer.known_beneficiaries))
 
     batch_payers = [c for c in customers if c.does_batch_payouts]
+    dormant_customers = [c for c in customers if any(a.is_naturally_dormant for a in c.accounts)]
+    # D82: accounts abandoned for months, for dormant-account fraud and owners returning.
+    abandoned_customers = [c for c in customers if any(a.is_dormant for a in c.accounts)]
     layer = EventLayer(config.seed, customers) if with_events else None
     credit_layer = CreditLayer(config.seed, customers) if with_credits else None
     by_id = {c.customer_id: c for c in customers}
@@ -156,6 +181,8 @@ def generate(config: SimulationConfig, *, with_events: bool = False, with_credit
             when = _active_hour(rng, customer, day)
             if when > end:
                 continue  # today is only partly over; do not invent the future
+            if rng.random() < NIGHT_SHARE:
+                when = _night(rng, when)
             event = legitimate_event(rng, customer, account, when)
             account.last_activity_at = when
             events.append(event)
@@ -175,15 +202,30 @@ def generate(config: SimulationConfig, *, with_events: bool = False, with_credit
                     if datetime.fromisoformat(e.payload["occurred_at"]) <= end
                 )
 
+        # --- D82: ordinary life that looks like the added fraud types ---------
+        def _upto(stream):
+            return (e for e in stream if datetime.fromisoformat(e.payload["occurred_at"]) <= end)
+
+        for _ in range(max(1, round(len(customers) * GROUP_COLLECTIONS_PER_10K_CUSTOMERS / 10_000))):
+            events.extend(_upto(group_collection(rng, customers, day)))
+        for rate, twin, choose in ((SIM_REPLACEMENT_RATE, sim_replacement_errands, customers),
+                                   (OWNER_RETURNING_RATE, returning_owner, abandoned_customers or dormant_customers),
+                                   (TRAVEL_RATE, travel_day, customers)):
+            for person in rng.sample(choose, min(len(choose), _poisson(rng, len(customers) * rate))):
+                when = _active_hour(rng, person, day)
+                if when <= end:
+                    events.extend(_upto(twin(rng, person, when)))
+
         # --- criminal processes ---------------------------------------------
         for _ in range(config.fraud_incidents_per_day):
             typology = rng.choice(list(TYPOLOGIES))
             # D20c: the process *selects* on attributes it never sets. An
             # attacker prefers a dormant account; the account was already
             # dormant, drawn from the population before any of this.
-            if typology == "ACCOUNT_TAKEOVER":
-                pool = [c for c in customers if any(a.is_naturally_dormant for a in c.accounts)]
-                victim = rng.choice(pool or customers)
+            if typology == "DORMANT_ACCOUNT":
+                victim = rng.choice(abandoned_customers or dormant_customers or customers)
+            elif typology == "ACCOUNT_TAKEOVER":
+                victim = rng.choice(dormant_customers or customers)
             else:
                 victim = rng.choice(customers)
 
@@ -192,10 +234,7 @@ def generate(config: SimulationConfig, *, with_events: bool = False, with_credit
                 continue
             # An incident runs for minutes or hours after it starts; anything
             # that would spill past now is dropped for the same reason.
-            events.extend(
-                e for e in TYPOLOGIES[typology](rng, victim, begin, recruited_pool)
-                if datetime.fromisoformat(e.payload["occurred_at"]) <= end
-            )
+            events.extend(_upto(TYPOLOGIES[typology](rng, victim, begin, recruited_pool, customers=customers)))
 
         payments = list(events)
         if layer is not None:
@@ -211,6 +250,18 @@ def generate(config: SimulationConfig, *, with_events: bool = False, with_credit
 
         events.sort(key=lambda e: e.payload["occurred_at"])
         yield from events
+
+
+def _poisson(rng: random.Random, mean: float) -> int:
+    """Knuth's method; the means here are small."""
+    import math
+
+    limit, k, p = math.exp(-mean), 0, 1.0
+    while True:
+        p *= rng.random()
+        if p <= limit:
+            return k
+        k += 1
 
 
 def events_path(corpus_path: Path) -> Path:

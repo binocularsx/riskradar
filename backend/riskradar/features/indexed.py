@@ -22,6 +22,7 @@ from typing import Any, Iterable
 
 from .spec import (
     ACCOUNT_HISTORY_DAYS,
+    BENEFICIARY_SENDERS_HOURS,
     CREDIT_HISTORY_DAYS,
     EVENT_LOOKBACK_HOURS,
     FEATURE_EVENT_TYPES,
@@ -43,6 +44,8 @@ class PandasHistorySource:
         self._subject_times: dict[str, list[datetime]] = defaultdict(list)
         self._subject_rows: dict[str, list[PriorTx]] = defaultdict(list)
         self._beneficiary_first: dict[str, list[datetime]] = defaultdict(list)
+        # D82: who paid each destination, and when, for the other-senders count.
+        self._beneficiary_payers: dict[str, list[tuple[datetime, str]]] = defaultdict(list)
         # D78: credits into each account, kept apart from outgoing history.
         self._credit_times: dict[str, list[datetime]] = defaultdict(list)
         self._credit_rows: dict[str, list[PriorTx]] = defaultdict(list)
@@ -55,6 +58,9 @@ class PandasHistorySource:
                     auth_result=row["auth_result"],
                     beneficiary_token=_clean(row.get("remitter_token")),
                     device_token=_clean(row.get("device_token")),
+                    ip_region=_clean(row.get("ip_region")),
+                    channel=_text(row.get("channel")),
+                    instrument=_text(row.get("instrument")),
                 ))
                 continue
             prior = PriorTx(
@@ -63,11 +69,15 @@ class PandasHistorySource:
                 auth_result=row["auth_result"],
                 beneficiary_token=_clean(row.get("beneficiary_token")),
                 device_token=_clean(row.get("device_token")),
+                ip_region=_clean(row.get("ip_region")),
+                channel=_text(row.get("channel")),
+                instrument=_text(row.get("instrument")),
             )
             self._account_rows[row["account_token"]].append(prior)
             self._subject_rows[row["subject_token"]].append(prior)
             if prior.beneficiary_token:
                 self._beneficiary_first[prior.beneficiary_token].append(prior.occurred_at)
+                self._beneficiary_payers[prior.beneficiary_token].append((prior.occurred_at, row["subject_token"]))
 
         for key, items in self._account_rows.items():
             items.sort(key=lambda p: p.occurred_at)
@@ -77,6 +87,10 @@ class PandasHistorySource:
             self._subject_times[key] = [p.occurred_at for p in items]
         for key, times in self._beneficiary_first.items():
             times.sort()
+        self._payer_times: dict[str, list[datetime]] = {}
+        for key, payers in self._beneficiary_payers.items():
+            payers.sort(key=lambda tp: tp[0])
+            self._payer_times[key] = [t for t, _ in payers]
         for key, items in self._credit_rows.items():
             items.sort(key=lambda p: p.occurred_at)
             self._credit_times[key] = [p.occurred_at for p in items]
@@ -125,10 +139,16 @@ class PandasHistorySource:
         )
 
         first_seen = None
+        other_senders = 0
         if tx.beneficiary_token:
             times = self._beneficiary_first.get(tx.beneficiary_token)
             if times and times[0] < tx.occurred_at:
                 first_seen = times[0]
+                payer_times = self._payer_times[tx.beneficiary_token]
+                lo = bisect.bisect_left(payer_times, tx.occurred_at - timedelta(hours=BENEFICIARY_SENDERS_HOURS))
+                hi = bisect.bisect_left(payer_times, tx.occurred_at)
+                other_senders = len({s for _, s in self._beneficiary_payers[tx.beneficiary_token][lo:hi]
+                                     if s != tx.subject_token})
 
         events = self._slice(
             self._event_times.get(tx.subject_token, []),
@@ -144,7 +164,7 @@ class PandasHistorySource:
         )
         return HistoryBundle(
             account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events,
-            credits=credits,
+            credits=credits, beneficiary_other_senders_24h=other_senders,
         )
 
 
@@ -152,6 +172,11 @@ def _iter_rows(rows: Any) -> Iterable[dict[str, Any]]:
     if hasattr(rows, "to_dict"):  # pandas DataFrame
         return rows.to_dict("records")
     return rows
+
+
+def _text(value: Any) -> Any:
+    value = _clean(value)
+    return None if value is None else str(value)
 
 
 def _clean(value: Any) -> Any:

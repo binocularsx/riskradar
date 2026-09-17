@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { api, clock, nairaShort } from '../lib/api'
 import { useAlertStream } from '../lib/useStream'
@@ -25,6 +26,8 @@ const SCOPES = [
   { key: 'unassigned', label: 'Unassigned' },
   { key: 'breaching', label: 'Past due' },
   { key: 'machine', label: 'Machine actions' },
+  { key: 'escalated', label: 'Escalated' },
+  { key: 'awaiting_close', label: 'Awaiting close' },
 ]
 
 export default function Triage({ user }) {
@@ -39,20 +42,31 @@ export default function Triage({ user }) {
   const [error, setError] = useState(null)
   const [alarms, setAlarms] = useState([])
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
+  const [params, setParams] = useSearchParams()
+  const linked = Number(params.get('case')) || null
 
   const load = useCallback(async (keepSelection = true) => {
     try {
       const d = await api.worklist({ scope, limit: 80 })
+      // D83: a case opened from the live desk or the tracker is shown even when
+      // it is not in the current filter, so a link never lands on nothing.
+      if (linked && !d.items.some((c) => c.id === linked)) {
+        const all = await api.worklist({ scope: 'all', limit: 200 })
+        const found = all.items.find((c) => c.id === linked)
+        if (found) d.items = [found, ...d.items]
+      }
       setData(d)
       setError(null)
       setSelectedId((current) => {
+        if (linked && d.items.some((c) => c.id === linked)) return linked
         if (keepSelection && current && d.items.some((c) => c.id === current)) return current
         return d.items[0]?.id ?? null
       })
     } catch (e) {
       setError(e.message)
     }
-  }, [scope])
+  }, [scope, linked])
 
   useEffect(() => { load(false) }, [load])
 
@@ -202,17 +216,29 @@ export default function Triage({ user }) {
         </aside>
 
         <section className="casecol">
-          {alarms.map((a, i) => (
+          {/* One banner per alarm, not one per worker that raised it. */}
+          {[...new Map(alarms.map((a) => [`${a.code}:${a.detail}`, a])).values()].map((a, i) => (
             <Banner key={i} kind="warn">
               <strong>System alarm — {a.code}.</strong> {a.detail}
             </Banner>
           ))}
           {error && <Banner kind="error">{error}</Banner>}
 
+          {notice && <Banner kind="ok">{notice}</Banner>}
           <CaseView
             summary={selected}
             user={user}
-            onDisposed={async () => { await load(false); advance() }}
+            onDisposed={async (result) => {
+              if (result?.refreshOnly) { await load(true); return }
+              if (result?.outcome) {
+                const id = result.case_id
+                setNotice(result.closed
+                  ? `Case #${id} closed as ${result.outcome.replace(/_/g, ' ').toLowerCase()}.`
+                  : `Case #${id}: outcome recorded. It has left your queue and waits for a Fraud Ops lead to close it — follow it in the Case tracker.`)
+              }
+              if (linked) setParams({})
+              await load(false); advance()
+            }}
             onSkip={advance}
           />
         </section>

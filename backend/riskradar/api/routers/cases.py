@@ -355,7 +355,10 @@ def start_review(
         user,
         to_state="UNDER_REVIEW",
         action="CASE_REVIEW_STARTED",
-        extra_sql=", assignee_id = COALESCE(assignee_id, %(uid)s), escalated_to = NULL",
+        # D83: taking an escalated case makes it the taker's. The analyst who
+        # escalated stays on record (escalated_by) and gets it back on return.
+        extra_sql=(", assignee_id = %(uid)s" if case["state"] == "ESCALATED"
+                   else ", assignee_id = COALESCE(assignee_id, %(uid)s)") + ", escalated_to = NULL",
         params={"uid": user["id"]},
     )
 
@@ -435,21 +438,27 @@ def escalate(
     case = _fetch_case(conn, case_id)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "cannot escalate a closed case")
-    if body.note:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO case_notes (case_id, author_id, body) VALUES (%s, %s, %s)",
-                (case_id, user["id"], body.note),
-            )
+    # D83: a reason is required. The team receiving it has to know why without
+    # calling the analyst, and the record has to say why it moved.
+    if not (body.note or "").strip():
+        raise HTTPException(400, "say why you are escalating; the receiving team reads it first")
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO case_notes (case_id, author_id, body) VALUES (%s, %s, %s)",
+            (case_id, user["id"], f"Escalated to {body.target}: {body.note}"),
+        )
+    # The case leaves the escalating analyst's queue and waits, unassigned, in
+    # the receiving team's escalated queue.
     return _transition(
         conn,
         case,
         user,
         to_state="ESCALATED",
         action="CASE_ESCALATED",
-        extra_sql=", escalated_to = %(target)s",
-        params={"target": body.target},
-        payload={"target": body.target},
+        extra_sql=(", escalated_to = %(target)s, escalated_by = %(uid)s, escalated_at = now(), "
+                   "escalation_reason = %(reason)s, assignee_id = NULL"),
+        params={"target": body.target, "uid": user["id"], "reason": body.note},
+        payload={"target": body.target, "reason": body.note[:500]},
     )
 
 
@@ -738,7 +747,7 @@ def close_case(
             cur.execute(
                 """
                 INSERT INTO beneficiary_lists (kind, token, note, added_by)
-                SELECT DISTINCT 'KNOWN_MULE', t.beneficiary_token,
+                SELECT DISTINCT 'KNOWN_MULE'::beneficiary_list_kind, t.beneficiary_token,
                        'auto: confirmed fraud on case ' || %s, %s
                   FROM alerts a JOIN transactions t ON t.id = a.transaction_id
                  WHERE a.case_id = %s AND t.beneficiary_token IS NOT NULL

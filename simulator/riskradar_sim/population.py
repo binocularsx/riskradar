@@ -46,6 +46,8 @@ LAST_NAMES = [
 ]
 
 PRODUCTS = ["SAVINGS", "CURRENT", "DOMICILIARY", "WALLET"]
+# D82: share of accounts old enough that have been abandoned for months.
+DORMANT_SHARE = 0.08
 PRODUCT_WEIGHTS = [0.52, 0.34, 0.05, 0.09]
 
 
@@ -64,6 +66,11 @@ class Account:
     @property
     def is_naturally_dormant(self) -> bool:
         return self.daily_rate < 0.08
+
+    @property
+    def is_dormant(self) -> bool:
+        """D82: not used at all for months. Ordinary life never picks it (weight 0)."""
+        return self.daily_rate == 0.0
 
 
 # How people actually differ from one another (D57).
@@ -163,6 +170,16 @@ def build_population(
                 [rng.uniform(0.01, 0.08), rng.uniform(0.08, 1.2), rng.uniform(1.2, 4.0)],
                 [0.18, 0.60, 0.22],
             )[0]
+            # D82: when it was last used before the window opens, from its own
+            # rate, so a quiet account is already quiet on day one instead of
+            # "never seen". Drawn with everything else, before any fraud (D20c).
+            idle_days = min(age_days, rng.expovariate(rate))
+            # D82: some old accounts are simply abandoned: a salary account from
+            # a previous job, a student account. Months without a transaction.
+            # Their owners sometimes return; somebody else sometimes finds them.
+            if age_days > 150 and rng.random() < DORMANT_SHARE:
+                rate = 0.0
+                idle_days = rng.uniform(90, min(age_days - 30, 900))
             accounts.append(
                 Account(
                     account_id=f"ACC{hex_id(12).upper()}",
@@ -170,6 +187,7 @@ def build_population(
                     origin_sol_id=rng.choice(SOL_IDS),
                     opened_at=now - timedelta(days=age_days),
                     daily_rate=rate,
+                    last_activity_at=now - timedelta(days=idle_days),
                 )
             )
 

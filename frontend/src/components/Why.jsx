@@ -20,6 +20,35 @@ import { naira } from '../lib/api'
  * strongest evidence reads first.
  */
 const READINGS = [
+  // D82: the four added fraud types.
+  {
+    key: 'beneficiary_distinct_senders_24h',
+    unusual: (v) => v >= 2,
+    weight: 95,
+    text: (v) => `**${Math.round(v)} other customers paid this destination** in the last day.`,
+    meaning: 'A scam collects from many victims into one account; a school or a levy does too, if the account is not new.',
+  },
+  {
+    key: 'card_present_count_1h_account',
+    unusual: (v) => v >= 3,
+    weight: 92,
+    text: (v) => `The card was used at **${Math.round(v)} terminals within the hour**.`,
+    meaning: 'A cloned card is cashed out at machine after machine before the owner notices.',
+  },
+  {
+    key: 'region_is_new_to_subject',
+    unusual: (v) => v === 1,
+    weight: 70,
+    text: () => 'This happened **in a region the customer has not used this month**.',
+    meaning: 'People travel, so this matters only alongside something else.',
+  },
+  {
+    key: 'hour_of_day_local',
+    unusual: (v) => v >= 0 && v < 5,
+    weight: 60,
+    text: (v) => `It happened at **${String(Math.round(v)).padStart(2, '0')}:00, in the small hours**.`,
+    meaning: 'SIM-swap drains and card cash-outs prefer the hours the owner is asleep.',
+  },
   // D77: what happened to the customer before the payment.
   {
     key: 'failed_logins_1h_subject',

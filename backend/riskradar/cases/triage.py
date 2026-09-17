@@ -122,6 +122,40 @@ def recommend(
             disposition_hint="CONFIRMED_FRAUD",
         )
 
+    # D82: the four added fraud types, each with the step that saves the money.
+    if "SIM_SWAP_TRANSFER" in signals:
+        return Recommendation(
+            action="Hold further transfers and reach the customer on a second channel",
+            because=f"₦{naira:,.0f} left for a new destination hours after the customer's SIM "
+                    "changed. Whoever holds the new SIM receives the OTPs, so do not call the "
+                    "number on file: use email, the branch or a registered alternative number.",
+            urgency="now",
+        )
+    if "CARD_PRESENT_NEW_REGION_CASHOUT" in signals:
+        return Recommendation(
+            action="Block the card and confirm where the customer is",
+            because=f"The card was used at terminal after terminal ({declined_count} declined) in a "
+                    "region this customer has not used this month. A cloned card is cashed out "
+                    "like this before the owner notices; a traveller rarely is.",
+            urgency="now",
+        )
+    if "SCAM_BENEFICIARY_FANIN" in signals:
+        return Recommendation(
+            action="Call the customer before paying out, and ask who asked them to pay",
+            because=f"₦{naira:,.0f} went to a new account that several other customers also paid "
+                    "today. That is how a scam's collection account looks. The customer made the "
+                    "payment themselves, so ask about the call or message that prompted it, then "
+                    "notify the receiving bank to place a hold.",
+            urgency="now",
+        )
+    if "DORMANT_ACCOUNT_REACTIVATION" in signals:
+        return Recommendation(
+            action="Verify the owner in person or by video before releasing more",
+            because=f"An account dormant for months moved ₦{naira:,.0f} to a new destination. "
+                    "Check whether its phone number or email was changed recently, and by whom.",
+            urgency="now",
+        )
+
     # Account takeover shape: new device plus rapid outbound movement.
     if new_device and "VELOCITY_BURST_1H" in signals:
         return Recommendation(

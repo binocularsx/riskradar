@@ -18,7 +18,7 @@ from __future__ import annotations
 
 # Bumped whenever the meaning of any feature changes. Every decision record
 # stores the version that produced it, so a decision is reproducible (G4).
-FEATURE_SPEC_VERSION = "1.3.0"  # D78: the money coming in
+FEATURE_SPEC_VERSION = "1.4.1"  # D82: four more fraud types (1.4.1: region novelty ignores the last day)
 
 # D25 cut this from ~15 to 12 to pay for the identity work in D19a/D22.
 FEATURE_NAMES: tuple[str, ...] = (
@@ -48,6 +48,14 @@ FEATURE_NAMES: tuple[str, ...] = (
     "inbound_count_ratio_24h_vs_daily_mean_30d",
     "minutes_since_last_credit",
     "pass_through_ratio_24h",
+    # D82: what the four added fraud types leave behind. A cloned card used where
+    # its owner never is, several times within the hour; a scam collection account
+    # paid by several of our customers in one day; the local hour, because a SIM
+    # swap drain and a skimmed-card cash-out prefer the night.
+    "region_is_new_to_subject",
+    "card_present_count_1h_account",
+    "beneficiary_distinct_senders_24h",
+    "hour_of_day_local",
 )
 
 # Lookback windows the history loaders must honour. Both data-access paths read
@@ -61,6 +69,18 @@ BENEFICIARY_LOOKBACK_DAYS = 90
 # bound three days ago are both simply "not recently", and an uncapped value
 # would teach the model the age of the simulation rather than the customer.
 EVENT_LOOKBACK_HOURS = 72
+
+# D82. How far back other customers' payments to the same destination are
+# counted. One day: a scam collection account is used hard and dropped.
+BENEFICIARY_SENDERS_HOURS = 24
+# D82. Region novelty compares with where the customer was *before* the last
+# day. Measured against all of the month, a cloned card's second withdrawal in
+# the attacker's city already reads as "seen": the run hides itself.
+REGION_RECENT_HOURS = 24
+# D82. Card present: the card and the person holding it are at the terminal.
+CARD_PRESENT_CHANNELS = frozenset({"POS", "ATM", "AGENT"})
+# D82. Local time for the hour of day. Nigeria keeps UTC+1 all year.
+LOCAL_UTC_OFFSET_HOURS = 1
 
 # D78. The receiving-side features are read by rules, not by the payment model.
 # Given to the model, they cost unseen account takeover 0.991 [0.97, 1.00] ->

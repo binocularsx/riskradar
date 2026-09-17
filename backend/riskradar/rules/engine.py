@@ -35,6 +35,10 @@ ACCOUNT_TAKEOVER_SEQUENCE    ESCALATE   A way in taken over, then a new destinat
 MULE_INBOUND_FANIN           ESCALATE   Credits from many senders, unlike the account (D78)
 SECOND_LEG_ONWARD_PAYMENT    ESCALATE   That money leaving again within hours (D79)
 CARD_TESTING_PROBES          ESCALATE   Authorisation probing — decline-heavy by nature
+SCAM_BENEFICIARY_FANIN       ESCALATE   A new destination several customers paid today (D82)
+SIM_SWAP_TRANSFER            ESCALATE   A new destination hours after the SIM changed (D82)
+DORMANT_ACCOUNT_REACTIVATION ESCALATE   A long-quiet account suddenly moving real money (D82)
+CARD_PRESENT_NEW_REGION_CASHOUT ESCALATE A card at terminal after terminal, somewhere new (D82)
 SANCTIONED_BENEFICIARY       OVERRIDE   Some things are not probabilistic
 KNOWN_MULE_BENEFICIARY       OVERRIDE   Destination confirmed fraudulent by an analyst
 PRE_REGISTERED_BENEFICIARY   SUPPRESS   The customer set this payee up on purpose
@@ -292,6 +296,140 @@ def card_testing_probes(ctx: RuleContext, params: dict[str, Any]) -> Signal | No
 
 
 # ---------------------------------------------------------------------------
+# D82 — four fraud types a Nigerian desk sees that the first three did not cover
+# ---------------------------------------------------------------------------
+
+
+@rule("SCAM_BENEFICIARY_FANIN")
+def scam_beneficiary_fanin(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """A payment to a destination several other customers of ours paid today, that is new.
+
+    Social engineering is the fraud Nigerian banks report most: a caller posing
+    as the bank, a regulator or a relative, or an "investment", talks the real
+    customer into sending the money themselves, from their own phone. Nothing
+    about the session is wrong, so no takeover signal can see it. What the scam
+    cannot hide is its collection account: many victims pay it within a day or
+    two, and it did not exist in our traffic last week.
+
+    A school, a church levy or a popular vendor is also paid by many customers,
+    which is why the destination must be new, and new to this customer.
+    """
+    if float(ctx.features.get("beneficiary_is_new_to_account", 0.0)) != 1.0:
+        return None
+    others = float(ctx.features.get("beneficiary_distinct_senders_24h", -1.0))
+    first_seen = float(ctx.features.get("beneficiary_first_seen_days", -1.0))
+    min_others = int(params.get("min_other_senders", 2))
+    max_age = float(params.get("max_beneficiary_age_days", 7))
+    if others < min_others or first_seen < 0 or first_seen > max_age:
+        return None
+    min_amount = params.get("min_amount_log10")
+    amount = float(ctx.features.get("amount_log10", 0.0))
+    if min_amount is not None and amount < float(min_amount):
+        return None
+    # Persuaded victims send more than they usually do; a school fee is ordinary.
+    min_ratio = params.get("min_amount_ratio")
+    ratio = float(ctx.features.get("amount_ratio_to_account_p95_30d", 0.0))
+    if min_ratio is not None and ratio < float(min_ratio):
+        return None
+    return Signal(
+        code="SCAM_BENEFICIARY_FANIN",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"other_customers_paying_it_24h": int(others), "destination_first_seen_days": round(first_seen, 2),
+                  "min_other_senders": min_others, "max_beneficiary_age_days": max_age,
+                  "payee_added_minutes": round(float(ctx.features.get("payee_added_minutes", -1.0)), 1)},
+    )
+
+
+@rule("SIM_SWAP_TRANSFER")
+def sim_swap_transfer(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """Money to a new destination within hours of the customer's SIM changing.
+
+    A SIM swap hands the attacker the OTPs and the USSD session. On USSD there
+    is no app to bind and often no password to guess, so the takeover sequence
+    (which wants two precursors) sees one; this rule is that one precursor, on
+    its own, followed by a destination the account has never paid. People do
+    replace lost SIMs, so the window is short and the destination must be new.
+    """
+    if float(ctx.features.get("beneficiary_is_new_to_account", 0.0)) != 1.0:
+        return None
+    within = float(params.get("within_hours", 12))
+    hours = float(ctx.features.get("sim_changed_hours", within))
+    if not 0 <= hours < within:
+        return None
+    channels = params.get("channels")
+    if channels and ctx.tx.channel not in channels:
+        return None
+    min_amount = params.get("min_amount_log10")
+    if min_amount is not None and float(ctx.features.get("amount_log10", 0.0)) < float(min_amount):
+        return None
+    min_ratio = params.get("min_amount_ratio")
+    if min_ratio is not None and float(ctx.features.get("amount_ratio_to_account_p95_30d", 0.0)) < float(min_ratio):
+        return None
+    return Signal(
+        code="SIM_SWAP_TRANSFER",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"sim_changed_hours": round(hours, 2), "within_hours": within, "channel": ctx.tx.channel,
+                  "hour_of_day_local": int(ctx.features.get("hour_of_day_local", -1))},
+    )
+
+
+@rule("DORMANT_ACCOUNT_REACTIVATION")
+def dormant_account_reactivation(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """An account quiet for months, suddenly sending a large sum somewhere new.
+
+    Dormant accounts are drained from inside and outside: a changed phone number
+    on a forgotten account, a transfer nobody is watching for. Owners also come
+    back, so the sum must be large and the destination new to the account.
+    """
+    quiet = float(ctx.features.get("days_since_account_activity", -1.0))
+    min_quiet = float(params.get("min_dormant_days", 60))
+    if quiet < min_quiet:
+        return None
+    amount = float(ctx.features.get("amount_log10", 0.0))
+    min_amount = float(params.get("min_amount_log10", 5.0))
+    if amount < min_amount:
+        return None
+    if params.get("require_new_destination", True) and ctx.tx.beneficiary_token \
+            and float(ctx.features.get("beneficiary_is_new_to_account", 0.0)) != 1.0:
+        return None
+    return Signal(
+        code="DORMANT_ACCOUNT_REACTIVATION",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"days_since_account_activity": round(quiet, 1), "min_dormant_days": min_quiet,
+                  "amount_naira": round(10 ** amount - 1), "min_amount_log10": min_amount,
+                  "credential_changed_hours": round(float(ctx.features.get("credential_changed_hours", -1.0)), 1)},
+    )
+
+
+@rule("CARD_PRESENT_NEW_REGION_CASHOUT")
+def card_present_new_region_cashout(ctx: RuleContext, params: dict[str, Any]) -> Signal | None:
+    """The card at terminal after terminal within the hour, in a region its owner has not used.
+
+    A skimmed or stolen card is emptied at ATMs, POS terminals and agents before
+    the owner notices, usually away from home. A traveller uses a card away from
+    home too, once or twice; the run of attempts is what separates them.
+    """
+    if ctx.tx.instrument != "CARD" or ctx.tx.channel not in ("POS", "ATM", "AGENT"):
+        return None
+    if float(ctx.features.get("region_is_new_to_subject", -1.0)) != 1.0:
+        return None
+    count = int(ctx.features.get("card_present_count_1h_account", 0))
+    min_count = int(params.get("min_count_1h", 3))
+    if count < min_count:
+        return None
+    return Signal(
+        code="CARD_PRESENT_NEW_REGION_CASHOUT",
+        power="ESCALATE",
+        severity=params.get("severity", "HIGH"),
+        evidence={"card_present_attempts_1h": count, "min_count_1h": min_count, "region": ctx.tx.ip_region,
+                  "hour_of_day_local": int(ctx.features.get("hour_of_day_local", -1))},
+    )
+
+
+# ---------------------------------------------------------------------------
 # OVERRIDE — deterministic veto. The model gets no vote.
 # ---------------------------------------------------------------------------
 
@@ -395,6 +533,10 @@ ALL_RULE_CODES: tuple[str, ...] = (
     "MULE_INBOUND_FANIN",
     "SECOND_LEG_ONWARD_PAYMENT",
     "CARD_TESTING_PROBES",
+    "SCAM_BENEFICIARY_FANIN",
+    "SIM_SWAP_TRANSFER",
+    "DORMANT_ACCOUNT_REACTIVATION",
+    "CARD_PRESENT_NEW_REGION_CASHOUT",
     "SANCTIONED_BENEFICIARY",
     "KNOWN_MULE_BENEFICIARY",
     "PRE_REGISTERED_BENEFICIARY",

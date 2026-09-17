@@ -33,13 +33,16 @@ from .spec import (
     ACCOUNT_HISTORY_DAYS,
     CREDIT_HISTORY_DAYS,
     BENEFICIARY_LOOKBACK_DAYS,
+    BENEFICIARY_SENDERS_HOURS,
     EVENT_LOOKBACK_HOURS,
     FEATURE_EVENT_TYPES,
     SUBJECT_HISTORY_DAYS,
 )
 from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
-_PRIOR_COLUMNS = "occurred_at, amount_minor, auth_result, beneficiary_token, device_token"
+_PRIOR_FIELDS = ("occurred_at", "amount_minor", "auth_result", "beneficiary_token", "device_token",
+                 "ip_region", "channel", "instrument")
+_PRIOR_COLUMNS = "occurred_at, amount_minor, auth_result, beneficiary_token, device_token, ip_region, channel, instrument"
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +70,8 @@ _SUBJECT_SQL = f"""
 # D78. Credits into the account; the remitter stands where the beneficiary
 # stands on a payment, the other party.
 _CREDITS_SQL = """
-    SELECT occurred_at, amount_minor, auth_result, remitter_token AS beneficiary_token, device_token
+    SELECT occurred_at, amount_minor, auth_result, remitter_token AS beneficiary_token, device_token,
+           ip_region, channel, instrument
       FROM transactions
      WHERE account_token = %(account)s
        AND direction = 'INBOUND'
@@ -96,14 +100,33 @@ _BENEFICIARY_SQL = """
 """
 
 
+# D82. Other customers paying the same destination in the day before.
+_BENEFICIARY_SENDERS_SQL = """
+    SELECT count(DISTINCT subject_token) AS n
+      FROM transactions
+     WHERE beneficiary_token = %(beneficiary)s
+       AND direction = 'OUTBOUND'
+       AND subject_token <> %(subject)s
+       AND occurred_at <  %(now)s
+       AND occurred_at >= %(from)s
+"""
+
+
 def _row_to_prior(row: Any) -> PriorTx:
     return PriorTx(
         occurred_at=row["occurred_at"],
         amount_minor=int(row["amount_minor"]),
         auth_result=row["auth_result"],
-        beneficiary_token=row["beneficiary_token"],
-        device_token=row["device_token"],
+        beneficiary_token=_none(row["beneficiary_token"]),
+        device_token=_none(row["device_token"]),
+        ip_region=_none(row.get("ip_region")),
+        channel=_text(row.get("channel")),
+        instrument=_text(row.get("instrument")),
     )
+
+
+def _text(value: Any) -> Any:
+    return str(value) if _present(value) else None
 
 
 def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
@@ -135,6 +158,7 @@ def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
         subject = [_row_to_prior(r) for r in cur.fetchall()]
 
         first_seen = None
+        other_senders = 0
         if tx.beneficiary_token:
             cur.execute(
                 _BENEFICIARY_SQL,
@@ -142,6 +166,13 @@ def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
             )
             row = cur.fetchone()
             first_seen = row["first_seen"] if row else None
+            cur.execute(
+                _BENEFICIARY_SENDERS_SQL,
+                {"beneficiary": tx.beneficiary_token, "subject": tx.subject_token, "now": tx.occurred_at,
+                 "from": tx.occurred_at - timedelta(hours=BENEFICIARY_SENDERS_HOURS)},
+            )
+            row = cur.fetchone()
+            other_senders = int(row["n"]) if row else 0
 
         cur.execute(
             _EVENTS_SQL,
@@ -166,7 +197,7 @@ def load_history_sql(conn: Any, tx: TxView) -> HistoryBundle:
 
     return HistoryBundle(
         account=account, subject=subject, beneficiary_first_seen_at=first_seen, events=events,
-        credits=credits,
+        credits=credits, beneficiary_other_senders_24h=other_senders,
     )
 
 
@@ -219,23 +250,19 @@ def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBun
     )
 
     def to_priors(mask: Any) -> list[PriorTx]:
-        sub = frame.loc[mask, list(_PRIOR_COLUMNS.replace(" ", "").split(","))]
-        return [
-            PriorTx(
-                occurred_at=rec[0],
-                amount_minor=int(rec[1]),
-                auth_result=rec[2],
-                beneficiary_token=rec[3] if _present(rec[3]) else None,
-                device_token=rec[4] if _present(rec[4]) else None,
-            )
-            for rec in sub.itertuples(index=False, name=None)
-        ]
+        cols = [c for c in _PRIOR_FIELDS if c in frame]
+        return [_row_to_prior({**dict.fromkeys(_PRIOR_FIELDS), **rec})
+                for rec in frame.loc[mask, cols].to_dict("records")]
 
     first_seen = None
+    other_senders = 0
     if tx.beneficiary_token:
         ben_mask = before & outbound & (frame["beneficiary_token"] == tx.beneficiary_token)
         if bool(ben_mask.any()):
             first_seen = frame.loc[ben_mask, "occurred_at"].min()
+            recent = ben_mask & (occurred >= tx.occurred_at - timedelta(hours=BENEFICIARY_SENDERS_HOURS)) \
+                & (frame["subject_token"] != tx.subject_token)
+            other_senders = int(frame.loc[recent, "subject_token"].nunique())
 
     prior_events: list[PriorEvent] = []
     if events is not None and len(events):
@@ -258,9 +285,7 @@ def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBun
     if bool(credit_mask.any()):
         sub = frame.loc[credit_mask]
         credits = [
-            PriorTx(occurred_at=r["occurred_at"], amount_minor=int(r["amount_minor"]), auth_result=r["auth_result"],
-                    beneficiary_token=r["remitter_token"] if _present(r.get("remitter_token")) else None,
-                    device_token=r["device_token"] if _present(r.get("device_token")) else None)
+            _row_to_prior({**dict.fromkeys(_PRIOR_FIELDS), **r, "beneficiary_token": r.get("remitter_token")})
             for r in sub.to_dict("records")
         ]
 
@@ -271,6 +296,7 @@ def load_history_frame(frame: Any, tx: TxView, events: Any = None) -> HistoryBun
         beneficiary_first_seen_at=first_seen,
         events=prior_events,
         credits=credits,
+        beneficiary_other_senders_24h=other_senders,
     )
 
 

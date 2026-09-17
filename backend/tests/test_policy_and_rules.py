@@ -307,3 +307,76 @@ def test_second_leg_never_fires_on_the_credit_itself():
     moving = features(distinct_remitters_24h_account=5.0, inbound_count_ratio_24h_vs_daily_mean_30d=20.0,
                       minutes_since_last_credit=40.0, pass_through_ratio_24h=0.9)
     assert not evaluate(RuleContext(tx=credit_tx(), features=moving), LEG)
+
+
+# ---------------------------------------------------------------- D82
+
+
+def _d82(code: str) -> dict:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ml"))
+    from offline_rules import RULE_CONFIGS
+
+    return {code: RULE_CONFIGS[code]}
+
+
+def codes(f, t=None, rules=None):
+    return [s.code for s in evaluate(RuleContext(tx=t or tx(), features=f), rules)]
+
+
+def test_scam_collection_account_needs_other_payers_and_a_new_destination():
+    rules = _d82("SCAM_BENEFICIARY_FANIN")
+    scam = features(beneficiary_distinct_senders_24h=3.0, beneficiary_first_seen_days=0.4)
+    assert codes(scam, rules=rules) == ["SCAM_BENEFICIARY_FANIN"]
+    assert not codes({**scam, "beneficiary_first_seen_days": 400.0}, rules=rules), "a school paid for years"
+    assert not codes({**scam, "beneficiary_is_new_to_account": 0.0}, rules=rules), "this customer pays it already"
+    assert not codes({**scam, "beneficiary_distinct_senders_24h": 0.0}, rules=rules)
+    assert not codes({**scam, "beneficiary_distinct_senders_24h": -1.0}, rules=rules), "no destination"
+
+
+def test_sim_swap_needs_a_recent_sim_change_and_a_new_destination():
+    rules = _d82("SIM_SWAP_TRANSFER")
+    drain = features(sim_changed_hours=2.0)
+    assert codes(drain, t=tx(channel="USSD"), rules=rules) == ["SIM_SWAP_TRANSFER"]
+    assert not codes({**drain, "sim_changed_hours": 72.0}, rules=rules), "not recent: the cap"
+    assert not codes({**drain, "beneficiary_is_new_to_account": 0.0}, rules=rules), "a known payee"
+
+
+def test_dormant_reactivation_needs_months_of_quiet_and_real_money():
+    rules = _d82("DORMANT_ACCOUNT_REACTIVATION")
+    drain = features(days_since_account_activity=200.0, amount_log10=5.8)
+    assert codes(drain, rules=rules) == ["DORMANT_ACCOUNT_REACTIVATION"]
+    assert not codes({**drain, "days_since_account_activity": 3.0}, rules=rules)
+    assert not codes({**drain, "amount_log10": 3.0}, rules=rules), "airtime from an old account"
+    assert not codes({**drain, "days_since_account_activity": -1.0}, rules=rules), "never seen is not dormant"
+
+
+def test_card_cashout_needs_card_present_a_run_and_a_new_region():
+    rules = _d82("CARD_PRESENT_NEW_REGION_CASHOUT")
+    atm = tx(channel="ATM", instrument="CARD", beneficiary_token=None, ip_region="NG-KN")
+    run = features(card_present_count_1h_account=4.0, region_is_new_to_subject=1.0)
+    assert codes(run, t=atm, rules=rules) == ["CARD_PRESENT_NEW_REGION_CASHOUT"]
+    assert not codes({**run, "region_is_new_to_subject": 0.0}, t=atm, rules=rules), "at home"
+    assert not codes({**run, "card_present_count_1h_account": 1.0}, t=atm, rules=rules), "one withdrawal on a trip"
+    assert not codes(run, t=tx(channel="WEB", instrument="CARD", beneficiary_token=None), rules=rules), "not present"
+
+
+def test_offline_rules_are_the_seeded_rules():
+    """D82: every offline script measures ml/offline_rules.py; it must be what ships."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "ml"))
+    from offline_rules import RULE_CONFIGS
+
+    spec = importlib.util.spec_from_file_location("seed", root / "scripts" / "seed.py")
+    seed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seed)
+    seeded = {code: params for code, _power, _sev, params in seed.RULES}
+    assert set(seeded) == set(RULE_CONFIGS)
+    for code, params in seeded.items():
+        assert RULE_CONFIGS[code]["params"] == params, code

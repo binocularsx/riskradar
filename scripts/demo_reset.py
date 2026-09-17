@@ -110,6 +110,17 @@ def register_trained_model() -> None:
     reports = sorted((REPO_ROOT / "ml" / "artifacts").glob(f"evaluation-{version}.json"))
     metrics = json.loads(reports[-1].read_text()) if reports else {}
 
+    # D82: the artefact records the inputs it was trained on. Registering an
+    # older model under today's spec would hand it a vector of the wrong
+    # length; leave the registry empty instead, so the worker says, loudly,
+    # that it is scoring on rules only until the model is retrained.
+    from riskradar.features.spec import MODEL_FEATURE_NAMES
+
+    if metrics.get("feature_names") != list(MODEL_FEATURE_NAMES):
+        print(f"    {artifact.name} was trained on other inputs than feature spec {FEATURE_SPEC_VERSION}; "
+              "not registered. Run ml/train.py --final --promote.")
+        return
+
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
         conn.execute("UPDATE model_versions SET is_active = false WHERE is_active")
         conn.execute(

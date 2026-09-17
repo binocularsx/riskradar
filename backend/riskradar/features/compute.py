@@ -36,9 +36,18 @@ Two rules hold throughout:
 from __future__ import annotations
 
 import math
-from datetime import timedelta
+from datetime import timedelta, timezone
 
-from .spec import CREDIT_RECENCY_CAP_MINUTES, EVENT_LOOKBACK_HOURS, FEATURE_NAMES, NOT_APPLICABLE, RATIO_CAP
+from .spec import (
+    CARD_PRESENT_CHANNELS,
+    CREDIT_RECENCY_CAP_MINUTES,
+    EVENT_LOOKBACK_HOURS,
+    FEATURE_NAMES,
+    LOCAL_UTC_OFFSET_HOURS,
+    NOT_APPLICABLE,
+    REGION_RECENT_HOURS,
+    RATIO_CAP,
+)
 from .types import HistoryBundle, PriorEvent, PriorTx, TxView
 
 
@@ -343,6 +352,68 @@ def pass_through_ratio_24h(tx: TxView, h: HistoryBundle) -> float:
 
 
 # ---------------------------------------------------------------------------
+# D82: where, how and when
+# ---------------------------------------------------------------------------
+
+
+def region_is_new_to_subject(tx: TxView, h: HistoryBundle) -> float:
+    """Is this happening somewhere the customer had not been this month, before today?
+
+    1 if the region is new, 0 if the customer used it before the last day. Not
+    applicable without a region, for a credit, or for a customer with no located
+    history: a first transaction anywhere is not evidence of anything. The last
+    day is left out so a run of transactions in a new place stays new for the
+    whole run. People travel, so this is a hint that needs company (the
+    card-present count, the hour).
+    """
+    if not tx.ip_region or _is_inbound(tx):
+        return NOT_APPLICABLE
+    recent = tx.occurred_at - timedelta(hours=REGION_RECENT_HOURS)
+    seen = {p.ip_region for p in _within(h.subject, tx, 24 * 30) if p.ip_region and p.occurred_at < recent}
+    if not seen:
+        return NOT_APPLICABLE
+    return 0.0 if tx.ip_region in seen else 1.0
+
+
+def _card_present(channel: str | None, instrument: str | None) -> bool:
+    return instrument == "CARD" and channel in CARD_PRESENT_CHANNELS
+
+
+def card_present_count_1h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Card-present attempts on the account in the hour, counting this one.
+
+    A skimmed card is cashed out at terminal after terminal before the owner
+    notices; a person buys lunch. Attempts, not approvals: the declined
+    withdrawal at the daily limit is part of the run.
+    """
+    prior = sum(1 for p in _within(h.account, tx, 1) if _card_present(p.channel, p.instrument))
+    return float(prior + (1 if _card_present(tx.channel, tx.instrument) else 0))
+
+
+def beneficiary_distinct_senders_24h(tx: TxView, h: HistoryBundle) -> float:
+    """How many other customers of ours paid this destination in the last day.
+
+    An impersonation or investment scam collects from many victims into one
+    account for a day or two. A school, a church levy or a popular vendor is
+    paid by many customers too, which is why the rule pairs this with how new
+    the destination is. Not applicable without a destination.
+    """
+    if not tx.beneficiary_token or _is_inbound(tx):
+        return NOT_APPLICABLE
+    return float(h.beneficiary_other_senders_24h)
+
+
+def hour_of_day_local(tx: TxView, _h: HistoryBundle) -> float:
+    """The hour in Nigeria (UTC+1, no daylight saving), 0 to 23.
+
+    Times are timezone-aware everywhere they are produced (D9b); a naive time
+    here is a bug upstream, and reading it as UTC is the least surprising answer.
+    """
+    when = tx.occurred_at if tx.occurred_at.tzinfo else tx.occurred_at.replace(tzinfo=timezone.utc)
+    return float(when.astimezone(timezone(timedelta(hours=LOCAL_UTC_OFFSET_HOURS))).hour)
+
+
+# ---------------------------------------------------------------------------
 # The vector
 # ---------------------------------------------------------------------------
 
@@ -369,6 +440,10 @@ _FUNCTIONS = {
     "inbound_count_ratio_24h_vs_daily_mean_30d": inbound_count_ratio_24h_vs_daily_mean_30d,
     "minutes_since_last_credit": minutes_since_last_credit,
     "pass_through_ratio_24h": pass_through_ratio_24h,
+    "region_is_new_to_subject": region_is_new_to_subject,
+    "card_present_count_1h_account": card_present_count_1h_account,
+    "beneficiary_distinct_senders_24h": beneficiary_distinct_senders_24h,
+    "hour_of_day_local": hour_of_day_local,
 }
 
 assert set(_FUNCTIONS) == set(FEATURE_NAMES), "feature registry disagrees with the spec"

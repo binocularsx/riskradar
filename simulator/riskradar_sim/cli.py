@@ -213,7 +213,7 @@ def cmd_stream(args: argparse.Namespace) -> None:
                 if rng.random() < args.incident_probability:
                     typology = args.typology or rng.choice(list(TYPOLOGIES))
                     victim = rng.choice(customers)
-                    incident = list(TYPOLOGIES[typology](rng, victim, now))
+                    incident = list(TYPOLOGIES[typology](rng, victim, now, customers=customers))
                     # D77: the takeover's prelude (logins, device, payees) goes first.
                     for event in sorted(layer.around(incident) + incident,
                                         key=lambda e: e.payload["occurred_at"]):
@@ -374,7 +374,9 @@ def main(argv: list[str] | None = None) -> None:
     # frequent enough that somebody watching a demo sees an incident every few
     # minutes. The honest figures come from the training profile, never this one.
     p.add_argument("--incident-probability", type=float, default=0.002)
-    p.add_argument("--typology", default=None, choices=["ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING"])
+    p.add_argument("--typology", default=None,
+                   choices=["ACCOUNT_TAKEOVER", "MULE_FANOUT", "CARD_TESTING", "SOCIAL_ENGINEERING",
+                            "SIM_SWAP", "DORMANT_ACCOUNT", "CARD_CLONING"])
     p.set_defaults(func=cmd_stream)
 
     p = sub.add_parser("industry-flag", help="play another bank: flag BVNs on the industry watch-list (D75)")
