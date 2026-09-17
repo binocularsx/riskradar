@@ -137,3 +137,38 @@ def test_intake_answers_for_an_analyst():
     assert len(body["series"]) == 30
     for key in ("queue", "expected_next_hour", "budget", "pipeline", "recent", "by_risk_level"):
         assert key in body
+
+
+def test_links_show_another_customer_paying_the_same_destination(case_id):
+    """D84: a destination shared with another customer, and that customer's confirmed fraud, are visible."""
+    now = datetime.now(timezone.utc)
+    ben = f"ben_wf_{uuid.uuid4().hex[:12]}"
+    other = f"sub_wf_other_{uuid.uuid4().hex[:10]}"
+    with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
+        subject = c.execute("SELECT subject_token FROM cases WHERE id = %s", (case_id,)).fetchone()["subject_token"]
+        for who, minutes in ((subject, 30), (other, 20)):
+            c.execute(
+                "INSERT INTO transactions (transaction_ref, occurred_at, amount_minor, currency, channel, instrument, rail, "
+                "subject_token, account_token, beneficiary_token, auth_result, display_name) "
+                "VALUES (%s, %s, 5000000, 'NGN', 'MOBILE_APP', 'ACCOUNT_TRANSFER', 'NIP', %s, %s, %s, 'APPROVED', %s)",
+                (uuid.uuid4().hex, now - timedelta(minutes=minutes), who, f"acc_{who}", ben, "Linked Person"))
+        oc = c.execute("INSERT INTO cases (subject_token, state, outcome, risk_level, correlation_expires_at, closed_at) "
+                       "VALUES (%s, 'CLOSED', 'CONFIRMED_FRAUD', 'HIGH', %s, now()) RETURNING id",
+                       (other, now + timedelta(hours=24))).fetchone()["id"]
+        c.commit()
+    try:
+        analyst = as_user("analyst@riskradar.local")
+        body = analyst.get(f"/v1/cases/{case_id}/links").json()
+        dest = next(n for n in body["nodes"] if n["kind"] == "destination" and n["token"] == ben)
+        assert dest["other_customers"] == 1 and dest["other_customers_24h"] == 1
+        linked = [n for n in body["nodes"] if n["kind"] == "other_customer"]
+        assert any(n["case_id"] == oc and n["case_outcome"] == "CONFIRMED_FRAUD" and n["risky"] for n in linked)
+        assert body["summary"]["linked_confirmed_fraud"] == 1
+    finally:
+        with psycopg.connect(settings().app_dsn) as c:
+            try:
+                c.execute("DELETE FROM transactions WHERE beneficiary_token = %s", (ben,))
+                c.execute("DELETE FROM cases WHERE id = %s", (oc,))
+                c.commit()
+            except psycopg.Error:
+                c.rollback()

@@ -1,6 +1,6 @@
 {
   "budget_per_day": 75,
-  "test_days": 29.8,
+  "test_days": 37.4,
   "machine_signals": [
     "CARD_TESTING_PROBES",
     "ACCOUNT_TAKEOVER_SEQUENCE"
@@ -12,78 +12,132 @@
       "machine_actions_per_day": 0.0,
       "machine_precision": 0.0,
       "reviews_per_day": 75.0,
-      "false_reviews_per_day": 16.6,
+      "false_reviews_per_day": 22.0,
       "incidents_caught": {
-        "ACCOUNT_TAKEOVER": "55/55",
-        "MULE_FANOUT": "44/47",
-        "CARD_TESTING": "48/48"
+        "ACCOUNT_TAKEOVER": "42/42",
+        "MULE_FANOUT": "37/38",
+        "CARD_TESTING": "43/43",
+        "SOCIAL_ENGINEERING": "102/137",
+        "SIM_SWAP": "37/37",
+        "DORMANT_ACCOUNT": "29/29",
+        "CARD_CLONING": "35/39"
       },
-      "value_detection_rate": 0.904,
-      "model_reviews_per_day": 20.9
+      "value_detection_rate": 0.823,
+      "model_reviews_per_day": 22.7
     },
     {
       "arm": "tiered: machine actions off the budget",
-      "machine_actions_per_day": 24.1,
-      "machine_precision": 0.992,
+      "machine_actions_per_day": 17.1,
+      "machine_precision": 0.964,
       "reviews_per_day": 75.0,
-      "false_reviews_per_day": 38.0,
+      "false_reviews_per_day": 34.9,
       "incidents_caught": {
-        "ACCOUNT_TAKEOVER": "55/55",
-        "MULE_FANOUT": "45/47",
-        "CARD_TESTING": "48/48"
+        "ACCOUNT_TAKEOVER": "42/42",
+        "MULE_FANOUT": "37/38",
+        "CARD_TESTING": "43/43",
+        "SOCIAL_ENGINEERING": "114/137",
+        "SIM_SWAP": "37/37",
+        "DORMANT_ACCOUNT": "29/29",
+        "CARD_CLONING": "39/39"
       },
-      "value_detection_rate": 0.93,
-      "model_reviews_per_day": 45.0
+      "value_detection_rate": 0.895,
+      "model_reviews_per_day": 39.9
     },
     {
       "arm": "tiered + auto-close lowest fifth",
-      "machine_actions_per_day": 24.1,
-      "machine_precision": 0.992,
-      "reviews_per_day": 66.0,
-      "false_reviews_per_day": 29.4,
+      "machine_actions_per_day": 17.1,
+      "machine_precision": 0.964,
+      "reviews_per_day": 67.0,
+      "false_reviews_per_day": 28.1,
       "incidents_caught": {
-        "ACCOUNT_TAKEOVER": "55/55",
-        "MULE_FANOUT": "45/47",
-        "CARD_TESTING": "48/48"
+        "ACCOUNT_TAKEOVER": "42/42",
+        "MULE_FANOUT": "37/38",
+        "CARD_TESTING": "43/43",
+        "SOCIAL_ENGINEERING": "109/137",
+        "SIM_SWAP": "37/37",
+        "DORMANT_ACCOUNT": "29/29",
+        "CARD_CLONING": "38/39"
       },
-      "value_detection_rate": 0.926,
-      "model_reviews_per_day": 36.0
+      "value_detection_rate": 0.867,
+      "model_reviews_per_day": 31.9
     },
     {
       "arm": "tiered: freed capacity kept",
-      "machine_actions_per_day": 24.1,
-      "machine_precision": 0.992,
-      "reviews_per_day": 50.9,
-      "false_reviews_per_day": 16.4,
+      "machine_actions_per_day": 17.1,
+      "machine_precision": 0.964,
+      "reviews_per_day": 57.9,
+      "false_reviews_per_day": 21.4,
       "incidents_caught": {
-        "ACCOUNT_TAKEOVER": "55/55",
-        "MULE_FANOUT": "44/47",
-        "CARD_TESTING": "48/48"
+        "ACCOUNT_TAKEOVER": "42/42",
+        "MULE_FANOUT": "37/38",
+        "CARD_TESTING": "43/43",
+        "SOCIAL_ENGINEERING": "102/137",
+        "SIM_SWAP": "37/37",
+        "DORMANT_ACCOUNT": "29/29",
+        "CARD_CLONING": "35/39"
       },
-      "value_detection_rate": 0.904,
-      "model_reviews_per_day": 20.9
+      "value_detection_rate": 0.823,
+      "model_reviews_per_day": 22.7
     },
     {
       "arm": "tiered, kept + auto-close lowest fifth",
-      "machine_actions_per_day": 24.1,
-      "machine_precision": 0.992,
-      "reviews_per_day": 46.7,
-      "false_reviews_per_day": 13.9,
+      "machine_actions_per_day": 17.1,
+      "machine_precision": 0.964,
+      "reviews_per_day": 53.3,
+      "false_reviews_per_day": 20.0,
       "incidents_caught": {
-        "ACCOUNT_TAKEOVER": "55/55",
-        "MULE_FANOUT": "44/47",
-        "CARD_TESTING": "48/48"
+        "ACCOUNT_TAKEOVER": "41/42",
+        "MULE_FANOUT": "36/38",
+        "CARD_TESTING": "43/43",
+        "SOCIAL_ENGINEERING": "93/137",
+        "SIM_SWAP": "36/37",
+        "DORMANT_ACCOUNT": "27/29",
+        "CARD_CLONING": "30/39"
       },
-      "value_detection_rate": 0.878,
-      "model_reviews_per_day": 16.7
+      "value_detection_rate": 0.772,
+      "model_reviews_per_day": 18.2
     }
   ],
-  "auto_close_candidate": {
-    "closed_per_day": 9.0,
-    "fraud_payments_closed": 12,
-    "incidents_touched": 11,
-    "incidents_lost": 0
+  "rule_precision": {
+    "ACCOUNT_TAKEOVER_SEQUENCE": {
+      "per_day": 6.0,
+      "precision": 0.897
+    },
+    "CARD_PRESENT_NEW_REGION_CASHOUT": {
+      "per_day": 2.8,
+      "precision": 0.686
+    },
+    "CARD_TESTING_PROBES": {
+      "per_day": 11.2,
+      "precision": 1.0
+    },
+    "DORMANT_ACCOUNT_REACTIVATION": {
+      "per_day": 3.2,
+      "precision": 0.283
+    },
+    "SCAM_BENEFICIARY_FANIN": {
+      "per_day": 1.1,
+      "precision": 0.3
+    },
+    "SECOND_LEG_ONWARD_PAYMENT": {
+      "per_day": 5.0,
+      "precision": 0.818
+    },
+    "SIM_SWAP_TRANSFER": {
+      "per_day": 7.6,
+      "precision": 0.401
+    },
+    "VELOCITY_BURST_1H": {
+      "per_day": 21.1,
+      "precision": 0.607
+    }
   },
-  "auto_close_probability_cut": 0.7500000006865641,
-  "incidents_lost_to_auto_close_in_kept_arm": 0
+  "auto_close_candidate": {
+    "closed_per_day": 8.0,
+    "fraud_payments_closed": 43,
+    "incidents_touched": 40,
+    "incidents_lost": 6
+  },
+  "auto_close_probability_cut": 0.7636363644365458,
+  "incidents_lost_to_auto_close_in_kept_arm": 19
 }

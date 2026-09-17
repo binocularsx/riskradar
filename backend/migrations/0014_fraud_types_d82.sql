@@ -17,9 +17,9 @@ SELECT r.id, v.code, 'ESCALATE', 'HIGH', true, v.params::jsonb,
        '2026-09-17'::timestamptz + interval '90 days'
   FROM rulesets r
  CROSS JOIN (VALUES
-    ('SCAM_BENEFICIARY_FANIN', '{"min_other_senders": 2, "max_beneficiary_age_days": 7}',
+    ('SCAM_BENEFICIARY_FANIN', '{"min_other_senders": 1, "max_beneficiary_age_days": 3, "min_amount_ratio": 1.5}',
      'D82: a new destination several other customers paid today; the collection account of a social-engineering scam.'),
-    ('SIM_SWAP_TRANSFER', '{"within_hours": 12}',
+    ('SIM_SWAP_TRANSFER', '{"within_hours": 12, "channels": ["USSD", "MOBILE_APP"], "min_amount_log10": 4.7}',
      'D82: a new destination within hours of the SIM changing; the USSD drain after a SIM swap.'),
     ('DORMANT_ACCOUNT_REACTIVATION', '{"min_dormant_days": 60, "min_amount_log10": 5.0}',
      'D82: a long-dormant account sending a large sum somewhere new.'),

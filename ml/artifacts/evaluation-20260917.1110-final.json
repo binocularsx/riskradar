@@ -1,0 +1,70 @@
+{
+  "trained_on": "all typologies (production model)",
+  "held_out_typology": null,
+  "evidence_note": "Trained on everything, so it cannot be tested on an unseen typology. The figures below are the held-out evaluation of this same recipe.",
+  "system_mean_incident_recall": {
+    "rules only": 0.9013,
+    "one feature (txn_count_1h_account)": 0.4942,
+    "logistic regression": 0.5629,
+    "gradient boosting (ours)": 0.4298,
+    "rules + logistic regression": 0.9211,
+    "rules + gradient boosting (ours)": 0.9596
+  },
+  "calibration_on_fair_test": {
+    "confidence_ratio": 0.919,
+    "ece_alerting_region": 0.0319
+  },
+  "corpus": {
+    "rows": 3057482,
+    "fraud": 8322,
+    "incidents": 1463,
+    "span_days": 150.0
+  },
+  "feature_names": [
+    "amount_log10",
+    "amount_ratio_to_account_p95_30d",
+    "txn_count_1h_account",
+    "approved_value_ratio_24h_vs_daily_mean_30d",
+    "failed_attempts_1h_account",
+    "decline_rate_24h_account",
+    "distinct_beneficiaries_1h_account",
+    "beneficiary_is_new_to_account",
+    "beneficiary_first_seen_days",
+    "device_is_new_to_subject",
+    "account_age_days",
+    "days_since_account_activity",
+    "failed_logins_1h_subject",
+    "device_bound_hours",
+    "credential_changed_hours",
+    "sim_changed_hours",
+    "payee_added_minutes",
+    "region_is_new_to_subject",
+    "card_present_count_1h_account",
+    "beneficiary_distinct_senders_24h",
+    "hour_of_day_local"
+  ],
+  "feature_baseline": [
+    4.3585455,
+    0.022924,
+    0.0,
+    0.8381915,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    2.4409085,
+    0.0,
+    649.002877,
+    0.087604,
+    0.0,
+    72.0,
+    72.0,
+    72.0,
+    4320.0,
+    0.0,
+    0.0,
+    0.0,
+    14.0
+  ],
+  "alert_budget_per_day": 75
+}

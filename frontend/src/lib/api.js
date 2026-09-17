@@ -61,6 +61,7 @@ export const api = {
   caseWorkflow: (id) => get(`/v1/cases/${id}/workflow`),
   recordAction: (id, data) => post(`/v1/cases/${id}/actions`, data),
   returnCase: (id, findings) => post(`/v1/cases/${id}/return`, { findings }),
+  caseLinks: (id, days = 30) => get(`/v1/cases/${id}/links?days=${days}`),
 
   // queue and cases
   cases: (params) => get(`/v1/cases?${new URLSearchParams(params)}`),

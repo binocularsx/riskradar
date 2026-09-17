@@ -46,9 +46,11 @@ SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
 # D25: six rules, two of each power; D77, D78 and D79 added three escalating rules. Every rule *power* in D11a is retained,
 # including suppression — the primary false-positive control, which had to be
 # built rather than deferred.
+# Chosen by ml/fraud_types_d82.py (fraud-types-d82.json): the most incidents of each rule's
+# own fraud type at no more than 5 false alerts a day and precision of at least 0.25.
 D82_PARAMS = {
-    "SCAM_BENEFICIARY_FANIN": {"min_other_senders": 2, "max_beneficiary_age_days": 7},
-    "SIM_SWAP_TRANSFER": {"within_hours": 12},
+    "SCAM_BENEFICIARY_FANIN": {"min_other_senders": 1, "max_beneficiary_age_days": 3, "min_amount_ratio": 1.5},
+    "SIM_SWAP_TRANSFER": {"within_hours": 12, "channels": ["USSD", "MOBILE_APP"], "min_amount_log10": 4.7},
     "DORMANT_ACCOUNT_REACTIVATION": {"min_dormant_days": 60, "min_amount_log10": 5.0},
     "CARD_PRESENT_NEW_REGION_CASHOUT": {"min_count_1h": 3},
 }

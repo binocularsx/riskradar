@@ -1,7 +1,7 @@
 {
   "measured": "time-ordered test: train oldest 75%, score newest 30 days, every fraud type present; held-out recall from system-evaluation*.json",
-  "test_days": 29.8,
-  "fraud_value_minor": 26696841540,
+  "test_days": 37.4,
+  "fraud_value_minor": 37801684665,
   "benchmarks": {
     "false_alerts_per_incident": {
       "best_in_class": [
@@ -24,190 +24,321 @@
       "budget_per_day": 120,
       "alerts_per_day": 120.0,
       "credit_alerts_per_day": 7.27,
-      "false_alerts_per_day": 56.3,
-      "incidents_per_day": 5.04,
-      "false_alerts_per_incident": 11.2,
+      "false_alerts_per_day": 59.5,
+      "incidents_per_day": 9.75,
+      "false_alerts_per_incident": 6.1,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
-          "caught": 55,
-          "incidents": 55,
+          "caught": 42,
+          "incidents": 42,
           "ci95": [
-            0.935,
+            0.916,
             1.0
           ]
         },
         "MULE_FANOUT": {
-          "caught": 45,
-          "incidents": 47,
+          "caught": 38,
+          "incidents": 38,
           "ci95": [
-            0.858,
-            0.988
+            0.908,
+            1.0
           ]
         },
         "CARD_TESTING": {
-          "caught": 48,
-          "incidents": 48,
+          "caught": 43,
+          "incidents": 43,
           "ci95": [
-            0.926,
+            0.918,
+            1.0
+          ]
+        },
+        "SOCIAL_ENGINEERING": {
+          "caught": 124,
+          "incidents": 137,
+          "ci95": [
+            0.844,
+            0.944
+          ]
+        },
+        "SIM_SWAP": {
+          "caught": 37,
+          "incidents": 37,
+          "ci95": [
+            0.906,
+            1.0
+          ]
+        },
+        "DORMANT_ACCOUNT": {
+          "caught": 29,
+          "incidents": 29,
+          "ci95": [
+            0.883,
+            1.0
+          ]
+        },
+        "CARD_CLONING": {
+          "caught": 39,
+          "incidents": 39,
+          "ci95": [
+            0.91,
             1.0
           ]
         }
       },
-      "value_detection_rate": 0.935,
-      "value_in_caught_incidents": 0.998,
-      "mule_value_detection_rate": 0.906,
-      "held_out": {
-        "per_typology": {
-          "ACCOUNT_TAKEOVER": {
-            "recall": 0.991,
-            "ci95": [
-              0.966,
-              0.997
-            ]
-          },
-          "MULE_FANOUT": {
-            "recall": 0.918,
-            "ci95": [
-              0.869,
-              0.95
-            ]
-          },
-          "CARD_TESTING": {
-            "recall": 0.976,
-            "ci95": [
-              0.945,
-              0.99
-            ]
-          }
-        },
-        "mean": 0.961
-      }
+      "value_detection_rate": 0.914,
+      "value_in_caught_incidents": 0.98,
+      "mule_value_detection_rate": 0.83,
+      "value_detection_rate_by_type": {
+        "ACCOUNT_TAKEOVER": 0.943,
+        "MULE_FANOUT": 0.83,
+        "CARD_TESTING": 1.0,
+        "SOCIAL_ENGINEERING": 0.874,
+        "SIM_SWAP": 0.992,
+        "DORMANT_ACCOUNT": 0.993,
+        "CARD_CLONING": 0.715
+      },
+      "rule_alerts_per_day": {
+        "ACCOUNT_TAKEOVER_SEQUENCE": 6.0,
+        "CARD_PRESENT_NEW_REGION_CASHOUT": 2.8,
+        "CARD_TESTING_PROBES": 11.2,
+        "DORMANT_ACCOUNT_REACTIVATION": 3.2,
+        "SCAM_BENEFICIARY_FANIN": 1.1,
+        "SECOND_LEG_ONWARD_PAYMENT": 5.0,
+        "SIM_SWAP_TRANSFER": 7.6,
+        "VELOCITY_BURST_1H": 21.1
+      },
+      "held_out": null
     },
     {
       "budget_per_day": 75,
       "alerts_per_day": 75.0,
       "credit_alerts_per_day": 7.27,
-      "false_alerts_per_day": 14.5,
-      "incidents_per_day": 5.04,
-      "false_alerts_per_incident": 2.9,
+      "false_alerts_per_day": 19.9,
+      "incidents_per_day": 9.75,
+      "false_alerts_per_incident": 2.0,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
-          "caught": 55,
-          "incidents": 55,
+          "caught": 42,
+          "incidents": 42,
           "ci95": [
-            0.935,
+            0.916,
             1.0
           ]
         },
         "MULE_FANOUT": {
-          "caught": 44,
-          "incidents": 47,
+          "caught": 37,
+          "incidents": 38,
           "ci95": [
-            0.828,
-            0.978
+            0.865,
+            0.995
           ]
         },
         "CARD_TESTING": {
-          "caught": 48,
-          "incidents": 48,
+          "caught": 43,
+          "incidents": 43,
           "ci95": [
-            0.926,
+            0.918,
             1.0
+          ]
+        },
+        "SOCIAL_ENGINEERING": {
+          "caught": 102,
+          "incidents": 137,
+          "ci95": [
+            0.666,
+            0.81
+          ]
+        },
+        "SIM_SWAP": {
+          "caught": 37,
+          "incidents": 37,
+          "ci95": [
+            0.906,
+            1.0
+          ]
+        },
+        "DORMANT_ACCOUNT": {
+          "caught": 29,
+          "incidents": 29,
+          "ci95": [
+            0.883,
+            1.0
+          ]
+        },
+        "CARD_CLONING": {
+          "caught": 35,
+          "incidents": 39,
+          "ci95": [
+            0.764,
+            0.959
           ]
         }
       },
-      "value_detection_rate": 0.904,
-      "value_in_caught_incidents": 0.998,
-      "mule_value_detection_rate": 0.849,
+      "value_detection_rate": 0.823,
+      "value_in_caught_incidents": 0.937,
+      "mule_value_detection_rate": 0.723,
+      "value_detection_rate_by_type": {
+        "ACCOUNT_TAKEOVER": 0.851,
+        "MULE_FANOUT": 0.723,
+        "CARD_TESTING": 1.0,
+        "SOCIAL_ENGINEERING": 0.725,
+        "SIM_SWAP": 0.947,
+        "DORMANT_ACCOUNT": 0.907,
+        "CARD_CLONING": 0.507
+      },
+      "rule_alerts_per_day": {
+        "ACCOUNT_TAKEOVER_SEQUENCE": 6.0,
+        "CARD_PRESENT_NEW_REGION_CASHOUT": 2.8,
+        "CARD_TESTING_PROBES": 11.2,
+        "DORMANT_ACCOUNT_REACTIVATION": 3.2,
+        "SCAM_BENEFICIARY_FANIN": 1.1,
+        "SECOND_LEG_ONWARD_PAYMENT": 5.0,
+        "SIM_SWAP_TRANSFER": 7.6,
+        "VELOCITY_BURST_1H": 21.1
+      },
       "held_out": {
         "per_typology": {
           "ACCOUNT_TAKEOVER": {
-            "recall": 0.991,
+            "recall": 1.0,
             "ci95": [
-              0.966,
-              0.997
+              0.975,
+              1.0
             ]
           },
           "MULE_FANOUT": {
-            "recall": 0.913,
+            "recall": 0.96,
             "ci95": [
-              0.863,
-              0.945
+              0.915,
+              0.981
             ]
           },
           "CARD_TESTING": {
-            "recall": 0.976,
+            "recall": 1.0,
             "ci95": [
-              0.945,
-              0.99
+              0.977,
+              1.0
+            ]
+          },
+          "SOCIAL_ENGINEERING": {
+            "recall": 0.516,
+            "ci95": [
+              0.475,
+              0.558
+            ]
+          },
+          "SIM_SWAP": {
+            "recall": 0.972,
+            "ci95": [
+              0.93,
+              0.989
+            ]
+          },
+          "DORMANT_ACCOUNT": {
+            "recall": 0.872,
+            "ci95": [
+              0.807,
+              0.918
+            ]
+          },
+          "CARD_CLONING": {
+            "recall": 0.432,
+            "ci95": [
+              0.358,
+              0.509
             ]
           }
         },
-        "mean": 0.96
+        "mean": 0.822
       }
     },
     {
       "budget_per_day": 60,
       "alerts_per_day": 60.0,
       "credit_alerts_per_day": 7.27,
-      "false_alerts_per_day": 10.5,
-      "incidents_per_day": 5.04,
-      "false_alerts_per_incident": 2.1,
+      "false_alerts_per_day": 17.8,
+      "incidents_per_day": 9.75,
+      "false_alerts_per_incident": 1.8,
       "seen_fraud": {
         "ACCOUNT_TAKEOVER": {
-          "caught": 46,
-          "incidents": 55,
+          "caught": 38,
+          "incidents": 42,
           "ci95": [
-            0.717,
-            0.911
+            0.779,
+            0.962
           ]
         },
         "MULE_FANOUT": {
-          "caught": 42,
-          "incidents": 47,
+          "caught": 36,
+          "incidents": 38,
           "ci95": [
-            0.774,
-            0.954
+            0.827,
+            0.985
           ]
         },
         "CARD_TESTING": {
-          "caught": 48,
-          "incidents": 48,
+          "caught": 43,
+          "incidents": 43,
           "ci95": [
-            0.926,
+            0.918,
             1.0
+          ]
+        },
+        "SOCIAL_ENGINEERING": {
+          "caught": 65,
+          "incidents": 137,
+          "ci95": [
+            0.393,
+            0.558
+          ]
+        },
+        "SIM_SWAP": {
+          "caught": 33,
+          "incidents": 37,
+          "ci95": [
+            0.753,
+            0.957
+          ]
+        },
+        "DORMANT_ACCOUNT": {
+          "caught": 20,
+          "incidents": 29,
+          "ci95": [
+            0.508,
+            0.827
+          ]
+        },
+        "CARD_CLONING": {
+          "caught": 17,
+          "incidents": 39,
+          "ci95": [
+            0.293,
+            0.59
           ]
         }
       },
-      "value_detection_rate": 0.781,
-      "value_in_caught_incidents": 0.954,
-      "mule_value_detection_rate": 0.78,
-      "held_out": {
-        "per_typology": {
-          "ACCOUNT_TAKEOVER": {
-            "recall": 0.986,
-            "ci95": [
-              0.959,
-              0.995
-            ]
-          },
-          "MULE_FANOUT": {
-            "recall": 0.907,
-            "ci95": [
-              0.856,
-              0.941
-            ]
-          },
-          "CARD_TESTING": {
-            "recall": 0.976,
-            "ci95": [
-              0.945,
-              0.99
-            ]
-          }
-        },
-        "mean": 0.956
-      }
+      "value_detection_rate": 0.603,
+      "value_in_caught_incidents": 0.805,
+      "mule_value_detection_rate": 0.634,
+      "value_detection_rate_by_type": {
+        "ACCOUNT_TAKEOVER": 0.459,
+        "MULE_FANOUT": 0.634,
+        "CARD_TESTING": 0.999,
+        "SOCIAL_ENGINEERING": 0.504,
+        "SIM_SWAP": 0.657,
+        "DORMANT_ACCOUNT": 0.312,
+        "CARD_CLONING": 0.214
+      },
+      "rule_alerts_per_day": {
+        "ACCOUNT_TAKEOVER_SEQUENCE": 6.0,
+        "CARD_PRESENT_NEW_REGION_CASHOUT": 2.8,
+        "CARD_TESTING_PROBES": 11.2,
+        "DORMANT_ACCOUNT_REACTIVATION": 3.2,
+        "SCAM_BENEFICIARY_FANIN": 1.1,
+        "SECOND_LEG_ONWARD_PAYMENT": 5.0,
+        "SIM_SWAP_TRANSFER": 7.6,
+        "VELOCITY_BURST_1H": 21.1
+      },
+      "held_out": null
     }
   ]
 }

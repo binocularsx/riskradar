@@ -328,17 +328,18 @@ def codes(f, t=None, rules=None):
 
 def test_scam_collection_account_needs_other_payers_and_a_new_destination():
     rules = _d82("SCAM_BENEFICIARY_FANIN")
-    scam = features(beneficiary_distinct_senders_24h=3.0, beneficiary_first_seen_days=0.4)
+    scam = features(beneficiary_distinct_senders_24h=3.0, beneficiary_first_seen_days=0.4, amount_ratio_to_account_p95_30d=3.0)
     assert codes(scam, rules=rules) == ["SCAM_BENEFICIARY_FANIN"]
     assert not codes({**scam, "beneficiary_first_seen_days": 400.0}, rules=rules), "a school paid for years"
     assert not codes({**scam, "beneficiary_is_new_to_account": 0.0}, rules=rules), "this customer pays it already"
     assert not codes({**scam, "beneficiary_distinct_senders_24h": 0.0}, rules=rules)
     assert not codes({**scam, "beneficiary_distinct_senders_24h": -1.0}, rules=rules), "no destination"
+    assert not codes({**scam, "amount_ratio_to_account_p95_30d": 0.8}, rules=rules), "an ordinary amount for this customer"
 
 
 def test_sim_swap_needs_a_recent_sim_change_and_a_new_destination():
     rules = _d82("SIM_SWAP_TRANSFER")
-    drain = features(sim_changed_hours=2.0)
+    drain = features(sim_changed_hours=2.0, amount_log10=5.2)
     assert codes(drain, t=tx(channel="USSD"), rules=rules) == ["SIM_SWAP_TRANSFER"]
     assert not codes({**drain, "sim_changed_hours": 72.0}, rules=rules), "not recent: the cap"
     assert not codes({**drain, "beneficiary_is_new_to_account": 0.0}, rules=rules), "a known payee"

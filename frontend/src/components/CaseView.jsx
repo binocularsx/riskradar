@@ -8,6 +8,7 @@ import Timeline from './Timeline'
 import Why, { VersusNormal } from './Why'
 import { CONSEQUENCES, OwnershipBanner, RoleCapability } from './Actions'
 import CaseFlow from './CaseFlow'
+import LinkGraph from './LinkGraph'
 
 /**
  * The investigation panel — everything needed to decide, on one screen, in the
@@ -194,6 +195,11 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           onUpdated={() => api.caseDetail(caseId).then(setDetail).catch((e) => setError(e.message))}
         />
       )}
+
+      {/* D84: who else shares this customer's destinations and devices */}
+      <div style={{ marginBottom: 14 }}>
+        <LinkGraph caseId={summary.id} />
+      </div>
 
       {/* ------------------------------------ 4. what the activity looks like */}
       {detail?.timeline?.length > 0 && <Timeline items={detail.timeline} />}

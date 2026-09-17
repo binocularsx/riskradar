@@ -457,3 +457,31 @@ tr.flagged td { background: color-mix(in srgb, var(--high) 7%, transparent); }
 .dialog ul.tight { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
 .lifecycle { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; }
 .lifecycle li { margin-bottom: 4px; }
+
+/* ------------------------------------------------ D84: connections */
+.linkgraph { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
+.lg-edge { stroke: var(--line-2); stroke-width: 1.2; }
+.lg-edge.used { stroke-dasharray: 4 3; }
+.lg-edge.hot { stroke: var(--accent); stroke-width: 2; }
+.lg-node { fill: var(--surface-3); stroke: var(--line-2); stroke-width: 1.5; }
+.lg-node.customer { fill: var(--accent-dim); stroke: var(--accent); stroke-width: 2; }
+.lg-node.destination { fill: var(--surface-2); }
+.lg-node.other_customer { fill: var(--bg-2); }
+.lg-node.risky { stroke: var(--danger); fill: color-mix(in srgb, var(--danger) 18%, var(--surface-2)); }
+.lg-label { fill: var(--text-3); font-size: 10px; font-family: var(--mono); }
+.lg-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--text-3); }
+.lg-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px;
+          border: 1.5px solid var(--line-2); background: var(--surface-3); }
+.lg-key.customer { border-color: var(--accent); background: var(--accent-dim); }
+.lg-key.square { border-radius: 2px; }
+.lg-key.risky { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 18%, var(--surface-2)); }
+.reputation { display: flex; flex-direction: column; gap: 6px; }
+.rep { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line);
+       border-radius: var(--r-sm); background: var(--bg-2); font-size: 12.5px; }
+.rep.risky { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.rep.hot { border-color: var(--accent); }
+.rep .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2);
+              text-decoration: none; }
+.badge-chip.warn { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); }
+.badge-chip.danger { border-color: color-mix(in srgb, var(--danger) 55%, transparent); color: #ffb0b2; }

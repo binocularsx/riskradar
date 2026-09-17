@@ -40,9 +40,9 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 
 | Status | Count | Meaning |
 |---|---|---|
-| Met | 15 | Built and tested, 4 of them added for this review and 3 since (D71, D77) |
-| Partly | 51 | Some of it built; the missing part is named |
-| Not built | 21 | Absent; on the roadmap or waiting on a bank |
+| Met | 18 | Built and tested, 4 of them added for this review and the rest since (D71, D77, D83) |
+| Partly | 52 | Some of it built; the missing part is named |
+| Not built | 20 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
@@ -83,17 +83,17 @@ the few gaps that matter most rather than all of them.
 
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
-| FR-201 | Rules engine | Partly | Six rules including payment bursts and card testing (D25, D67). Amount, location and time-of-day rules not written; dormancy is a model input, not a rule. |
+| FR-201 | Rules engine | Partly | Thirteen rules: bursts, card testing, takeover sequence, credit fan-in, the second leg, and four added for Nigerian fraud types (D82): scam collection account, SIM swap transfer, dormant account, card cash-out in a new region, each tuned by a stated criterion. A new kind of rule still needs code. |
 | FR-202 | Supervised model on labelled outcomes | Partly | Calibrated gradient boosting (D60–D61), trained on simulator labels. Analyst outcomes are recorded as future labels (D13c) but not yet trained on. |
-| FR-203 | Unsupervised anomaly detection for novel patterns | Not built | Our own evidence argues for it: the model alone caught 0 of 194 card-testing incidents it had never seen (D69h). |
+| FR-203 | Unsupervised anomaly detection for novel patterns | Partly | An isolation forest that never sees a label is an arm of the dataset evaluator (D81), measured against the model on files we did not make. It does not run live. |
 | FR-204 | Graph and link analysis for rings and mules | Partly | The two-leg link built without a graph (D79): a credit fan-in and the payment that moves it on, scored and cased together; mule-ring value flagged 63.5% to 84.9%. Ring-wide graph analysis still roadmap (D16). |
 | FR-205 | Scoring against the individual's own baseline | Met | Amount against the account's usual largest, today against a normal day, new device for this customer, new payee for this account. |
 | FR-206 | Session modelling to catch takeover in progress | Partly | Sequences inside a 72-hour window: failed logins, a new device bound, a SIM or credential change, then a payee enrolled and paid (D77). No explicit session identifier from the channel. |
-| FR-207 | Scam (APP) detection | Partly | First-time payee, unusual amount and bursts are measured. No session or "coached customer" signals; no dedicated scam pattern. |
+| FR-207 | Scam (APP) detection | Partly | Social engineering is a simulated fraud type with group collections as its legitimate twin, and a rule on a new account several customers paid today (D82). The rule is deliberately narrow (13% of scams at precision 0.31), so the model carries most scams; no session or coached-customer signals. |
 | FR-208 | Synthetic identity at onboarding | Not built | No onboarding events. |
 | FR-209 | Screening money coming in, not only going out | Partly | Credits are ingested and decided as INBOUND transactions with receiving-side features and a fan-in rule: 73% of mule rings flagged at 7.3 credit alerts a day (D78). Rules only; no model on incoming fraud. |
 | FR-210 | One weighted score with visible contributions | Rejected for v1 | Conflicts with D11. Its intent, visible contribution per component, is met by separate outputs and the policy trace (D69b). |
-| Accept. | A documented detection path and owner per top fraud type | Partly | Three fraud types, each with a measured path (D63–D67). |
+| Accept. | A documented detection path and owner per top fraud type | Partly | Seven fraud types, each with a rule and a measured path (D63–D67, D77–D79, D82). Detection is measured on simulated fraud; independent confirmation waits for IEEE-CIS (D81c). |
 
 ## 5.3 Decisioning (FR-3xx)
 
@@ -116,9 +116,9 @@ the few gaps that matter most rather than all of them.
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
 | FR-401 | Cases created with context assembled | Met | Timeline, account baseline, signals with evidence, attributions and a recommendation (FR-024). |
-| FR-402 | Risk-ranked queues and routing | Partly | Ranked by severity, money and lateness; "take next case" assigns it. No routing by skill or segment. |
+| FR-402 | Risk-ranked queues and routing | Partly | Ranked by severity, money and lateness; "take next case" assigns it; escalations route to InfoSec's or the lead's own queue, and recorded outcomes to the lead's awaiting-close queue (D83). No routing by skill or segment. |
 | FR-403 | Related alerts merged into one case | Partly | By customer within 24 hours (D13a, D19). Not across a ring of customers. |
-| FR-404 | In-case actions | Partly | Escalate, note, record outcome, assign, close. Block, refund and contact are advice to the analyst, not system actions (D7). |
+| FR-404 | In-case actions | Met | Every recommendation is a checklist of steps, each recorded with its result (customer contacted, card blocked, hold, recall, receiving bank notified, destinations checked, identity verified); escalation with a required reason to InfoSec or the Fraud Ops lead and hand-back with findings; outcome; close (D83). Block, hold and refund are done in the bank's systems and recorded here (D7). |
 | FR-405 | Link-analysis view in the case | Not built | — |
 | FR-406 | Outcome labels feed model training | Partly | Recorded as labels (D13c); not yet used to retrain. |
 | FR-407 | Response clocks with breach alerting, mapped to regulatory clocks | Partly | Regulatory clocks built (D71): versioned policy, working days, breach recorded once, written to the permanent record and escalated to Fraud Ops. The per-severity response clocks are still set in code and not escalated. |

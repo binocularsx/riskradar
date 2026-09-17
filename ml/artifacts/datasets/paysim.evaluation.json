@@ -13,7 +13,7 @@
     },
     "rows_evaluated": 980000
   },
-  "feature_spec": "1.3.0",
+  "feature_spec": "1.4.1",
   "labelled": true,
   "split": {
     "rule": "by time",
@@ -32,9 +32,9 @@
   "arms": [
     {
       "arm": "rules only",
-      "alerts": 0,
-      "alerts_per_day": 0.0,
-      "rule_alerts": 0,
+      "alerts": 5,
+      "alerts_per_day": 0.3,
+      "rule_alerts": 5,
       "precision": 0.0,
       "transaction_recall": 0.0,
       "incidents": 707,
@@ -44,7 +44,7 @@
         0.0,
         0.005
       ],
-      "false_alerts": 0,
+      "false_alerts": 5,
       "false_alerts_per_incident_caught": null,
       "fraud_value_recall": 0.0,
       "by_fraud_type": {
@@ -61,12 +61,13 @@
     },
     {
       "arm": "shipped model + rules",
-      "alerts": 3707,
-      "alerts_per_day": 212.3,
-      "rule_alerts": 0,
-      "budget_left_for_score": 1577,
-      "score_threshold": 0.0025380710682660003,
-      "precision": 0.0005,
+      "alerts": 1577,
+      "alerts_per_day": 90.3,
+      "rule_alerts": 5,
+      "budget_left_for_score": 1572,
+      "pr_auc": 0.0047,
+      "pr_auc_lift_over_random": 1.93,
+      "precision": 0.0013,
       "transaction_recall": 0.0028,
       "incidents": 707,
       "incidents_caught": 2,
@@ -75,9 +76,9 @@
         0.001,
         0.01
       ],
-      "false_alerts": 3705,
-      "false_alerts_per_incident_caught": 1852.5,
-      "fraud_value_recall": 0.0,
+      "false_alerts": 1575,
+      "false_alerts_per_incident_caught": 787.5,
+      "fraud_value_recall": 0.0029,
       "by_fraud_type": {
         "UNSPECIFIED": {
           "incidents": 707,
@@ -92,12 +93,13 @@
     },
     {
       "arm": "shipped model alone",
-      "alerts": 3707,
-      "alerts_per_day": 212.3,
+      "alerts": 1577,
+      "alerts_per_day": 90.3,
       "rule_alerts": 0,
       "budget_left_for_score": 1577,
-      "score_threshold": 0.0025380710682660003,
-      "precision": 0.0005,
+      "pr_auc": 0.0047,
+      "pr_auc_lift_over_random": 1.93,
+      "precision": 0.0013,
       "transaction_recall": 0.0028,
       "incidents": 707,
       "incidents_caught": 2,
@@ -106,9 +108,9 @@
         0.001,
         0.01
       ],
-      "false_alerts": 3705,
-      "false_alerts_per_incident_caught": 1852.5,
-      "fraud_value_recall": 0.0,
+      "false_alerts": 1575,
+      "false_alerts_per_incident_caught": 787.5,
+      "fraud_value_recall": 0.0029,
       "by_fraud_type": {
         "UNSPECIFIED": {
           "incidents": 707,
@@ -123,31 +125,32 @@
     },
     {
       "arm": "anomaly score (no labels) + rules",
-      "alerts": 1585,
-      "alerts_per_day": 90.8,
-      "rule_alerts": 0,
-      "budget_left_for_score": 1577,
-      "score_threshold": 0.7078738062969815,
-      "precision": 0.0076,
-      "transaction_recall": 0.017,
+      "alerts": 1577,
+      "alerts_per_day": 90.3,
+      "rule_alerts": 5,
+      "budget_left_for_score": 1572,
+      "pr_auc": 0.003,
+      "pr_auc_lift_over_random": 1.25,
+      "precision": 0.0108,
+      "transaction_recall": 0.024,
       "incidents": 707,
-      "incidents_caught": 12,
-      "incident_recall": 0.017,
+      "incidents_caught": 17,
+      "incident_recall": 0.024,
       "ci95": [
-        0.01,
-        0.029
+        0.015,
+        0.038
       ],
-      "false_alerts": 1573,
-      "false_alerts_per_incident_caught": 131.08,
-      "fraud_value_recall": 0.0452,
+      "false_alerts": 1560,
+      "false_alerts_per_incident_caught": 91.76,
+      "fraud_value_recall": 0.035,
       "by_fraud_type": {
         "UNSPECIFIED": {
           "incidents": 707,
-          "caught": 12,
-          "recall": 0.017,
+          "caught": 17,
+          "recall": 0.024,
           "ci95": [
-            0.01,
-            0.029
+            0.015,
+            0.038
           ]
         }
       }
@@ -158,7 +161,8 @@
       "alerts_per_day": 90.3,
       "rule_alerts": 0,
       "budget_left_for_score": 1577,
-      "score_threshold": 6.504346,
+      "pr_auc": 0.036,
+      "pr_auc_lift_over_random": 14.96,
       "precision": 0.0685,
       "transaction_recall": 0.1528,
       "incidents": 707,
@@ -185,62 +189,64 @@
     },
     {
       "arm": "retrained model + rules",
-      "alerts": 1599,
-      "alerts_per_day": 91.6,
-      "rule_alerts": 0,
-      "budget_left_for_score": 1577,
-      "score_threshold": 0.01973684217251679,
-      "precision": 0.0844,
-      "transaction_recall": 0.1909,
+      "alerts": 1577,
+      "alerts_per_day": 90.3,
+      "rule_alerts": 5,
+      "budget_left_for_score": 1572,
+      "pr_auc": 0.2443,
+      "pr_auc_lift_over_random": 101.6,
+      "precision": 0.1598,
+      "transaction_recall": 0.3564,
       "incidents": 707,
-      "incidents_caught": 135,
-      "incident_recall": 0.1909,
+      "incidents_caught": 252,
+      "incident_recall": 0.3564,
       "ci95": [
-        0.164,
-        0.222
+        0.322,
+        0.392
       ],
-      "false_alerts": 1464,
-      "false_alerts_per_incident_caught": 10.84,
-      "fraud_value_recall": 0.6749,
+      "false_alerts": 1325,
+      "false_alerts_per_incident_caught": 5.26,
+      "fraud_value_recall": 0.6701,
       "by_fraud_type": {
         "UNSPECIFIED": {
           "incidents": 707,
-          "caught": 135,
-          "recall": 0.1909,
+          "caught": 252,
+          "recall": 0.3564,
           "ci95": [
-            0.164,
-            0.222
+            0.322,
+            0.392
           ]
         }
       }
     },
     {
       "arm": "retrained model alone",
-      "alerts": 1599,
-      "alerts_per_day": 91.6,
+      "alerts": 1577,
+      "alerts_per_day": 90.3,
       "rule_alerts": 0,
       "budget_left_for_score": 1577,
-      "score_threshold": 0.01973684217251679,
-      "precision": 0.0844,
-      "transaction_recall": 0.1909,
+      "pr_auc": 0.2443,
+      "pr_auc_lift_over_random": 101.6,
+      "precision": 0.1598,
+      "transaction_recall": 0.3564,
       "incidents": 707,
-      "incidents_caught": 135,
-      "incident_recall": 0.1909,
+      "incidents_caught": 252,
+      "incident_recall": 0.3564,
       "ci95": [
-        0.164,
-        0.222
+        0.322,
+        0.392
       ],
-      "false_alerts": 1464,
-      "false_alerts_per_incident_caught": 10.84,
-      "fraud_value_recall": 0.6749,
+      "false_alerts": 1325,
+      "false_alerts_per_incident_caught": 5.26,
+      "fraud_value_recall": 0.6701,
       "by_fraud_type": {
         "UNSPECIFIED": {
           "incidents": 707,
-          "caught": 135,
-          "recall": 0.1909,
+          "caught": 252,
+          "recall": 0.3564,
           "ci95": [
-            0.164,
-            0.222
+            0.322,
+            0.392
           ]
         }
       }
@@ -249,29 +255,30 @@
       "arm": "retrained with the dataset's own columns + rules",
       "alerts": 1577,
       "alerts_per_day": 90.3,
-      "rule_alerts": 0,
-      "budget_left_for_score": 1577,
-      "score_threshold": 0.012820512832028057,
-      "precision": 0.416,
-      "transaction_recall": 0.9279,
+      "rule_alerts": 5,
+      "budget_left_for_score": 1572,
+      "pr_auc": 0.892,
+      "pr_auc_lift_over_random": 370.94,
+      "precision": 0.4134,
+      "transaction_recall": 0.9222,
       "incidents": 707,
-      "incidents_caught": 656,
-      "incident_recall": 0.9279,
+      "incidents_caught": 652,
+      "incident_recall": 0.9222,
       "ci95": [
-        0.906,
-        0.945
+        0.9,
+        0.94
       ],
-      "false_alerts": 921,
-      "false_alerts_per_incident_caught": 1.4,
-      "fraud_value_recall": 0.9962,
+      "false_alerts": 925,
+      "false_alerts_per_incident_caught": 1.42,
+      "fraud_value_recall": 0.9955,
       "by_fraud_type": {
         "UNSPECIFIED": {
           "incidents": 707,
-          "caught": 656,
-          "recall": 0.9279,
+          "caught": 652,
+          "recall": 0.9222,
           "ci95": [
-            0.906,
-            0.945
+            0.9,
+            0.94
           ]
         }
       }
@@ -285,7 +292,7 @@
     "incidents_in_test": 707,
     "fraud_rows_in_test_per_day": 40.5
   },
-  "shipped_model": "riskradar-gbm-20260915.1334-final.joblib",
+  "shipped_model": "riskradar-gbm-20260917.1500-final.joblib",
   "native_columns": [
     "oldbalanceOrg",
     "newbalanceOrig",
@@ -630,6 +637,63 @@
         "why": [],
         "constant_on_this_data": false,
         "share_not_applicable": 0.0
+      },
+      {
+        "feature": "region_is_new_to_subject",
+        "needs": [
+          "region",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "region",
+          "history"
+        ],
+        "why": [
+          "no `region` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "card_present_count_1h_account",
+        "needs": [
+          "channel",
+          "instrument",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "channel",
+          "history"
+        ],
+        "why": [
+          "no `channel` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "beneficiary_distinct_senders_24h",
+        "needs": [
+          "beneficiary"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.2199
+      },
+      {
+        "feature": "hour_of_day_local",
+        "needs": [],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
       }
     ],
     "rules": [
@@ -689,7 +753,7 @@
         "why": [
           "each account appears too rarely for 'unusual for this customer' to mean anything"
         ],
-        "fired": 0
+        "fired": 5
       },
       {
         "rule": "SIM_SWAP_TRANSFER",
@@ -775,7 +839,7 @@
     ]
   },
   "mapping": "# Risk Radar dataset mapping (D81). Written by `evaluate_dataset.py suggest`.\n# Read every field before running: a wrong sender or label column makes every\n# figure meaningless while looking plausible. Then set `reviewed: true`.\n# NOTE: no incident column: fraud rows of one customer (and type) within 24 hours count as one incident\n# NOTE: `step` is numeric; read as hours. Check the unit: every per-hour measurement depends on it\n# NOTE: amounts are multiplied by 100 into minor units (kobo, cents); set `scale: 1` if already minor\n# NOTE: no approval/decline column: every row is treated as approved, so decline-based measurements and the card-testing rule cannot fire\n# NOTE: `type` values read as credits: ['CASH_IN']\n# NOTE: 4 other numeric columns are offered as `native_features` for the comparison arm only; delete any that are derived from the label or from the future\ndataset: PaySim mobile money (Lopez-Rojas)\nreviewed: true\nfields:\n  label:\n    column: isFraud\n    positive:\n    - 1\n  incident:\n    derive:\n      by: customer\n      gap_hours: 24\n  timestamp:\n    column: step\n    unit: hours\n    origin: '2026-01-01T00:00:00+00:00'\n  amount:\n    column: amount\n    scale: 100\n  account:\n    column: nameOrig\n  beneficiary:\n    column: nameDest\n  auth_result:\n    constant: APPROVED\n  instrument:\n    column: type\n    values:\n      PAYMENT: ACCOUNT_TRANSFER\n      TRANSFER: ACCOUNT_TRANSFER\n      CASH_OUT: CASH\n      DEBIT: CARD\n      CASH_IN: CASH\n    default: ACCOUNT_TRANSFER\n  direction:\n    column: type\n    values:\n      PAYMENT: OUTBOUND\n      TRANSFER: OUTBOUND\n      CASH_OUT: OUTBOUND\n      DEBIT: OUTBOUND\n      CASH_IN: INBOUND\n    default: OUTBOUND\nnative_features:\n# Reviewed 17 Sep 2026: balances before and after are ledger facts at posting time.\n# Known to separate PaySim fraud strongly (the fraud empties the balance), so this\n# arm is a ceiling, not a claim.\n- oldbalanceOrg\n- newbalanceOrig\n- oldbalanceDest\n- newbalanceDest\nignore:\n  isFlaggedFraud: 'somebody else''s score or flag (D10f): never an input'\n",
-  "seconds": 426.7,
+  "seconds": 404.1,
   "alerts_arm": "shipped model + rules",
   "alerts_file": "paysim.alerts.csv"
 }

@@ -40,8 +40,8 @@ RULE_CONFIGS: dict[str, dict[str, Any]] = {
                                   "max_minutes_since_credit": 180, "min_pass_through": 0.5}},  # D79
     "CARD_TESTING_PROBES": {"enabled": True, "params": {"min_decline_rate_24h": 0.5, "min_failed_1h": 3}},
     # D82: tuned by ml/fraud_types_d82.py; see ml/artifacts/fraud-types-d82.json.
-    "SCAM_BENEFICIARY_FANIN": {"enabled": True, "params": {"min_other_senders": 2, "max_beneficiary_age_days": 7}},
-    "SIM_SWAP_TRANSFER": {"enabled": True, "params": {"within_hours": 12}},
+    "SCAM_BENEFICIARY_FANIN": {"enabled": True, "params": {"min_other_senders": 1, "max_beneficiary_age_days": 3, "min_amount_ratio": 1.5}},
+    "SIM_SWAP_TRANSFER": {"enabled": True, "params": {"within_hours": 12, "channels": ["USSD", "MOBILE_APP"], "min_amount_log10": 4.7}},
     "DORMANT_ACCOUNT_REACTIVATION": {"enabled": True, "params": {"min_dormant_days": 60, "min_amount_log10": 5.0}},
     "CARD_PRESENT_NEW_REGION_CASHOUT": {"enabled": True, "params": {"min_count_1h": 3}},
     "SANCTIONED_BENEFICIARY": {"enabled": True, "params": {}},
