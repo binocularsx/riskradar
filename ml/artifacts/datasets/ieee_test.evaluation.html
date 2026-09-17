@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IEEE-CIS Fraud Detection (Vesta), test split: no labels evaluation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root { --ink:#16202c; --ink-2:#4a5667; --line:#d9dee6; --bg:#fbfcfd; --surface:#fff; --accent:#1f5fa8;
+        --ok:#1d7a4f; --ok-bg:#e3f3ea; --no:#9a3b21; --no-bg:#f8e7e0; --warn-bg:#fff5da; }
+@media (prefers-color-scheme: dark) { :root { --ink:#e6ebf2; --ink-2:#a6b1c0; --line:#2c3644; --bg:#0f141b;
+        --surface:#161d27; --accent:#7fb0ea; --ok:#7fd3a5; --ok-bg:#15301f; --no:#f0a58c; --no-bg:#3a1d14; --warn-bg:#3a3014; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Libre Franklin", system-ui, sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding-block: 28px 60px; padding-inline: 20px; }
+h1 { font-size: 30px; margin: 4px 0 8px; text-wrap: balance; } h2 { font-size: 19px; margin: 34px 0 8px; }
+.kicker { font: 12px "IBM Plex Mono", monospace; letter-spacing: .06em; color: var(--ink-2); margin: 0; }
+.lede { color: var(--ink-2); max-width: 70ch; }
+.note, .sub { color: var(--ink-2); font-size: 13px; } .sub { margin-top: 2px; }
+.warn { background: var(--warn-bg); border: 1px solid var(--line); padding: 10px 14px; border-radius: 4px; margin: 10px 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.tile .v { font: 600 32px "IBM Plex Mono", monospace; color: var(--accent); } .tile .k { font-size: 13px; color: var(--ink-2); }
+.scroll { overflow-x: auto; } table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--ink-2); font-weight: 600; } td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+code, pre { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+pre { background: var(--surface); border: 1px solid var(--line); padding: 12px; overflow-x: auto; }
+.chip { font: 11px "IBM Plex Mono", monospace; padding: 1px 7px; border-radius: 10px; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.no { background: var(--no-bg); color: var(--no); }
+footer { margin-top: 40px; color: var(--ink-2); font-size: 12.5px; }
+</style></head><body><main>
+<header><p class='kicker'>Risk Radar · dataset evaluation (D81) · feature spec 1.4.1</p><h1>IEEE-CIS Fraud Detection (Vesta), test split: no labels</h1><p class='lede'>506,691 transactions evaluated of 506,691 in the file. Test period 2018-07-10 to 2018-12-30 (173.12 days), budget 100.0 alerts a day (fixed alerts a day).</p></header>
+<div class='warn'>No fraud label mapped: this report lists what the system would alert on and why, but cannot say whether any of it is fraud.</div>
+<h2>What this data can feed</h2><p>2 of 26 measurements carry information on this data. A measurement that cannot work here is not a detection failure; it is a fact about the file.</p>
+<div class='scroll'><table><thead><tr><th>Measurement</th><th>Works here</th><th>Why not</th><th>Share “does not apply”</th></tr></thead><tbody>
+<tr><td><code>amount_log10</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>amount_ratio_to_account_p95_30d</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>txn_count_1h_account</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>approved_value_ratio_24h_vs_daily_mean_30d</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>failed_attempts_1h_account</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>decline_rate_24h_account</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>distinct_beneficiaries_1h_account</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>beneficiary_is_new_to_account</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>100.0%</td></tr>
+<tr><td><code>beneficiary_first_seen_days</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>device_is_new_to_subject</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>account_age_days</code></td><td><span class='chip no'>no</span></td><td>no `account_opened_at` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>days_since_account_activity</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>46.7%</td></tr>
+<tr><td><code>failed_logins_1h_subject</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>device_bound_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>77.3%</td></tr>
+<tr><td><code>credential_changed_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>sim_changed_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>payee_added_minutes</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>100.0%</td></tr>
+<tr><td><code>credits_24h_account</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>distinct_remitters_24h_account</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>inbound_count_ratio_24h_vs_daily_mean_30d</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>minutes_since_last_credit</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>pass_through_ratio_24h</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>region_is_new_to_subject</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>70.2%</td></tr>
+<tr><td><code>card_present_count_1h_account</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>beneficiary_distinct_senders_24h</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>hour_of_day_local</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+</tbody></table></div>
+<div class='scroll'><table><thead><tr><th>Rule</th><th>Can fire</th><th>Why not</th><th>Fired in test</th></tr></thead><tbody>
+<tr><td><code>VELOCITY_BURST_1H</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything; no `beneficiary` column mapped</td><td class='n'>468</td></tr>
+<tr><td><code>ACCOUNT_TAKEOVER_SEQUENCE</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one; no `beneficiary` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>MULE_INBOUND_FANIN</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0</td></tr>
+<tr><td><code>SECOND_LEG_ONWARD_PAYMENT</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0</td></tr>
+<tr><td><code>CARD_TESTING_PROBES</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>SCAM_BENEFICIARY_FANIN</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+<tr><td><code>SIM_SWAP_TRANSFER</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one; no `beneficiary` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>DORMANT_ACCOUNT_REACTIVATION</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+<tr><td><code>CARD_PRESENT_NEW_REGION_CASHOUT</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+<tr><td><code>SANCTIONED_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>KNOWN_MULE_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>PRE_REGISTERED_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>ESTABLISHED_PAYEE_NORMAL</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+</tbody></table></div>
+<h2>Each layer, same rows, same budget</h2>
+<div class='scroll'><table><thead><tr><th>Arm</th><th>Alerts a day</th></tr></thead><tbody>
+<tr><td>rules only<div class='sub'>no model</div></td><td class='n'>2.7</td></tr>
+<tr><td>shipped model + rules<div class='sub'>as it ships, never shown this data</div></td><td class='n'>100.0</td></tr>
+<tr><td>shipped model alone<div class='sub'>as it ships, no rules</div></td><td class='n'>100.0</td></tr>
+<tr><td>anomaly score (no labels) + rules<div class='sub'>never sees a label</div></td><td class='n'>100.0</td></tr>
+<tr><td>amount alone<div class='sub'>the floor</div></td><td class='n'>100.0</td></tr>
+</tbody></table></div>
+<p class='note'>Ranking is budget-free: how well the arm's score puts fraud above everything else, against a random order. A good ranking caught little only when the budget is far below the fraud volume.</p>
+<h2>How to read this</h2><ul><li><b>Incidents, not rows.</b> An incident counts as caught if any of its transactions is alerted: one alert opens the case.</li><li><b>Ranges overlap, no difference.</b> Two arms whose 95% ranges overlap are not distinguishable on this data.</li><li><b>Shipped versus retrained.</b> The shipped model learned a simulated Nigerian bank. A large gap to the retrained arm is expected on foreign data and says the model must be retrained on a bank's own outcomes before it is trusted.</li><li><b>No borrowed scores.</b> Columns somebody else computed (scores, risk, flags) were excluded as inputs (D10f).</li></ul>
+<h2>Mapping used</h2><pre># The IEEE-CIS mapping without a label: Kaggle never released test labels, so
+# the test split can be scored and replayed, not measured (D81d).
+dataset: &#x27;IEEE-CIS Fraud Detection (Vesta), test split: no labels&#x27;
+reviewed: true
+fields:
+  timestamp:
+    column: TransactionDT
+    unit: seconds
+    origin: &#x27;2017-11-30T00:00:00+00:00&#x27;
+  amount:
+    column: TransactionAmt
+    scale: 100
+  customer:
+    columns:
+    - card1
+    - addr1
+    - P_emaildomain
+    - card_start_day
+  card:
+    columns:
+    - card1
+    - card2
+    - card3
+    - card5
+    - addr1
+    - P_emaildomain
+    - card_start_day
+  device:
+    column: DeviceInfo
+  channel:
+    constant: WEB
+  instrument:
+    constant: CARD
+  auth_result:
+    constant: APPROVED
+  region:
+    column: addr1
+  merchant_category:
+    column: ProductCD
+native_features:
+- C1
+- C2
+- C3
+- C4
+- C5
+- C6
+- C7
+- C8
+- C9
+- C10
+- C11
+- C12
+- C13
+- C14
+- D1
+- D2
+- D3
+- D4
+- D5
+- D6
+- D7
+- D8
+- D9
+- D10
+- D11
+- D12
+- D13
+- D14
+- D15
+- dist1
+- dist2
+ignore: {}
+</pre>
+<footer>Written by <code>ml/evaluate_dataset.py</code>. Alerts listed in <code>ieee_test.alerts.csv</code> (shipped model + rules). JSON beside this file.</footer>
+</main></body></html>

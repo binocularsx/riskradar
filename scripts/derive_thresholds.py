@@ -137,11 +137,25 @@ def main() -> None:
         # payments the rules did not already flag.
         p_free = p[~rule_driven]
         alert_rate = min(1.0, remaining / max(daily_volume * (1 - rule_driven.mean()), 1e-9))
-        p_monitor = float(np.quantile(p_free, 1.0 - alert_rate))
+        def within(share: float) -> float:
+            """The lowest threshold whose alert share does not exceed ``share``.
+
+            A calibrated model gives many payments exactly the same probability.
+            A plain quantile can land on such a value, and every tied payment
+            then alerts: on IEEE-CIS a 100-a-day budget became 486 a day. Stepping
+            up to the next distinct value keeps the volume inside the budget.
+            """
+            t = float(np.quantile(p_free, 1.0 - share))
+            if float(np.mean(p_free >= t)) <= share:
+                return t
+            above = np.unique(p_free[p_free > t])
+            return float(above[0]) if len(above) else float(np.nextafter(t, 1.0))
+
+        p_monitor = within(alert_rate)
         # REVIEW takes a third of the model's share, HOLD a tenth: the bands stay
         # nested inside the same envelope rather than each having its own.
-        p_review = float(np.quantile(p_free, 1.0 - alert_rate / 3.0))
-        p_hold = float(np.quantile(p_free, 1.0 - alert_rate / 10.0))
+        p_review = within(alert_rate / 3.0)
+        p_hold = within(alert_rate / 10.0)
 
         # Ordering is a database constraint too, but a degenerate distribution
         # (every probability identical) would otherwise produce three equal

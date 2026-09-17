@@ -1,0 +1,638 @@
+{
+  "dataset": "IEEE-CIS Fraud Detection (Vesta), test split: no labels",
+  "mapping_reviewed": true,
+  "source": {
+    "source_file": "ieee_test_joined.csv",
+    "rows_in_file": 506691,
+    "rows_evaluated": 506691
+  },
+  "feature_spec": "1.4.1",
+  "labelled": false,
+  "split": {
+    "rule": "by time",
+    "train_rows": 25334,
+    "test_rows": 481357,
+    "test_from": "2018-07-10T21:09:06+00:00",
+    "test_to": "2018-12-30T23:59:05+00:00",
+    "test_days": 173.12
+  },
+  "budget": {
+    "alerts_per_day": 100.0,
+    "alerts_in_test": 17312,
+    "share_of_traffic": 0.03596,
+    "basis": "fixed alerts a day"
+  },
+  "arms": [
+    {
+      "arm": "rules only",
+      "alerts": 468,
+      "alerts_per_day": 2.7,
+      "rule_alerts": 468
+    },
+    {
+      "arm": "shipped model + rules",
+      "alerts": 17312,
+      "alerts_per_day": 100.0,
+      "rule_alerts": 468,
+      "budget_left_for_score": 16844
+    },
+    {
+      "arm": "shipped model alone",
+      "alerts": 17312,
+      "alerts_per_day": 100.0,
+      "rule_alerts": 0,
+      "budget_left_for_score": 17312
+    },
+    {
+      "arm": "anomaly score (no labels) + rules",
+      "alerts": 17312,
+      "alerts_per_day": 100.0,
+      "rule_alerts": 468,
+      "budget_left_for_score": 16844
+    },
+    {
+      "arm": "amount alone",
+      "alerts": 17312,
+      "alerts_per_day": 100.0,
+      "rule_alerts": 0,
+      "budget_left_for_score": 17312
+    }
+  ],
+  "skipped_arms": {},
+  "shipped_model": "ieee-gbm-20260917.1351-ieee.joblib",
+  "capability": {
+    "inputs": {
+      "amount": true,
+      "beneficiary": false,
+      "device": true,
+      "channel": true,
+      "instrument": true,
+      "region": true,
+      "account_opened_at": false,
+      "auth_result": false,
+      "history": false,
+      "credits": false,
+      "events": false,
+      "lists": false
+    },
+    "features": [
+      {
+        "feature": "amount_log10",
+        "needs": [
+          "amount"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "amount_ratio_to_account_p95_30d",
+        "needs": [
+          "amount",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "txn_count_1h_account",
+        "needs": [
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+        "needs": [
+          "amount",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "failed_attempts_1h_account",
+        "needs": [
+          "auth_result",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "auth_result",
+          "history"
+        ],
+        "why": [
+          "no `auth_result` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "decline_rate_24h_account",
+        "needs": [
+          "auth_result",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "auth_result",
+          "history"
+        ],
+        "why": [
+          "no `auth_result` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "distinct_beneficiaries_1h_account",
+        "needs": [
+          "beneficiary",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "beneficiary",
+          "history"
+        ],
+        "why": [
+          "no `beneficiary` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "beneficiary_is_new_to_account",
+        "needs": [
+          "beneficiary",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "beneficiary",
+          "history"
+        ],
+        "why": [
+          "no `beneficiary` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "beneficiary_first_seen_days",
+        "needs": [
+          "beneficiary"
+        ],
+        "available": false,
+        "missing": [
+          "beneficiary"
+        ],
+        "why": [
+          "no `beneficiary` column mapped"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "device_is_new_to_subject",
+        "needs": [
+          "device",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "account_age_days",
+        "needs": [
+          "account_opened_at"
+        ],
+        "available": false,
+        "missing": [
+          "account_opened_at"
+        ],
+        "why": [
+          "no `account_opened_at` column mapped"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "days_since_account_activity",
+        "needs": [
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.4672
+      },
+      {
+        "feature": "failed_logins_1h_subject",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "device_bound_hours",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.7729
+      },
+      {
+        "feature": "credential_changed_hours",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "sim_changed_hours",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "payee_added_minutes",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "credits_24h_account",
+        "needs": [
+          "credits"
+        ],
+        "available": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "distinct_remitters_24h_account",
+        "needs": [
+          "credits"
+        ],
+        "available": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "inbound_count_ratio_24h_vs_daily_mean_30d",
+        "needs": [
+          "credits"
+        ],
+        "available": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "minutes_since_last_credit",
+        "needs": [
+          "credits"
+        ],
+        "available": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "pass_through_ratio_24h",
+        "needs": [
+          "credits"
+        ],
+        "available": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "region_is_new_to_subject",
+        "needs": [
+          "region",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.7016
+      },
+      {
+        "feature": "card_present_count_1h_account",
+        "needs": [
+          "channel",
+          "instrument",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "beneficiary_distinct_senders_24h",
+        "needs": [
+          "beneficiary"
+        ],
+        "available": false,
+        "missing": [
+          "beneficiary"
+        ],
+        "why": [
+          "no `beneficiary` column mapped"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "hour_of_day_local",
+        "needs": [],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      }
+    ],
+    "rules": [
+      {
+        "rule": "VELOCITY_BURST_1H",
+        "can_fire": false,
+        "missing": [
+          "history",
+          "beneficiary"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything",
+          "no `beneficiary` column mapped"
+        ],
+        "fired": 468
+      },
+      {
+        "rule": "ACCOUNT_TAKEOVER_SEQUENCE",
+        "can_fire": false,
+        "missing": [
+          "events",
+          "beneficiary"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one",
+          "no `beneficiary` column mapped"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "MULE_INBOUND_FANIN",
+        "can_fire": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "SECOND_LEG_ONWARD_PAYMENT",
+        "can_fire": false,
+        "missing": [
+          "credits"
+        ],
+        "why": [
+          "no incoming transactions, so the receiving side cannot be seen"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "CARD_TESTING_PROBES",
+        "can_fire": false,
+        "missing": [
+          "auth_result"
+        ],
+        "why": [
+          "no `auth_result` column mapped"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "SCAM_BENEFICIARY_FANIN",
+        "can_fire": false,
+        "missing": [
+          "beneficiary",
+          "history"
+        ],
+        "why": [
+          "no `beneficiary` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "SIM_SWAP_TRANSFER",
+        "can_fire": false,
+        "missing": [
+          "events",
+          "beneficiary"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one",
+          "no `beneficiary` column mapped"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "DORMANT_ACCOUNT_REACTIVATION",
+        "can_fire": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "CARD_PRESENT_NEW_REGION_CASHOUT",
+        "can_fire": false,
+        "missing": [
+          "history"
+        ],
+        "why": [
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "SANCTIONED_BENEFICIARY",
+        "can_fire": false,
+        "missing": [
+          "lists"
+        ],
+        "why": [
+          "sanctions, confirmed-mule and payee lists belong to the bank, not the dataset"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "KNOWN_MULE_BENEFICIARY",
+        "can_fire": false,
+        "missing": [
+          "lists"
+        ],
+        "why": [
+          "sanctions, confirmed-mule and payee lists belong to the bank, not the dataset"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "PRE_REGISTERED_BENEFICIARY",
+        "can_fire": false,
+        "missing": [
+          "lists"
+        ],
+        "why": [
+          "sanctions, confirmed-mule and payee lists belong to the bank, not the dataset"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "ESTABLISHED_PAYEE_NORMAL",
+        "can_fire": false,
+        "missing": [
+          "beneficiary",
+          "history"
+        ],
+        "why": [
+          "no `beneficiary` column mapped",
+          "each account appears too rarely for 'unusual for this customer' to mean anything"
+        ],
+        "fired": 0
+      }
+    ]
+  },
+  "mapping": "# The IEEE-CIS mapping without a label: Kaggle never released test labels, so\n# the test split can be scored and replayed, not measured (D81d).\ndataset: 'IEEE-CIS Fraud Detection (Vesta), test split: no labels'\nreviewed: true\nfields:\n  timestamp:\n    column: TransactionDT\n    unit: seconds\n    origin: '2017-11-30T00:00:00+00:00'\n  amount:\n    column: TransactionAmt\n    scale: 100\n  customer:\n    columns:\n    - card1\n    - addr1\n    - P_emaildomain\n    - card_start_day\n  card:\n    columns:\n    - card1\n    - card2\n    - card3\n    - card5\n    - addr1\n    - P_emaildomain\n    - card_start_day\n  device:\n    column: DeviceInfo\n  channel:\n    constant: WEB\n  instrument:\n    constant: CARD\n  auth_result:\n    constant: APPROVED\n  region:\n    column: addr1\n  merchant_category:\n    column: ProductCD\nnative_features:\n- C1\n- C2\n- C3\n- C4\n- C5\n- C6\n- C7\n- C8\n- C9\n- C10\n- C11\n- C12\n- C13\n- C14\n- D1\n- D2\n- D3\n- D4\n- D5\n- D6\n- D7\n- D8\n- D9\n- D10\n- D11\n- D12\n- D13\n- D14\n- D15\n- dist1\n- dist2\nignore: {}\n",
+  "seconds": 282.3,
+  "alerts_arm": "shipped model + rules",
+  "alerts_file": "ieee_test.alerts.csv"
+}

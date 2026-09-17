@@ -57,13 +57,16 @@ def _raw_id(token: str | None) -> str | None:
     return str(token)[2:][:128]
 
 
+CURRENCY = "NGN"
+
+
 def payload(row: pd.Series, when: datetime, ref: str) -> dict:
     inbound = row["direction"] == "INBOUND"
     body = {
         "transaction_ref": ref[:128],
         "occurred_at": when.isoformat(),
         "amount_minor": int(row["amount_minor"]),
-        "currency": "NGN",
+        "currency": CURRENCY,
         "channel": row["channel"],
         "instrument": row["instrument"],
         "rail": "CARD_SCHEME" if row["instrument"] == "CARD" else "NIP",
@@ -93,10 +96,13 @@ def main() -> None:
     parser.add_argument("--labels-out", default=None)
     parser.add_argument("--seed", type=int, default=20260917)
     parser.add_argument("--skip-history", action="store_true")
+    parser.add_argument("--currency", default="NGN", help="ISO 4217 code of the file's amounts (IEEE-CIS: USD)")
     parser.add_argument("--history-only", action="store_true",
                         help="post the history and stop, so thresholds can be derived before the live part")
     args = parser.parse_args()
 
+    global CURRENCY
+    CURRENCY = args.currency.upper()
     path = Path(args.data)
     mapping = Mapping.load(Path(args.mapping))
     if not mapping.reviewed:
