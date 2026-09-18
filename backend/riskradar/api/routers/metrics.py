@@ -325,3 +325,16 @@ def search_transactions(
         params,
     )
     return {"items": items, "limit": limit, "offset": offset}
+
+
+@router.get("/metrics/drift")
+def drift(
+    recent_days: float = Query(1.0, gt=0, le=30),
+    baseline_days: float = Query(7.0, gt=0, le=90),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """D88: score and feature drift (PSI) and each rule's firing rate, recent against baseline."""
+    from ...monitoring import report
+
+    return report(conn, recent_days=recent_days, baseline_days=baseline_days)

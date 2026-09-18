@@ -106,6 +106,10 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | NFR-001 | 50 TPS, p95 end-to-end < 2 s | `scripts/load_test.py` | 878 ms — PASS |
 | NFR-002 | 250 TPS burst, zero loss | `scripts/load_test.py --burst` | 0 lost — PASS |
 | NFR-004 | Scoring failure must not reject ingestion | `worker/scoring.py` → `_record_failure` (backoff, bounded retries) | — |
+| D86 | The alert budget holds at run time; over budget an alert is deferred, never dropped | `policy/budget.py`; `worker/scoring.py` → `score_transaction` (admission), `raise_alert`, `release_deferred`, `release_one`; `api/routers/budget.py`; `migrations/0017_budget_guard.sql`; `tests/test_budget_guard.py` | Verified |
+| D87 | Rate limits, backpressure, live-first queue, probes, request ids, future dates refused | `api/flow.py`; `api/routers/system.py`; `api/app.py` → `request_context`; `api/schemas.py` → `_not_in_the_future`; `simulator/riskradar_sim/client.py`; `tests/test_paced_client.py` | Verified |
+| D88 | Score, feature and rule drift | `monitoring.py`; `GET /v1/metrics/drift` | Verified |
+| D89 | Retrain on the desk's outcomes, champion against challenger | `ml/retrain_from_outcomes.py`; `tests/test_retrain_from_outcomes.py` | Verified |
 | NFR-005 | No secret in source control | `config.py` reads the environment; `.env` is gitignored | — |
 | NFR-006 | Integer minor units end to end | `amount_minor BIGINT`; `features/compute.py` sums integers | — |
 | NFR-007 | Audit append-only, enforced by grants, hash-chained | `migrations/0002_grants.sql`; `audit/chain.py`; `tests/test_security.py` | Verified |
@@ -145,7 +149,14 @@ Every "Must" in PRD §7 and §8, and where it lives.
 | **`api/routers/triage.py`** | 400 | The worklist, "hand me the next case", one-call disposition, and the operations view. The endpoints the redesigned console actually runs on. |
 | `api/routers/metrics.py` | 205 | The aggregate queries behind the charts. |
 | `api/routers/stream.py` | 170 | The live alert stream. |
-| `api/routers/admin.py` | 497 | Rules, thresholds, lists, models, users, audit. |
+| `api/routers/admin.py` | 497 | Rules, thresholds, lists, models, users, API keys, audit. |
+| **`policy/budget.py`** | 250 | D86: counts every alert against the bank's day and hour, and defers the discretionary ones over budget. |
+| `policy/calibration.py` | 160 | Thresholds solved from the budget, and the check that the ones in force still fit. One copy for the script and the API. |
+| `api/flow.py` | 140 | D87: per-key rate limits and queue backpressure at the front door. |
+| `api/routers/budget.py` | 280 | Today against the budget, the deferred queue, release, calibration, and the admin budget and derive calls. |
+| `api/routers/system.py` | 200 | Liveness, readiness and the one-read system status for the console header. |
+| `monitoring.py` | 190 | D88: PSI drift of the score and each input, and each rule's firing rate. |
+| `logsetup.py` | 45 | One log line per event: readable in development, JSON in production. |
 
 ### `backend/migrations/` — the database, in order
 
@@ -190,6 +201,10 @@ rather than folded back into `0001` so the record of *why* survives.
 | `totp.py` | Prints a login code. Development convenience only. |
 | `derive_thresholds.py` | Solves the thresholds backwards from the alert budget and publishes a new audited version. |
 | `load_test.py` | Measures NFR-001 and NFR-002 honestly. |
+| `replay_dataset.py` | Feeds a mapped dataset through the API: history quietly, then a time-lapse live stream that keeps the file's gaps (D81, D87). |
+| `demo_reset.py` | Rebuilds the simulated demo bank in the order a deployment would. |
+
+`deploy/` holds the container image, a compose file and the production runbook (`deploy/README.md`).
 
 ### `frontend/src/` — the console
 

@@ -1,0 +1,74 @@
+# Risk Radar, the whole backend on one host (D87).
+#
+#   cp .env.example .env         # fill in real secrets first
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+#
+# Order matters and compose enforces it: Postgres healthy -> migrations applied
+# -> seed (idempotent) -> API, workers and the clock sweep. The API's readiness
+# probe (/health/ready) only passes once a worker has reported in.
+#
+# Not exercised on the build machine (no Docker there, D30); the same
+# processes run natively via scripts/run_api.py, run_workers.py, run_clocks.py.
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  env_file: ../.env
+  environment:
+    RISKRADAR_DB_HOST: postgres
+    RISKRADAR_DB_PORT: "5432"
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${RISKRADAR_PG_SUPERUSER_PASSWORD:?set RISKRADAR_PG_SUPERUSER_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: ../.env
+    environment:
+      RISKRADAR_DB_HOST: postgres
+      RISKRADAR_DB_PORT: "5432"
+    command: ["sh", "-c", "python scripts/migrate.py && python scripts/seed.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["python", "scripts/run_api.py"]
+    ports:
+      - "8000:8000"
+
+  worker:
+    <<: *app
+    command: ["python", "scripts/run_worker.py"]
+    # Competing consumers over one Postgres queue (D8a); scale freely.
+    deploy:
+      replicas: 3
+    healthcheck:
+      disable: true
+
+  clocks:
+    <<: *app
+    command: ["python", "scripts/run_clocks.py", "60"]
+    healthcheck:
+      disable: true
+
+volumes:
+  pgdata:

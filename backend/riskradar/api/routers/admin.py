@@ -490,6 +490,30 @@ def create_api_key(
     return {"api_key": raw, "note": "shown once; only its hash is stored"}
 
 
+@router.get("/api-keys")
+def list_api_keys(
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """D87: which callers can post transactions, and when each last did."""
+    return {"keys": _rows(conn, "SELECT id, name, active, created_at, last_used_at FROM api_keys ORDER BY id")}
+
+
+@router.delete("/api-keys/{key_id}")
+def revoke_api_key(
+    key_id: int,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """D87: revoke, never delete: the key's history stays attributable. Takes effect on the next request."""
+    rows = _rows(conn, "UPDATE api_keys SET active = false WHERE id = %s AND active RETURNING id, name", (key_id,))
+    if not rows:
+        raise HTTPException(404, "no active API key with that id")
+    chain.append(conn, actor_user_id=user["id"], action="API_KEY_REVOKED", object_type="api_key",
+                 object_id=key_id, payload={"name": rows[0]["name"]})
+    return {"revoked": rows[0]}
+
+
 # ---------------------------------------------------------------------------
 # Audit (D12c)
 # ---------------------------------------------------------------------------

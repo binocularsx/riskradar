@@ -84,7 +84,8 @@ npm run dev --prefix frontend                   # http://localhost:5173
 cd simulator
 # a week of behaviour, with the last 14 hours alerting into the case queue
 python -m riskradar_sim --seed 424242 history --profile demo --alerting-tail-hours 14
-# a live feed while you demo
+# a live feed while you demo: incidents unfold in their own time (D87);
+# --incident-speed 10 compresses them for a short demo
 python -m riskradar_sim stream --rate 2
 # another bank flags three of your customers' BVNs on the industry watch-list (D75)
 python -m riskradar_sim industry-flag --count 3
@@ -94,6 +95,14 @@ python -m riskradar_sim industry-flag --count 3
 core's customer file, which the API reads to learn each customer's BVN. The
 identity and industry adapters are chosen in `.env` (see `.env.example`); the
 real Finacle and NIBSS adapters wait, visibly, until configured.
+
+### Running it for real
+
+`deploy/README.md` is the production runbook: settings, start order, the
+health and readiness probes, rate limits and backpressure (D87), operating the
+alert budget (D86), drift monitoring (D88), retraining on the desk's own
+outcomes (D89), backups and upgrades. `docs/api/openapi.json` is the full API
+description; `docs/dashboard-api-contract.html` maps it to screens.
 
 ### 6. Test it on somebody else's transactions (D81)
 

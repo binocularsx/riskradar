@@ -25,12 +25,14 @@ from fastapi.responses import JSONResponse
 
 from ...config import settings
 from ...db import pool
+from ...security.tokens import hash_api_key
 from ..deps import current_user, get_conn
 from .budget import budget_status
 
 router = APIRouter(tags=["ops"])
 
 API_VERSION = "1.1.0"
+DEV_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
 
 
 def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
@@ -90,7 +92,15 @@ def readiness(conn: Any) -> dict[str, Any]:
     checks["queue"] = {"ok": lag_ok, **queue}
     # The model is not required to be ready: rules-only is a degraded mode the
     # system reports, not an outage. Everything else is.
-    required = ("database", "ruleset", "thresholds", "workers", "queue")
+    required = ["database", "ruleset", "thresholds", "workers", "queue"]
+    if s.is_production:
+        # The seeded development key is public (it is in this repository). A
+        # production service that still accepts it is not ready for traffic.
+        dev_key = _rows(conn, "SELECT count(*) AS n FROM api_keys WHERE key_hash = %s AND active",
+                        (hash_api_key(DEV_API_KEY),))[0]["n"]
+        checks["dev_credentials"] = {"ok": dev_key == 0,
+                                     "note": None if dev_key == 0 else "revoke the seeded development API key"}
+        required.append("dev_credentials")
     ready = all(checks[k]["ok"] for k in required)
     return {"ready": ready, "checks": checks}
 

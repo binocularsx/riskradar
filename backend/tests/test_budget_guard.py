@@ -196,3 +196,25 @@ def test_a_backlog_refuses_new_work_with_503(client, api_headers, sample_transac
     limits.queue_hard_limit = 0
     r = client.post("/v1/transactions", json=sample_transaction(), headers=api_headers)
     assert r.status_code == 503 and r.headers["Retry-After"]
+
+
+def test_psi_reads_stability_and_shift():
+    import numpy as np
+
+    from riskradar.monitoring import psi, reading
+
+    rng = np.random.default_rng(1)
+    a = rng.normal(0, 1, 5000)
+    assert reading(psi(a, rng.normal(0, 1, 5000))) == "STABLE"
+    assert reading(psi(a, rng.normal(1.0, 1, 5000))) == "SHIFTED"
+    assert psi(a, a[:10]) is None
+
+
+def test_the_drift_report_answers(client):
+    login(client, "lead@riskradar.local", "OpsLead#2026")
+    r = client.get("/v1/metrics/drift?recent_days=1&baseline_days=3")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] in {"STABLE", "WATCH", "SHIFTED", "TOO_FEW", "NO_DATA"}
+    if body["status"] != "NO_DATA":
+        assert {"score", "features", "rules"} <= set(body)
