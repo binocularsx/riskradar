@@ -40,15 +40,15 @@ Counted over the 102 numbered items in sections 2, 5, 6, 7.1 and 8 of the base P
 
 | Status | Count | Meaning |
 |---|---|---|
-| Met | 18 | Built and tested, 4 of them added for this review and the rest since (D71, D77, D83) |
-| Partly | 52 | Some of it built; the missing part is named |
-| Not built | 20 | Absent; on the roadmap or waiting on a bank |
+| Met | 21 | Built and tested, 4 of them added for this review and the rest since (D71, D77, D83, D88, D89) |
+| Partly | 50 | Some of it built; the missing part is named |
+| Not built | 19 | Absent; on the roadmap or waiting on a bank |
 | Rejected for v1 | 6 | Conflicts with a locked decision; kept out on purpose |
 | Out of scope | 6 | Belongs to the bank's customer channels, not a fraud engine |
 | Not applicable | 3 | Assumes a live bank deployment |
 
-In short: Risk Radar fully meets about one requirement in seven and partly meets
-four in ten. That is the expected shape for a five-week first version of a platform
+In short: Risk Radar fully meets about one requirement in five and partly meets
+about half. That is the expected shape for a five-week first version of a platform
 the base PRD itself says takes twelve months, and it is why the five points above name
 the few gaps that matter most rather than all of them.
 
@@ -120,7 +120,7 @@ the few gaps that matter most rather than all of them.
 | FR-403 | Related alerts merged into one case | Partly | By customer within 24 hours (D13a, D19). Not across a ring of customers. |
 | FR-404 | In-case actions | Met | Every recommendation is a checklist of steps, each recorded with its result (customer contacted, card blocked, hold, recall, receiving bank notified, destinations checked, identity verified); escalation with a required reason to InfoSec or the Fraud Ops lead and hand-back with findings; outcome; close (D83). Block, hold and refund are done in the bank's systems and recorded here (D7). |
 | FR-405 | Link-analysis view in the case | Not built | — |
-| FR-406 | Outcome labels feed model training | Partly | Recorded as labels (D13c); not yet used to retrain. |
+| FR-406 | Outcome labels feed model training | Met | `ml/retrain_from_outcomes.py` trains on closed cases using the feature snapshot stored with each decision, and compares challenger with champion on the newest quarter (D89). It refuses below 30 confirmed frauds. |
 | FR-407 | Response clocks with breach alerting, mapped to regulatory clocks | Partly | Regulatory clocks built (D71): versioned policy, working days, breach recorded once, written to the permanent record and escalated to Fraud Ops. The per-severity response clocks are still set in code and not escalated. |
 | FR-408 | Tamper-evident record of decisions, overrides and data access | Met | Hash-chained record the application cannot edit, with a check endpoint. Case views are now recorded too (D69k). |
 | FR-409 | Evidence exchange with other banks | Not built | The hashed identifier is designed to travel (D9d). |
@@ -132,8 +132,8 @@ the few gaps that matter most rather than all of them.
 | ID | Requirement | Status | Where Risk Radar stands |
 |---|---|---|---|
 | FR-501 | Model registry | Partly | Version, artefact hash, feature-spec version, metrics, training and promotion dates, who promoted it. Training-data lineage is a simulator seed, not a snapshot. |
-| FR-502 | Drift monitoring | Not built | Training medians are stored with each model; no live comparison (D16). |
-| FR-503 | Retraining with a human approval gate | Partly | Retraining script and a promotion endpoint a person must call. Not scheduled. |
+| FR-502 | Drift monitoring | Met | `GET /v1/metrics/drift`: population stability index of the score and each model input, recent day against the week before, and each rule's firing rate marked silent or spiking (D88). |
+| FR-503 | Retraining with a human approval gate | Partly | Retraining on outcomes registers the challenger inactive with its comparison; promotion is an audited admin call, followed by re-derived thresholds (D89, D86). Not scheduled: that is the bank's job runner. |
 | FR-504 | Rules inventory: owner, reason, approval, next review | Met | Built (D69e). |
 | FR-505 | False-positive rate per rule and per model | Met | Built (D69d), with 95% ranges and a thin-evidence flag. |
 | FR-506 | Dated tuning log with data, impact and sign-off | Partly | Every change is recorded with old and new values and now its reason; large changes are logged with evidence in decisions.md. No sign-off step. |
@@ -184,7 +184,7 @@ it is the event Risk Radar would need to receive (D69g). Until a channel sends i
 | NFR-09 | Recovery point and time | Not built | — |
 | NFR-10 | First channel live in 90 days | Not applicable | No bank. |
 | NFR-11 | New data source in two weeks | Partly | One documented event contract; a new source maps to it. |
-| NFR-12 | Observability | Partly | Latency, queue depth, rule firings and active model exposed. Score distribution not exposed. |
+| NFR-12 | Observability | Met | Liveness and readiness probes, worker heartbeats, system status (versions, queue and lag, scoring latency, budget, alarms), request ids on every response and log line, JSON logs in production (D87), and score and feature distributions through drift (D88). |
 
 ## 7.1 Nigeria (CBN and NIBSS)
 
