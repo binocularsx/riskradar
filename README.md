@@ -84,8 +84,8 @@ npm run dev --prefix frontend                   # http://localhost:5173
 cd simulator
 # a week of behaviour, with the last 14 hours alerting into the case queue
 python -m riskradar_sim --seed 424242 history --profile demo --alerting-tail-hours 14
-# a live feed while you demo: incidents unfold in their own time (D87);
-# --incident-speed 10 compresses them for a short demo
+# a live feed while you demo: it continues the demo bank's own customers (D88a),
+# incidents unfold in their own time (D87); --incident-speed 10 compresses them
 python -m riskradar_sim stream --rate 2
 # another bank flags three of your customers' BVNs on the industry watch-list (D75)
 python -m riskradar_sim industry-flag --count 3

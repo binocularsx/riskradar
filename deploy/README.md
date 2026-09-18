@@ -39,6 +39,12 @@ Readiness requires the database, an active ruleset and threshold set, a live
 worker, and live queue lag under two minutes. A missing model is reported but
 not fatal: scoring runs on rules only and raises `MODEL_UNAVAILABLE` (FR-017).
 
+Sizing, measured on one 8-core machine with the whole stack on it (D87a): three
+API processes (`RISKRADAR_API_WORKERS=3`) and four scoring workers held 50
+payments a second at p95 210 ms end to end, and accepted a 231-a-second burst
+with nothing lost. Workers run one model thread each (`run_worker.py` sets it)
+and warm the model before taking work; add workers, not threads, for throughput.
+
 Put a TLS-terminating proxy in front of the API. It trusts `X-Forwarded-*`
 headers in production. Each response carries `X-Request-ID`; quote it when
 reporting a problem, because every log line for that request carries it too.

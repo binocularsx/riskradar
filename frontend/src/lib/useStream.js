@@ -12,11 +12,11 @@ import { useEffect, useRef, useState } from 'react'
  * reconnect logic is the fallback, and the durable `stream_events` table means
  * a reconnect never misses anything.
  */
-export function useAlertStream({ enabled = true, onAlert, onAlarm } = {}) {
+export function useAlertStream({ enabled = true, onAlert, onAlarm, onCaseNews } = {}) {
   const [connected, setConnected] = useState(false)
   const [lastEventId, setLastEventId] = useState(null)
-  const handlers = useRef({ onAlert, onAlarm })
-  handlers.current = { onAlert, onAlarm }
+  const handlers = useRef({ onAlert, onAlarm, onCaseNews })
+  handlers.current = { onAlert, onAlarm, onCaseNews }
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -43,6 +43,18 @@ export function useAlertStream({ enabled = true, onAlert, onAlarm } = {}) {
         /* ignore */
       }
     })
+
+    // D90: a customer reported fraud, or a CBN clock ran out. News about one case.
+    for (const kind of ['case_reported', 'clock_breached']) {
+      source.addEventListener(kind, (event) => {
+        setLastEventId(event.lastEventId)
+        try {
+          handlers.current.onCaseNews?.({ kind, ...JSON.parse(event.data) })
+        } catch {
+          /* ignore */
+        }
+      })
+    }
 
     return () => source.close()
   }, [enabled])

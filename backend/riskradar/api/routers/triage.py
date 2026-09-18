@@ -108,7 +108,11 @@ WORKLIST_SQL = """
            (SELECT t.display_name
               FROM alerts a JOIN transactions t ON t.id = a.transaction_id
              WHERE a.case_id = c.id ORDER BY a.raised_at LIMIT 1)
-               AS customer_name
+               AS customer_name,
+
+           -- D90: payments on this case the detector missed and a customer reported.
+           (SELECT count(*) FROM alerts a WHERE a.case_id = c.id AND a.source = 'CUSTOMER_REPORT')
+               AS missed_by_detector
       FROM cases c
       LEFT JOIN users u ON u.id = c.assignee_id
      WHERE {where}
@@ -161,6 +165,7 @@ def _enrich(row: dict[str, Any], clock_context: dict[str, Any]) -> dict[str, Any
         exposure_minor=int(row["exposure_minor"] or 0),
         sla_remaining=min(remaining, regulatory["remaining_minutes"]) if regulatory else remaining,
         alert_count=int(row["alert_count"] or 0),
+        reported=row["reported"],
     )
     return row
 

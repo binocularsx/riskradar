@@ -461,6 +461,22 @@ class ReportIn(Strict):
         return _aware(v)
 
 
+class CustomerReportIn(Strict):
+    """D90: a customer reports payments as fraud, whether or not Risk Radar alerted on them."""
+
+    transaction_refs: Annotated[list[Annotated[str, Field(min_length=1, max_length=128)]],
+                                Field(min_length=1, max_length=50)]
+    reported_at: IsoDatetime
+    channel: Literal["BRANCH", "CONTACT_CENTRE", "MOBILE_APP", "WEB", "EMAIL", "USSD"]
+    counterparty_institution: Annotated[str | None, Field(min_length=2, max_length=128)] = None
+    note: Annotated[str | None, Field(max_length=4000)] = None
+
+    @field_validator("reported_at")
+    @classmethod
+    def _require_timezone(cls, v: datetime) -> datetime:
+        return _aware(v)
+
+
 class MilestoneIn(Strict):
     """A moment that stops a regulatory clock. Recorded once, never edited."""
 

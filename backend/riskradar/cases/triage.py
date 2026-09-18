@@ -224,7 +224,7 @@ _ALERT_POINTS = 100     # ten alerts or more
 
 
 def priority_score(
-    *, risk_level: str, exposure_minor: int, sla_remaining: int, alert_count: int
+    *, risk_level: str, exposure_minor: int, sla_remaining: int, alert_count: int, reported: bool = False
 ) -> float:
     """The order the worklist is served in.
 
@@ -237,6 +237,13 @@ def priority_score(
     import math
 
     severity = SEVERITY_ORDER.get(risk_level, 0)
+    # D90: a customer has told us this is fraud. That outranks anything the
+    # detector merely suspects, a sanctions hit included: the money is leaving
+    # or gone, recall works for hours not days, and the CBN clocks are running.
+    # Within the band, money and lateness (the regulator's clock included)
+    # still order reported cases against each other.
+    if reported:
+        severity = SEVERITY_ORDER["CRITICAL"] + 1
 
     # Money matters, but not linearly: ₦10m is not a thousand times more urgent
     # than ₦10k. A log keeps large cases on top without letting one whale bury

@@ -108,6 +108,7 @@ def main() -> None:
     parser.add_argument("--tps", type=int, default=50)
     parser.add_argument("--seconds", type=int, default=60)
     parser.add_argument("--burst", action="store_true", help="run the NFR-002 burst instead")
+    parser.add_argument("--alerts", action="store_true", help="let the load raise alerts on the shared desk")
     parser.add_argument("--out", default="ml/artifacts/load-test.json")
     args = parser.parse_args()
 
@@ -127,6 +128,10 @@ def main() -> None:
     result = run_simulator([
         "burst", "--tps", str(args.tps), "--seconds", str(args.seconds),
         "--batch-size", "200" if args.burst else "50",
+        # D87a: payments are scored exactly as live ones, but raise no alerts:
+        # 90,000 synthetic payments from customers with no history once put
+        # 43,959 alerts behind the demo desk's budget. --alerts to include them.
+        *([] if args.alerts else ["--quiet"]),
     ])
     print(result.stdout.strip()[-400:])
     if result.returncode != 0:
@@ -147,7 +152,10 @@ def main() -> None:
 
     latency = end_to_end(started_at)
     scored = after["decisions"] - before["decisions"]
-    lost = ingested - scored
+    # Loss counts against what was *meant* to arrive, not what did: a sender
+    # that crashed before posting anything once scored "zero loss" here.
+    target = args.tps * args.seconds
+    lost = target - scored
     new_dead_letter = after["dead_letter"] - before["dead_letter"]
 
     verdict = {
@@ -155,6 +163,7 @@ def main() -> None:
         "mode": "burst (NFR-002)" if args.burst else "sustained (NFR-001)",
         "target_tps": args.tps,
         "requested_seconds": args.seconds,
+        "intended": target,
         "ingested": ingested,
         "achieved_ingest_tps": round(ingested / ingest_seconds, 1),
         "scored": scored,
@@ -174,7 +183,7 @@ def main() -> None:
             None if args.burst
             else bool(latency["p95_ms"] is not None and latency["p95_ms"] < TARGET_P95_MS)
         ),
-        "nfr_002_zero_loss": lost == 0,
+        "nfr_002_zero_loss": lost == 0 and result.returncode == 0,
     }
 
     print("\n" + "=" * 62)

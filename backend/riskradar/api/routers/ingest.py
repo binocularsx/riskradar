@@ -112,6 +112,38 @@ def _existing_event_type(conn: Any, ref: str) -> str | None:
 
 
 def _stamp_account_context(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    payload = _stamp_account_context_inner(conn, payload)
+    return _no_staler_than_observed(conn, payload)
+
+
+def _no_staler_than_observed(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    """Last activity is never older than a payment we have already seen (D22a).
+
+    A caller's account context can be stale: a core-banking snapshot from last
+    month, or a simulator that rebuilt its bank as it was on day one. Trusted as
+    sent, a stale ``last_activity_at`` makes a busy account look dormant, and
+    dormancy is a fraud signal: on 18 Sep a stream stamped 30.9 days of
+    inactivity on every account and one payment in eight alerted. So the stamp
+    is the later of what the caller says and this account's own most recent
+    earlier transaction here. Only earlier ones: the value stays point-in-time,
+    whatever order a replay arrives in.
+    """
+    if not payload.get("account_token"):
+        return payload
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT max(occurred_at) AS seen FROM transactions WHERE account_token = %s AND occurred_at < %s",
+            (payload["account_token"], payload["occurred_at"]),
+        )
+        row = cur.fetchone()
+    seen = row["seen"] if isinstance(row, dict) else row[0]
+    supplied = payload.get("last_activity_at")
+    if seen is not None and (supplied is None or seen > supplied):
+        payload["last_activity_at"] = seen
+    return payload
+
+
+def _stamp_account_context_inner(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     """Resolve missing account context from the dimension, once, here (D22).
 
     If the caller supplied context we trust it and refresh the dimension from it;
@@ -307,9 +339,15 @@ def ingest_batch(
     flow.guard(conn, response, api_key, cost=len(body.transactions), replay=body.is_replay)
     results: list[TransactionAccepted] = []
     errors: list[dict] = []
+    # D87: each item commits on its own. A batch was never all-or-nothing (the
+    # answer lists each item accepted or rejected), and holding every item's
+    # account-row lock until the whole batch committed made concurrent batches
+    # for overlapping customers queue behind each other: with three API
+    # processes one 200-item batch took over a minute. The request's own work
+    # (key check, flow guard) commits first.
+    conn.commit()
     for index, tx in enumerate(body.transactions):
         try:
-            # A savepoint per item: a rejected one must not leave half its writes.
             with conn.transaction():
                 results.append(
                     _persist(conn, _to_row(tx, is_replay=body.is_replay, raise_alerts=body.raise_alerts))
@@ -415,6 +453,7 @@ def ingest_event_batch(
     flow.guard(conn, response, api_key, cost=len(body.events), replay=body.is_replay)
     results: list[EventAccepted] = []
     errors: list[dict] = []
+    conn.commit()  # D87: per-item commits, as for payments
     for index, ev in enumerate(body.events):
         ref = ev.payment.transaction_ref if isinstance(ev, PaymentEventIn) else ev.event_ref
         try:

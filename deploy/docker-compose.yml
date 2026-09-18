@@ -52,6 +52,10 @@ services:
   api:
     <<: *app
     command: ["python", "scripts/run_api.py"]
+    environment:
+      RISKRADAR_DB_HOST: postgres
+      RISKRADAR_DB_PORT: "5432"
+      RISKRADAR_API_WORKERS: "3"
     ports:
       - "8000:8000"
 
@@ -60,7 +64,7 @@ services:
     command: ["python", "scripts/run_worker.py"]
     # Competing consumers over one Postgres queue (D8a); scale freely.
     deploy:
-      replicas: 3
+      replicas: 4
     healthcheck:
       disable: true
 

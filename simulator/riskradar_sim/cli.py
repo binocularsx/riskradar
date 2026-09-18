@@ -196,6 +196,41 @@ def cmd_history(args: argparse.Namespace) -> None:
     )
 
 
+DEMO_BANK = Path(__file__).resolve().parents[2] / "ml" / "data" / "demo-bank.json"
+
+
+def _live_population(args: argparse.Namespace, config: SimulationConfig) -> list:
+    """The customers the live feed belongs to.
+
+    The same bank the demo history was built from (D68): the same seed and
+    anchor rebuild exactly the customers, accounts, devices, regions and payees
+    that already have a month of history in the database. A stream with its own
+    invented customers looks, to every behavioural measurement, like a bank of
+    strangers: on 18 Sep drift monitoring (D88) flagged it at once, mean fraud
+    probability 0.003 to 0.086, one payment in six alerting. ``--new-bank`` asks
+    for strangers on purpose.
+    """
+    from . import ids
+
+    bank = json.loads(DEMO_BANK.read_text(encoding="utf-8")) if DEMO_BANK.exists() and not args.new_bank else None
+    if bank is None:
+        if not args.new_bank:
+            print(f"  no {DEMO_BANK.name}: streaming a new bank with no history (every customer is a stranger)")
+        rng = random.Random(args.seed if args.seed is not None else int(time.time()))
+        return build_population(rng, n_customers=config.n_customers,
+                                now=datetime.now(timezone.utc) - timedelta(days=30))
+    cfg = SimulationConfig.profile(bank["profile"])
+    anchor = datetime.fromisoformat(bank["anchor"])
+    start = (anchor - timedelta(days=cfg.days)).replace(minute=0, second=0, microsecond=0)
+    rng = random.Random(bank["seed"])
+    ids.reseed(bank["seed"])
+    customers = build_population(rng, n_customers=cfg.n_customers, now=start)
+    # Live references must never repeat the history's, so ids go back to entropy.
+    ids._IDS.seed()
+    print(f"  continuing the demo bank: seed {bank['seed']}, anchor {bank['anchor']}, {len(customers):,} customers")
+    return customers
+
+
 def _at(event) -> datetime:
     return datetime.fromisoformat(event.payload["occurred_at"])
 
@@ -228,9 +263,8 @@ def cmd_stream(args: argparse.Namespace) -> None:
     counted and shown.
     """
     config = SimulationConfig.profile("demo")
-    rng = random.Random(args.seed if args.seed is not None else int(time.time()))
-    customers = build_population(rng, n_customers=config.n_customers,
-                                 now=datetime.now(timezone.utc) - timedelta(days=30))
+    customers = _live_population(args, config)
+    rng = random.Random(int(time.time()) if args.seed is None else args.seed + 1)
 
     from .engine import TYPOLOGIES
 
@@ -238,6 +272,8 @@ def cmd_stream(args: argparse.Namespace) -> None:
     CoreFile().ensure([c.customer_id for c in customers])
     layer = EventLayer(args.seed if args.seed is not None else int(time.time()), customers)
 
+    pairs = [(c, a) for c in customers for a in c.accounts]
+    weights = [a.daily_rate for _, a in pairs]
     pending: list = []            # (due, seq, event), a min-heap on due time
     seq = itertools.count()
     incidents = 0
@@ -267,8 +303,8 @@ def cmd_stream(args: argparse.Namespace) -> None:
                         print(f"\n  {typology} incident begins; its last payment is due "
                               f"{last.astimezone().strftime('%H:%M')} ({incidents} so far)")
                     else:
-                        customer = rng.choice(customers)
-                        account = rng.choice(customer.accounts)
+                        # As history does: busy accounts busy, abandoned ones left alone.
+                        customer, account = rng.choices(pairs, weights)[0]
                         event = legitimate_event(rng, customer, account, now)
                         account.last_activity_at = now
                         schedule(layer.around([event]) + [event])
@@ -301,40 +337,55 @@ def cmd_burst(args: argparse.Namespace) -> None:
     """NFR-002: a burst at 5x sustained for 60 seconds, absorbed with zero loss.
 
     Uses the batch endpoint because the claim under test is that **the queue**
-    absorbs the burst — not that HTTP keep-alive is fast.
+    absorbs the burst — not that HTTP keep-alive is fast. Batches go out from
+    ``--concurrency`` senders at once, as a bank switch's many threads would;
+    one connection alone tops out near 175 payments a second on this machine
+    (D87), which measures the sender, not the service.
     """
-    config = SimulationConfig.profile("demo")
+    from concurrent.futures import ThreadPoolExecutor
+
     rng = random.Random(args.seed or 7)
     customers = build_population(rng, n_customers=2_000,
                                  now=datetime.now(timezone.utc) - timedelta(days=30))
 
     target = args.tps * args.seconds
-    print(f"burst: {args.tps} TPS for {args.seconds}s = {target} transactions")
+    print(f"burst: {args.tps} TPS for {args.seconds}s = {target} transactions, {args.concurrency} senders")
+
+    def send(batch: list[dict]) -> int:
+        with _client(args.base_url, args.api_key) as client:
+            for attempt in range(10):
+                response = client.post(
+                    "/v1/transactions/batch",
+                    json={"transactions": batch, "is_replay": False, "raise_alerts": not args.quiet},
+                )
+                if response.status_code in (429, 503):
+                    time.sleep(float(response.headers.get("Retry-After", 1)))
+                    continue
+                response.raise_for_status()
+                return int(response.json()["accepted"])
+        raise SystemExit("burst: a batch was refused ten times")
 
     sent = 0
-    accepted = 0
+    futures = []
     started = time.perf_counter()
-    with _client(args.base_url, args.api_key) as client:
+    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         while sent < target:
             deadline = started + (sent / args.tps)
+            drift = deadline - time.perf_counter()
+            if drift > 0:
+                time.sleep(drift)
             batch = []
             for _ in range(min(args.batch_size, target - sent)):
                 customer = rng.choice(customers)
                 account = rng.choice(customer.accounts)
-                batch.append(
-                    legitimate_event(rng, customer, account, datetime.now(timezone.utc)).payload
-                )
-            response = client.post(
-                "/v1/transactions/batch",
-                json={"transactions": batch, "is_replay": False, "raise_alerts": True},
-            )
-            response.raise_for_status()
-            accepted += response.json()["accepted"]
+                batch.append(legitimate_event(rng, customer, account, datetime.now(timezone.utc)).payload)
+            # Never more than the senders' worth waiting, so pacing stays honest.
+            while sum(1 for f in futures if not f.done()) >= args.concurrency * 2:
+                time.sleep(0.01)
+            futures.append(pool.submit(send, batch))
             sent += len(batch)
-            drift = deadline - time.perf_counter()
-            if drift > 0:
-                time.sleep(drift)
             print(f"\r  sent {sent}/{target}", end="", flush=True)
+        accepted = sum(f.result() for f in futures)
 
     elapsed = time.perf_counter() - started
     print(
@@ -432,6 +483,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--minutes", type=float, default=None, help="stop after this long (default: until Ctrl+C)")
     p.add_argument("--incident-speed", type=float, default=1.0,
                    help="compress each incident's timeline by this factor (1 = real time)")
+    p.add_argument("--new-bank", action="store_true",
+                   help="stream customers with no history instead of continuing the demo bank")
     # Each "incident" emits 8-25 transactions, so this knob is not the fraud
     # rate — it is far more sensitive than it looks. At 0.03 the live feed is
     # roughly 27% fraud, which is absurd and makes the alert queue meaningless.
@@ -455,6 +508,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--tps", type=int, default=250)
     p.add_argument("--seconds", type=int, default=60)
     p.add_argument("--batch-size", type=int, default=250)
+    p.add_argument("--concurrency", type=int, default=4, help="batches in flight at once, like a switch's threads")
+    p.add_argument("--quiet", action="store_true",
+                   help="score without raising alerts, so a load test does not fill the desk's budget (D87a)")
     p.set_defaults(func=cmd_burst)
 
     args = parser.parse_args(argv)

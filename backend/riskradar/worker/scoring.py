@@ -623,22 +623,10 @@ def release_one(conn: Any, sys_uid: int, deferral_id: int, *, user_id: int,
 
 
 def _publish(conn: Any, event_type: str, payload: dict[str, Any]) -> int:
-    """Durable event row plus an id-only doorbell (D14a).
+    """Durable event row plus an id-only doorbell (D14a); see ``riskradar.events``."""
+    from ..events import publish
 
-    ``LISTEN``/``NOTIFY`` has an 8000-byte payload cap and is not durable: a
-    client disconnected at the moment of the notify never learns it happened. So
-    the row is the record and the notification carries only its id; the SSE
-    endpoint reads the row, and ``Last-Event-ID`` replays the gap from the table.
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO stream_events (event_type, payload) VALUES (%s, %s) RETURNING id",
-            (event_type, json.dumps(payload)),
-        )
-        row = cur.fetchone()
-        event_id = int(row["id"] if isinstance(row, dict) else row[0])
-        cur.execute("SELECT pg_notify('riskradar_events', %s)", (str(event_id),))
-    return event_id
+    return publish(conn, event_type, payload)
 
 
 def _raise_alarm(conn: Any, sys_uid: int, code: str, detail: str) -> None:
@@ -664,8 +652,13 @@ RELEASE_SECONDS = 30.0
 
 
 class Worker:
-    def __init__(self, batch_size: int = 64, idle_sleep: float = 0.25) -> None:
-        self.batch_size = batch_size
+    # D87: small leases. A worker scores its lease one payment after another, so
+    # with 64 claimed the last waited ~2.5 s behind the other 63 while other
+    # workers sat idle; at 50 a second that was most of a 9.7 s p95. Eight keeps
+    # the claim round trip amortised and the wait inside a lease under half a
+    # second. RISKRADAR_WORKER_BATCH overrides it; bulk backfills may prefer more.
+    def __init__(self, batch_size: int | None = None, idle_sleep: float = 0.1) -> None:
+        self.batch_size = batch_size or int(os.environ.get("RISKRADAR_WORKER_BATCH", "8"))
         self.idle_sleep = idle_sleep
         self._stop = False
         self.worker_id = f"{socket.gethostname()}:{os.getpid()}"
@@ -690,6 +683,24 @@ class Worker:
                 """,
                 (self.worker_id, socket.gethostname(), os.getpid(), self.started_at, self.processed, self.failed),
             )
+
+    def warm_up(self) -> None:
+        """Load the model and run one prediction before taking any work (D87).
+
+        Loading the artefact and scikit-learn takes about four seconds. Done
+        lazily, the first payments a fresh worker claimed waited for it: a
+        freshly started fleet showed a 5.8 s end-to-end spike at 50 a second.
+        The heartbeat, and so readiness, follows the warm-up.
+        """
+        started = time.perf_counter()
+        try:
+            with connection() as conn:
+                bundle = registry.load_active(conn)
+                bundle.predict([0.0] * len(MODEL_FEATURE_NAMES))
+            log.info("model %s warmed in %.1fs", getattr(bundle, "version", "?"), time.perf_counter() - started)
+        except registry.ModelUnavailable as exc:
+            log.warning("no model to warm (%s); scoring will run rules-only and raise the alarm", exc)
+        self.heartbeat(force=True)
 
     def maybe_release(self) -> None:
         """D86: every half minute, raise deferred alerts the budget now has room for."""
@@ -762,6 +773,14 @@ class Worker:
                 # correlation and audit advisory locks short-lived, which is what
                 # lets workers actually run in parallel.
                 with connection() as conn:
+                    # D87: no wait for the disk flush at commit. The decision,
+                    # its alert and the queue row's deletion commit together, so
+                    # a crash that loses the last fraction of a second loses all
+                    # of them and the lease brings the payment back to be scored
+                    # again: nothing half-done, nothing lost for good. On this
+                    # machine the flush was about half of each payment's time.
+                    with conn.cursor() as cur:
+                        cur.execute("SET LOCAL synchronous_commit TO OFF")
                     score_transaction(
                         conn, tx_id, sys_uid=sys_uid,
                         ruleset=ruleset, thresholds=thresholds,
@@ -784,6 +803,7 @@ class Worker:
     def run_forever(self) -> None:
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
+        self.warm_up()
         log.info("scoring worker %s started", self.worker_id)
         while not self._stop:
             try:

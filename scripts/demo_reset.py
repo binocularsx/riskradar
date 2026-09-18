@@ -31,6 +31,7 @@ team actually carries.
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import subprocess
 import sys
@@ -199,6 +200,10 @@ def stage_data(args: argparse.Namespace) -> None:
     # loaded, which took close to three hours on 15 Sep 2026.
     anchor = args.anchor or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     print(f"      anchor {anchor} (pass --anchor {anchor} to resume)")
+    # D88: the live stream continues this bank, not a new one.
+    bank = REPO_ROOT / "ml" / "data" / "demo-bank.json"
+    bank.parent.mkdir(parents=True, exist_ok=True)
+    bank.write_text(json.dumps({"seed": args.seed, "anchor": anchor, "profile": "demo"}), encoding="utf-8")
     if args.from_step <= 1:
         load_history(args, sim, anchor)
 

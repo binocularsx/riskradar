@@ -75,6 +75,13 @@ export default function Triage({ user }) {
   const { connected } = useAlertStream({
     onAlert: () => load(true),
     onAlarm: (a) => setAlarms((prev) => [a, ...prev].slice(0, 3)),
+    // D90: a customer report moves a case to the top; a breached clock hands it to the lead.
+    onCaseNews: (n) => {
+      setNotice(n.kind === 'case_reported'
+        ? `Case #${n.case_id}: the customer reported fraud${n.missed_by_detector ? ` (${n.missed_by_detector} payment(s) the system had not flagged)` : ''}. It is now at the top of the queue and the CBN clocks are running.`
+        : `Case #${n.case_id}: the ${n.clock} clock has run out${n.escalated ? ' and the case is escalated to Fraud Ops' : ''}.`)
+      load(true)
+    },
   })
 
   const startReviewing = useCallback(async () => {

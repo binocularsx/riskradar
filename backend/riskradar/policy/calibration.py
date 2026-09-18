@@ -50,6 +50,7 @@ class Sample:
     p: np.ndarray
     signals: list[list[Signal]]
     span_days: float
+    rules: np.ndarray | None = None
 
     @property
     def daily_volume(self) -> float:
@@ -57,12 +58,14 @@ class Sample:
 
 
 def _signals(raw: Any) -> list[Signal]:
-    items = raw if isinstance(raw, list) else json.loads(raw or "[]")
+    if not raw or raw == "[]":
+        return []
+    items = raw if isinstance(raw, list) else json.loads(raw)
     return [Signal(code=x["code"], power=x["power"], severity=x["severity"], evidence=x.get("evidence") or {})
             for x in items]
 
 
-def load_sample(conn: Any, *, last_days: float | None = None, limit: int = 500_000) -> Sample:
+def load_sample(conn: Any, *, last_days: float | None = None, limit: int = 200_000) -> Sample:
     with conn.cursor() as cur:
         cur.execute(SAMPLE_SQL, {"last_days": last_days, "limit": limit})
         rows = cur.fetchall()
@@ -75,7 +78,11 @@ def load_sample(conn: Any, *, last_days: float | None = None, limit: int = 500_0
 
 def rule_driven(sample: Sample) -> np.ndarray:
     """Payments the rules would alert on even if the model said zero."""
-    return np.array([apply_policy(0.0, s, NEVER).actionable for s in sample.signals], dtype=bool)
+    if sample.rules is None:
+        # Most payments fire no rule, and those cannot be rule-driven: skip the policy walk.
+        sample.rules = np.array([bool(s) and apply_policy(0.0, s, NEVER).actionable for s in sample.signals],
+                                dtype=bool)
+    return sample.rules
 
 
 def implied(sample: Sample, thresholds: Thresholds) -> dict[str, Any]:
@@ -84,11 +91,20 @@ def implied(sample: Sample, thresholds: Thresholds) -> dict[str, Any]:
         return {"sample": 0}
     levels = Counter()
     actionable = 0
+    from .engine import LEVELS, base_level
+
+    alert_from = LEVELS.index(thresholds.alert_min_level)
     for p, sigs in zip(sample.p, sample.signals):
-        r = apply_policy(float(p), sigs, thresholds)
-        if r.actionable:
+        if sigs:
+            r = apply_policy(float(p), sigs, thresholds)
+            level, actionable_here = r.risk_level, r.actionable
+        else:
+            # No rule fired: the level is the model's band, nothing else moves it.
+            level = base_level(float(p), thresholds)
+            actionable_here = LEVELS.index(level) >= alert_from
+        if actionable_here:
             actionable += 1
-            levels[r.risk_level] += 1
+            levels[level] += 1
     per_day = lambda n: round(n / sample.span_days, 1)  # noqa: E731
     rules = rule_driven(sample)
     return {

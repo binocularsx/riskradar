@@ -103,8 +103,8 @@ Every "Must" in PRD §7 and §8, and where it lives.
 
 | Req | Promise | Verified by | Result |
 |---|---|---|---|
-| NFR-001 | 50 TPS, p95 end-to-end < 2 s | `scripts/load_test.py` | 878 ms — PASS |
-| NFR-002 | 250 TPS burst, zero loss | `scripts/load_test.py --burst` | 0 lost — PASS |
+| NFR-001 | 50 TPS, p95 end-to-end < 2 s | `scripts/load_test.py` | 210 ms on the 417k-payment bank (D87a) — PASS |
+| NFR-002 | 250 TPS burst, zero loss | `scripts/load_test.py --burst` | 231 TPS accepted, 0 lost (D87a) — PASS |
 | NFR-004 | Scoring failure must not reject ingestion | `worker/scoring.py` → `_record_failure` (backoff, bounded retries) | — |
 | D86 | The alert budget holds at run time; over budget an alert is deferred, never dropped | `policy/budget.py`; `worker/scoring.py` → `score_transaction` (admission), `raise_alert`, `release_deferred`, `release_one`; `api/routers/budget.py`; `migrations/0017_budget_guard.sql`; `tests/test_budget_guard.py` | Verified |
 | D87 | Rate limits, backpressure, live-first queue, probes, request ids, future dates refused | `api/flow.py`; `api/routers/system.py`; `api/app.py` → `request_context`; `api/schemas.py` → `_not_in_the_future`; `simulator/riskradar_sim/client.py`; `tests/test_paced_client.py` | Verified |

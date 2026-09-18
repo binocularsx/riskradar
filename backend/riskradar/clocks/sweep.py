@@ -150,6 +150,11 @@ def sweep(conn: Any, *, system_user_id: int, now: datetime | None = None) -> lis
                 )
                 row["state"] = "ESCALATED"
             actions.append({"case_id": row["id"], "clock": s["code"], "escalated": escalate})
+            # D90: a breach is news to the lead who now owns it, not only a row.
+            from ..events import publish
+
+            publish(conn, "clock_breached", {"case_id": row["id"], "clock": s["code"],
+                                             "obligation": s["obligation"], "escalated": escalate})
     return actions
 
 

@@ -142,7 +142,7 @@ def list_alerts(
     items = _rows(
         conn,
         """
-        SELECT a.id, a.case_id, a.risk_level, a.score_0_100, a.raised_at,
+        SELECT a.id, a.case_id, a.risk_level, a.score_0_100, a.raised_at, a.source,
                t.transaction_ref, t.amount_minor, t.currency, t.channel,
                t.instrument, t.rail, t.auth_result, t.display_name,
                d.decision, d.signals
@@ -182,7 +182,7 @@ def case_detail(
     alerts = _rows(
         conn,
         """
-        SELECT a.id, a.risk_level, a.score_0_100, a.raised_at,
+        SELECT a.id, a.risk_level, a.score_0_100, a.raised_at, a.source,
                t.id AS transaction_id, t.transaction_ref, t.occurred_at,
                t.amount_minor, t.currency, t.channel, t.instrument, t.rail,
                t.auth_result, t.decline_reason, t.ip_region, t.merchant_category,
@@ -504,36 +504,14 @@ def record_report(
     moment the bank's obligations began, and belongs in a note, not an update.
     The case is pinned to the clock policy in force now.
     """
-    case = _fetch_case(conn, case_id)
-    if case["first_reported_at"]:
-        raise HTTPException(409, "the customer's first report is already recorded")
-    now = _now(conn)
-    if body.reported_at > now:
-        raise HTTPException(400, "a report cannot be in the future")
-    policy = clock_sweep.active_policy(conn)
-    if not policy:
-        raise HTTPException(503, "no active clock policy")
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE cases SET first_reported_at = %s, report_channel = %s,
-                   counterparty_institution = COALESCE(%s, counterparty_institution),
-                   clock_policy_version = %s
-             WHERE id = %s
-            """,
-            (body.reported_at, body.channel, body.counterparty_institution, policy["version"], case_id),
-        )
-    _note(conn, case_id, user, body.note)
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="CUSTOMER_REPORT_RECORDED",
-        object_type="case",
-        object_id=case_id,
-        payload={"reported_at": body.reported_at.isoformat(), "channel": body.channel,
-                 "counterparty_institution": body.counterparty_institution,
-                 "clock_policy_version": policy["version"]},
-    )
+    from ...cases import reports
+
+    try:
+        # D90: the same path as POST /v1/reports: clocks, the stream, the audit record.
+        reports.start_clocks(conn, case_id=case_id, user=user, reported_at=body.reported_at, channel=body.channel,
+                             counterparty_institution=body.counterparty_institution, note=body.note)
+    except reports.ReportError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
     return {"case": _fetch_case(conn, case_id), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
 
 

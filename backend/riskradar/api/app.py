@@ -30,6 +30,7 @@ from .routers import (
     ingest,
     links,
     metrics,
+    reports,
     stream,
     system,
     triage,
@@ -122,6 +123,7 @@ app.include_router(metrics.router)
 app.include_router(stream.router)
 app.include_router(admin.router)
 app.include_router(budget.router)
+app.include_router(reports.router)
 app.include_router(system.router)
 
 

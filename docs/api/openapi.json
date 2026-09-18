@@ -3389,6 +3389,96 @@
         }
       }
     },
+    "/v1/reports": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Report",
+        "operationId": "report_v1_reports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerReportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Report V1 Reports Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics/missed": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Missed",
+        "operationId": "missed_v1_metrics_missed_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Missed V1 Metrics Missed Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "tags": [
@@ -3800,6 +3890,72 @@
           "detail"
         ],
         "title": "CredentialChangedEventIn"
+      },
+      "CustomerReportIn": {
+        "properties": {
+          "transaction_refs": {
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Transaction Refs"
+          },
+          "reported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reported At"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "BRANCH",
+              "CONTACT_CENTRE",
+              "MOBILE_APP",
+              "WEB",
+              "EMAIL",
+              "USSD"
+            ],
+            "title": "Channel"
+          },
+          "counterparty_institution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty Institution"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "transaction_refs",
+          "reported_at",
+          "channel"
+        ],
+        "title": "CustomerReportIn",
+        "description": "D90: a customer reports payments as fraud, whether or not Risk Radar alerted on them."
       },
       "DeriveThresholdsIn": {
         "properties": {
