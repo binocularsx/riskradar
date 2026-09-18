@@ -27,3 +27,4 @@ ml/artifacts/datasets/*.alerts.csv
 ml/artifacts/datasets/*.jsonl
 ml/artifacts/datasets/*.log
 ml/artifacts/*.log
+.vs/
