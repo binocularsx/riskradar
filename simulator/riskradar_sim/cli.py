@@ -14,6 +14,8 @@ one at a time through the same public endpoint a bank would use.
 from __future__ import annotations
 
 import argparse
+import heapq
+import itertools
 import json
 import random
 import sys
@@ -23,6 +25,7 @@ from pathlib import Path
 
 import httpx
 
+from .client import PacedClient
 from .engine import legitimate_event
 from .generate import SimulationConfig, generate, write_corpus
 from .identity import DEFAULT_CORE_FILE, CoreFile
@@ -94,16 +97,24 @@ def cmd_history(args: argparse.Namespace) -> None:
 
     core = CoreFile(Path(args.core_file))
 
-    with _client(args.base_url, args.api_key) as client:
+    # D87: paced, and patient. When the scoring queue is full the API answers
+    # 503 with Retry-After, and history waits for the workers instead of failing.
+    with PacedClient(args.base_url, args.api_key, rate=args.max_rate, max_retries=720) as client:
+        def _sent(response: httpx.Response | None, what: str) -> dict:
+            if response is None:
+                raise SystemExit(f"{what}: the API never accepted the batch ({client.stats.errors[-1:]}); "
+                                 "are the scoring workers running?")
+            response.raise_for_status()
+            return response.json()
+
         def flush_events(is_history: bool) -> None:
             batch = event_batches[is_history]
             if not batch:
                 return
             core.ensure([e["customer_id"] for e in batch])
             response = client.post("/v1/events/batch", json={"events": batch, "is_replay": is_history,
-                                                             "raise_alerts": not is_history})
-            response.raise_for_status()
-            body = response.json()
+                                                             "raise_alerts": not is_history}, cost=len(batch))
+            body = _sent(response, "events")
             counters["events"] += body["accepted"]
             if body["errors"]:
                 print("  event errors:", body["errors"][:3], file=sys.stderr)
@@ -124,9 +135,9 @@ def cmd_history(args: argparse.Namespace) -> None:
                     "is_replay": is_history,
                     "raise_alerts": not is_history,
                 },
+                cost=len(batch),
             )
-            response.raise_for_status()
-            body = response.json()
+            body = _sent(response, "transactions")
             counters["history" if is_history else "live"] += body["accepted"]
             counters["duplicates"] += body["duplicates"]
             counters["rejected"] += body["rejected"]
@@ -185,11 +196,36 @@ def cmd_history(args: argparse.Namespace) -> None:
     )
 
 
-def cmd_stream(args: argparse.Namespace) -> None:
-    """Live feed at a fixed rate, for the demo.
+def _at(event) -> datetime:
+    return datetime.fromisoformat(event.payload["occurred_at"])
 
-    Occasionally injects a full fraud incident so the queue actually receives
-    something worth investigating while somebody is watching.
+
+def _retime(events: list, start: datetime, speed: float) -> list:
+    """Compress an incident's timeline around its start (``--incident-speed``)."""
+    if speed == 1.0:
+        return events
+    for e in events:
+        at = _at(e)
+        if at > start:
+            e.payload["occurred_at"] = (start + (at - start) / speed).isoformat()
+    return events
+
+
+def cmd_stream(args: argparse.Namespace) -> None:
+    """A live feed that behaves like a bank's switch (D87).
+
+    Ordinary payments arrive as a Poisson process at ``--rate`` a second, each
+    stamped with the moment it is sent. Now and then a fraud incident begins.
+    Its events are **scheduled, not fired at once**: a takeover whose payments
+    happen over the next three hours is sent over the next three hours, each
+    when its time comes. The API refuses payments dated in the future, and
+    velocity features are only honest if events arrive in their own time.
+    ``--incident-speed 10`` compresses incidents tenfold for a short demo, at
+    the cost of making them look faster than real fraud does.
+
+    Everything goes through a paced client: never faster than ``--max-rate``,
+    slower when the service says it is under pressure, and every refusal is
+    counted and shown.
     """
     config = SimulationConfig.profile("demo")
     rng = random.Random(args.seed if args.seed is not None else int(time.time()))
@@ -202,41 +238,63 @@ def cmd_stream(args: argparse.Namespace) -> None:
     CoreFile().ensure([c.customer_id for c in customers])
     layer = EventLayer(args.seed if args.seed is not None else int(time.time()), customers)
 
-    interval = 1.0 / max(args.rate, 0.01)
-    sent = 0
+    pending: list = []            # (due, seq, event), a min-heap on due time
+    seq = itertools.count()
     incidents = 0
+    started = time.monotonic()
+    next_arrival = started
+    last_print = 0.0
 
-    with _client(args.base_url, args.api_key) as client:
+    def schedule(events: list) -> None:
+        for e in events:
+            heapq.heappush(pending, (_at(e), next(seq), e))
+
+    with PacedClient(args.base_url, args.api_key, rate=args.max_rate) as client:
         try:
-            while True:
-                now = datetime.now(timezone.utc)
-                if rng.random() < args.incident_probability:
-                    typology = args.typology or rng.choice(list(TYPOLOGIES))
-                    victim = rng.choice(customers)
-                    incident = list(TYPOLOGIES[typology](rng, victim, now, customers=customers))
-                    # D77: the takeover's prelude (logins, device, payees) goes first.
-                    for event in sorted(layer.around(incident) + incident,
-                                        key=lambda e: e.payload["occurred_at"]):
-                        path = "/v1/transactions" if event.kind == "PAYMENT" else "/v1/events"
-                        client.post(path, json=event.payload)
-                        sent += 1
-                        time.sleep(interval / 3)
-                    incidents += 1
-                    print(f"\n  injected {typology} incident ({incidents} total)")
-                else:
-                    customer = rng.choice(customers)
-                    account = rng.choice(customer.accounts)
-                    event = legitimate_event(rng, customer, account, now)
-                    account.last_activity_at = now
-                    for extra in layer.around([event]):
-                        client.post("/v1/events", json=extra.payload)
-                    client.post("/v1/transactions", json=event.payload)
-                    sent += 1
+            while args.minutes is None or time.monotonic() - started < args.minutes * 60:
+                clock = time.monotonic()
+                if clock >= next_arrival:
+                    next_arrival = clock + rng.expovariate(args.rate)
+                    now = datetime.now(timezone.utc)
+                    if rng.random() < args.incident_probability:
+                        typology = args.typology or rng.choice(list(TYPOLOGIES))
+                        victim = rng.choice(customers)
+                        incident = list(TYPOLOGIES[typology](rng, victim, now, customers=customers))
+                        # D77: the prelude (logins, device, payees) is part of the story.
+                        schedule(_retime(layer.around(incident) + incident, now, args.incident_speed))
+                        incidents += 1
+                        last = max(_at(e) for e in incident)
+                        print(f"\n  {typology} incident begins; its last payment is due "
+                              f"{last.astimezone().strftime('%H:%M')} ({incidents} so far)")
+                    else:
+                        customer = rng.choice(customers)
+                        account = rng.choice(customer.accounts)
+                        event = legitimate_event(rng, customer, account, now)
+                        account.last_activity_at = now
+                        schedule(layer.around([event]) + [event])
 
-                print(f"\r  sent {sent}", end="", flush=True)
-                time.sleep(interval)
+                # Send whatever is due, in time order.
+                now = datetime.now(timezone.utc)
+                while pending and pending[0][0] <= now:
+                    _, _, event = heapq.heappop(pending)
+                    path = "/v1/transactions" if event.kind in ("PAYMENT", "CREDIT") else "/v1/events"
+                    client.post(path, json=event.payload)
+
+                if clock - last_print > 2:
+                    last_print = clock
+                    waiting = f", {len(pending)} scheduled" if pending else ""
+                    slow = f", slowed x{client.slowdown:.1f}" if client.slowdown > 1.05 else ""
+                    print(f"\r  {client.stats.line()}{waiting}{slow}   ", end="", flush=True)
+
+                wake = next_arrival - time.monotonic()
+                if pending:
+                    wake = min(wake, (pending[0][0] - datetime.now(timezone.utc)).total_seconds())
+                time.sleep(min(max(wake, 0.0), 0.5))
         except KeyboardInterrupt:
-            print(f"\nstopped after {sent} transactions, {incidents} incidents")
+            pass
+    print(f"\nstopped: {client.stats.line()}, {incidents} incidents begun, {len(pending)} events not yet due")
+    for err in client.stats.errors[:5]:
+        print(f"  refused: {err}", file=sys.stderr)
 
 
 def cmd_burst(args: argparse.Namespace) -> None:
@@ -363,10 +421,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     p.add_argument("--core-file", default=str(DEFAULT_CORE_FILE),
                    help="the simulated core's customer file (customer_id,bvn,nin), D75")
+    p.add_argument("--max-rate", type=float, default=2000.0,
+                   help="transactions a second at most; the API's replay allowance is 2000 (D87)")
     p.set_defaults(func=cmd_history)
 
     p = sub.add_parser("stream", help="live feed for the demo")
-    p.add_argument("--rate", type=float, default=2.0, help="transactions per second")
+    p.add_argument("--rate", type=float, default=2.0, help="ordinary payments a second, on average")
+    p.add_argument("--max-rate", type=float, default=20.0,
+                   help="hard ceiling on requests a second, whatever is due (D87)")
+    p.add_argument("--minutes", type=float, default=None, help="stop after this long (default: until Ctrl+C)")
+    p.add_argument("--incident-speed", type=float, default=1.0,
+                   help="compress each incident's timeline by this factor (1 = real time)")
     # Each "incident" emits 8-25 transactions, so this knob is not the fraud
     # rate — it is far more sensitive than it looks. At 0.03 the live feed is
     # roughly 27% fraud, which is absurd and makes the alert queue meaningless.

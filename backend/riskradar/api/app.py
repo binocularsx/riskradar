@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -18,22 +20,40 @@ from fastapi.responses import JSONResponse
 from ..config import settings
 from ..db import close_pool, pool
 from ..security.tokens import hash_api_key
-from .routers import admin, auth, cases, directives, identity, ingest, links, metrics, stream, triage, workflow
+from .routers import (
+    admin,
+    auth,
+    budget,
+    cases,
+    directives,
+    identity,
+    ingest,
+    links,
+    metrics,
+    stream,
+    system,
+    triage,
+    workflow,
+)
 
 log = logging.getLogger("riskradar.api")
+access_log = logging.getLogger("riskradar.access")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    s = settings()
+    if s.is_production and not s.cors_origins:
+        log.warning("RISKRADAR_CORS_ORIGINS is empty: no browser console can call this API")
     pool()  # fail fast at boot if the database is unreachable
-    log.info("risk radar api ready (env=%s)", settings().env)
+    log.info("risk radar api ready (env=%s, version=%s)", s.env, system.API_VERSION)
     yield
     close_pool()
 
 
 app = FastAPI(
     title="Risk Radar",
-    version="1.0.0",
+    version=system.API_VERSION,
     description=(
         "Real-time transaction risk intelligence. **Advisory**: this service "
         "produces a decision (ALLOW / MONITOR / REVIEW / HOLD) with its reasons. "
@@ -43,14 +63,50 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# The dashboard is served from a different origin in development only.
+# The console's origins come from the environment (D87); development defaults
+# to the Vite server.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings().cors_origins,
     allow_credentials=True,   # the session cookie must travel
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining",
+                    "X-RiskRadar-Queue-Depth", "X-RiskRadar-Backpressure"],
 )
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    """D87: a request id on every response and log line, security headers, and a
+    JSON 500 carrying that id instead of a bare stack trace."""
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:  # noqa: BLE001 - the one place an unexpected error becomes a response
+        log.exception("unhandled error", extra={"request_id": request_id, "path": request.url.path})
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "internal error; quote the request id when reporting it", "request_id": request_id},
+        )
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers.setdefault("Cache-Control", "no-store")
+    if settings().is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.url.path != "/v1/stream":
+        access_log.info(
+            "%s %s %s %.1fms", request.method, request.url.path, response.status_code, elapsed_ms,
+            extra={"request_id": request_id, "status": response.status_code, "ms": elapsed_ms,
+                   "method": request.method, "path": request.url.path},
+        )
+    return response
+
 
 app.include_router(ingest.router)
 app.include_router(ingest.events_router)
@@ -65,6 +121,8 @@ app.include_router(links.router)
 app.include_router(metrics.router)
 app.include_router(stream.router)
 app.include_router(admin.router)
+app.include_router(budget.router)
+app.include_router(system.router)
 
 
 def _serialisable_errors(exc: RequestValidationError) -> list[dict[str, Any]]:

@@ -217,20 +217,52 @@ def stage_data(args: argparse.Namespace) -> None:
 
     print("\n[3/5] replaying the last hours with alerting ON")
     print("      whatever case count falls out is what the budget implies")
-    run(
-        [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed),
-         "history", "--profile", "demo", "--batch-size", "300",
-         "--alerting-tail-hours", str(args.alerting_hours), "--only-tail",
-         "--labels-out", str(LABELS), "--anchor", anchor],
-        cwd=sim,
-    )
-    wait_for_drain("alerting window", timeout_s=2 * 3600)
+    # D86: a day of alerts arrives in minutes here. The daily budget still
+    # holds; the hourly pacing, which exists to spread a live flood across the
+    # day, is lifted for this backfill and put back afterwards. Both audited.
+    burst = set_hourly_burst(24.0, "demo reset: a day's alerting window is replayed in minutes")
+    try:
+        run(
+            [str(PYTHON), "-u", "-m", "riskradar_sim", "--seed", str(args.seed),
+             "history", "--profile", "demo", "--batch-size", "300",
+             "--alerting-tail-hours", str(args.alerting_hours), "--only-tail",
+             "--labels-out", str(LABELS), "--anchor", anchor],
+            cwd=sim,
+        )
+        wait_for_drain("alerting window", timeout_s=2 * 3600)
+    finally:
+        set_hourly_burst(burst, "demo reset: alerting window scored; live pacing restored")
 
     print("\n[4/5] working a few cases so the desk has history")
     seed_worked_cases(args.seed)
 
     print("\n[5/5] summary")
     summarise()
+
+
+def set_hourly_burst(value: float, reason: str) -> float:
+    """Set the budget's hourly burst (D86); returns the value it replaced."""
+    import json
+
+    import psycopg
+
+    from riskradar.audit import chain
+    from riskradar.config import settings
+
+    with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
+        row = conn.execute("SELECT value FROM app_config WHERE key = 'alert_budget_hourly_burst'").fetchone()
+        before = float(row["value"]) if row else 3.0
+        conn.execute(
+            "INSERT INTO app_config (key, value) VALUES ('alert_budget_hourly_burst', %s) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (json.dumps(value),),
+        )
+        sys_uid = conn.execute("SELECT id FROM users WHERE is_system LIMIT 1").fetchone()["id"]
+        chain.append(conn, actor_user_id=sys_uid, action="ALERT_BUDGET_CHANGED", object_type="app_config",
+                     object_id="alert_budget_hourly_burst", from_state=str(before), to_state=str(value),
+                     payload={"reason": reason})
+        conn.commit()
+    return before
 
 
 def load_history(args: argparse.Namespace, sim: Path, anchor: str) -> None:

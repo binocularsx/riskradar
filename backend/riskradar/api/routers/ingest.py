@@ -43,6 +43,7 @@ from ...security.tokens import (
     msisdn_token,
     subject_token,
 )
+from .. import flow
 from ..deps import get_conn, require_api_key
 from ..schemas import (
     BatchAccepted,
@@ -246,7 +247,9 @@ def _persist(conn: Any, row: dict[str, Any]) -> TransactionAccepted:
         tx_id = int(inserted["id"] if isinstance(inserted, dict) else inserted[0])
         # FR-005: same transaction. The queue row and the transaction row commit
         # together or not at all.
-        cur.execute("INSERT INTO scoring_queue (transaction_id) VALUES (%s)", (tx_id,))
+        # D86: replayed history queues behind live traffic (priority 1).
+        cur.execute("INSERT INTO scoring_queue (transaction_id, priority) VALUES (%s, %s)",
+                    (tx_id, 1 if row["is_replay"] else 0))
         # D72: and its envelope, in the same transaction, so every payment is
         # also an event from the moment it exists.
         cur.execute(EVENT_INSERT_SQL, {
@@ -279,6 +282,7 @@ def ingest_one(
     conn: Any = Depends(get_conn),
     api_key: dict = Depends(require_api_key),
 ) -> TransactionAccepted:
+    flow.guard(conn, response, api_key, cost=1, replay=False)
     try:
         result = _persist(conn, _to_row(tx, is_replay=False, raise_alerts=True))
     except EventRefConflict as exc:
@@ -291,6 +295,7 @@ def ingest_one(
 @router.post("/batch", response_model=BatchAccepted, status_code=status.HTTP_202_ACCEPTED)
 def ingest_batch(
     body: BatchIn,
+    response: Response,
     conn: Any = Depends(get_conn),
     api_key: dict = Depends(require_api_key),
 ) -> BatchAccepted:
@@ -299,6 +304,7 @@ def ingest_batch(
     The contract matters more than throughput here: what a caller must be able to
     rely on is that replay is idempotent and silent, and that is true of a loop.
     """
+    flow.guard(conn, response, api_key, cost=len(body.transactions), replay=body.is_replay)
     results: list[TransactionAccepted] = []
     errors: list[dict] = []
     for index, tx in enumerate(body.transactions):
@@ -388,6 +394,7 @@ def ingest_event(
 ) -> EventAccepted:
     """One event of any type. Payments are scored; the other types are stored
     for the detectors WP-02 adds, and nothing is scored on them yet."""
+    flow.guard(conn, response, api_key, cost=1, replay=False)
     try:
         result = _persist_event(conn, event, is_replay=False, raise_alerts=True)
     except EventRefConflict as exc:
@@ -400,10 +407,12 @@ def ingest_event(
 @events_router.post("/batch", response_model=EventBatchAccepted, status_code=status.HTTP_202_ACCEPTED)
 def ingest_event_batch(
     body: EventBatchIn,
+    response: Response,
     conn: Any = Depends(get_conn),
     api_key: dict = Depends(require_api_key),
 ) -> EventBatchAccepted:
     """FR-006 for every type: replay is idempotent and silent by default (D8d)."""
+    flow.guard(conn, response, api_key, cost=len(body.events), replay=body.is_replay)
     results: list[EventAccepted] = []
     errors: list[dict] = []
     for index, ev in enumerate(body.events):

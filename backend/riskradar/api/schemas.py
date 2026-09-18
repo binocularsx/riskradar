@@ -9,7 +9,8 @@ not round.
 
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -22,6 +23,20 @@ ProductType = Literal["SAVINGS", "CURRENT", "DOMICILIARY", "WALLET"]
 RiskLevel = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 CaseState = Literal["OPEN", "UNDER_REVIEW", "ESCALATED", "CLOSED"]
 CaseOutcome = Literal["CONFIRMED_FRAUD", "FALSE_POSITIVE", "INCONCLUSIVE"]
+
+
+# D87: how far ahead of this server's clock an event may claim to have happened.
+# A payment from the future is a caller's clock fault or a replay bug, and it
+# would sit ahead of every velocity window until real time caught up with it.
+MAX_CLOCK_SKEW = timedelta(seconds=int(os.environ.get("RISKRADAR_MAX_CLOCK_SKEW_SECONDS", "300")))
+
+
+def _not_in_the_future(v: datetime) -> datetime:
+    if v - datetime.now(timezone.utc) > MAX_CLOCK_SKEW:
+        raise ValueError(
+            f"occurred_at is more than {int(MAX_CLOCK_SKEW.total_seconds())}s in the future; check the sender's clock"
+        )
+    return v
 
 
 class Strict(BaseModel):
@@ -119,7 +134,7 @@ class TransactionIn(Strict):
         # window. Guessing a zone here would corrupt velocity silently.
         if v.tzinfo is None:
             raise ValueError("occurred_at must include a timezone offset")
-        return v
+        return _not_in_the_future(v)
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +168,7 @@ class EnvelopeIn(Strict):
     def _require_timezone(cls, v: datetime) -> datetime:
         if v.tzinfo is None:
             raise ValueError("occurred_at must include a timezone offset")
-        return v
+        return _not_in_the_future(v)
 
 
 class LoginDetail(Strict):
@@ -496,3 +511,22 @@ class ListEntryIn(Strict):
 class PromoteModelIn(Strict):
     model_version_id: int
     comparison: dict | None = None
+
+
+class BudgetConfigIn(Strict):
+    """D86: the alert budget and how strictly it is paced. Every change is audited with its reason."""
+
+    per_day: Annotated[int, Field(ge=1, le=10_000)]
+    hourly_burst: Annotated[float, Field(ge=1.0, le=24.0)] = 3.0
+    enforced: bool = True
+    deferral_hours: Annotated[int, Field(ge=1, le=168)] = 24
+    reason: Annotated[str, Field(min_length=10, max_length=2000)]
+
+
+class DeriveThresholdsIn(Strict):
+    """D86: solve thresholds from recent traffic; publish only when asked."""
+
+    last_days: Annotated[float, Field(gt=0, le=90)] = 7.0
+    publish: bool = False
+    min_sample: Annotated[int, Field(ge=100)] = 2000
+    notes: Annotated[str | None, Field(max_length=2000)] = None

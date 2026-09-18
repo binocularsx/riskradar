@@ -39,7 +39,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import signal
+import socket
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -51,6 +53,7 @@ from ..features import MODEL_FEATURE_NAMES, compute_features, load_history_sql, 
 from ..features.spec import FEATURE_SPEC_VERSION
 from ..features.types import TxView
 from ..model import registry
+from ..policy import budget
 from ..policy import directives
 from ..policy import disposition as tiers
 from ..policy.engine import Thresholds, apply as apply_policy
@@ -89,7 +92,8 @@ CLAIM_SQL = """
              SELECT q.transaction_id
                FROM scoring_queue q
               WHERE q.available_at <= now()
-              ORDER BY q.available_at, q.transaction_id
+              -- D86: live traffic first; replayed history fills the gaps.
+              ORDER BY q.priority, q.available_at, q.transaction_id
                 FOR UPDATE SKIP LOCKED
               LIMIT %(limit)s
            )
@@ -167,7 +171,7 @@ def active_thresholds(conn: Any) -> Thresholds:
     return Thresholds.from_row(dict(row) if not isinstance(row, dict) else row)
 
 
-def _machine_action(conn: Any, sys_uid: int, case_id: int, signals: list, tx: TxView) -> None:
+def _machine_action(conn: Any, sys_uid: int, case_id: int, codes: list[str], transaction_ref: str) -> None:
     """Take the action a machine-action signal names (D80).
 
     The hold is already in the directive, which follows the decision (D74). A
@@ -176,7 +180,6 @@ def _machine_action(conn: Any, sys_uid: int, case_id: int, signals: list, tx: Tx
     """
     from ..clocks import watchlist
 
-    codes = [s.code for s in signals]
     if "ACCOUNT_TAKEOVER_SEQUENCE" in codes:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM cases WHERE id = %s", (case_id,))
@@ -194,7 +197,7 @@ def _machine_action(conn: Any, sys_uid: int, case_id: int, signals: list, tx: Tx
         action="DISPOSITION_MACHINE_ACTION",
         object_type="case",
         object_id=case_id,
-        payload={"signals": codes, "transaction_ref": tx.transaction_ref},
+        payload={"signals": codes, "transaction_ref": transaction_ref},
     )
 
 
@@ -349,6 +352,20 @@ def score_transaction(
     if bundle is not None and result.actionable:
         attributions = bundle.attributions(vector, registry.baseline_for(bundle))
 
+    # --- budget (D86): may this alert reach the desk now? --------------------
+    # Asked only of a decision that would alert. The answer goes into the
+    # decision's own trace, so "why was this not in my queue until 11:00?" is
+    # read from the record like every other why.
+    wants_alert = result.actionable and row["raise_alerts"] and disposition != tiers.AUTO_CLOSE
+    admission = None
+    if wants_alert:
+        admission = budget.admit(
+            conn,
+            mandatory=any(s.power == "OVERRIDE" for s in signals),
+            machine=disposition == tiers.MACHINE_ACTION,
+        )
+        result.trace.append(admission.as_trace())
+
     latency_ms = int((time.perf_counter() - started) * 1000)
 
     # --- decision: always written, written first (D7a) ----------------------
@@ -409,75 +426,195 @@ def score_transaction(
     # Re-scoring six weeks of history on a model change must not page anybody.
     outcome["disposition"] = disposition
     # AUTO_CLOSE (D80): recorded on the decision, no alert, no case, no label.
-    if result.actionable and row["raise_alerts"] and disposition != tiers.AUTO_CLOSE:
-        case_id, created = correlation.attach(
-            conn,
-            subject_token=tx.subject_token,
-            risk_level=result.risk_level,
-            at=row["occurred_at"],
+    codes = [s.code for s in signals]
+    if wants_alert and admission is not None and admission.raised:
+        alert_id, case_id = raise_alert(
+            conn, sys_uid,
+            decision_id=decision_id, transaction_id=transaction_id, transaction_ref=tx.transaction_ref,
+            subject_token=tx.subject_token, occurred_at=row["occurred_at"], risk_level=result.risk_level,
+            score=result.score_0_100, signal_codes=codes, disposition=disposition, rule_only=rule_only,
         )
-        # D80: a case the system can act on is MACHINE-handled; the first alert
-        # that needs a person makes it HUMAN, and it never goes back.
-        with conn.cursor() as cur:
-            if created and disposition == tiers.MACHINE_ACTION:
-                cur.execute("UPDATE cases SET handling = 'MACHINE' WHERE id = %s", (case_id,))
-            elif disposition == tiers.HUMAN_REVIEW:
-                cur.execute("UPDATE cases SET handling = 'HUMAN' WHERE id = %s AND handling <> 'HUMAN'", (case_id,))
-        if disposition == tiers.MACHINE_ACTION:
-            _machine_action(conn, sys_uid, case_id, signals, tx)
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO alerts
-                    (decision_id, transaction_id, case_id, subject_token,
-                     risk_level, score_0_100)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id
-                """,
-                (
-                    decision_id,
-                    transaction_id,
-                    case_id,
-                    tx.subject_token,
-                    result.risk_level,
-                    result.score_0_100,
-                ),
-            )
-            a_row = cur.fetchone()
-            alert_id = int(a_row["id"] if isinstance(a_row, dict) else a_row[0])
-
         outcome["alert_id"] = alert_id
         outcome["case_id"] = case_id
-
-        chain.append(
-            conn,
-            actor_user_id=sys_uid,
-            action="ALERT_RAISED",
-            object_type="alert",
-            object_id=alert_id,
-            to_state=result.risk_level,
-            payload={
-                "case_id": case_id,
-                "case_created": created,
-                "decision_id": decision_id,
-                "transaction_ref": tx.transaction_ref,
-                "score": result.score_0_100,
-                "signals": [s.code for s in signals],
-                "rule_only_mode": rule_only,
-            },
+    elif wants_alert and admission is not None:
+        # D86: held back, not dropped. It waits, most serious first, and is
+        # raised when the budget has room (release_deferred).
+        deferral_id = budget.record_deferral(
+            conn, admission, decision_id=decision_id, transaction_id=transaction_id,
+            subject_token=tx.subject_token, risk_level=result.risk_level, p_fraud=result.p_fraud,
+            score=result.score_0_100, signal_codes=codes,
         )
-        _publish(
-            conn,
-            "alert",
-            {
-                "alert_id": alert_id,
-                "case_id": case_id,
-                "risk_level": result.risk_level,
-                "score": result.score_0_100,
-            },
+        outcome["deferred"] = {"id": deferral_id, "reason": admission.reason}
+        _publish(conn, "alert_deferred", {"deferral_id": deferral_id, "risk_level": result.risk_level,
+                                          "score": result.score_0_100, "reason": admission.reason})
+    if admission is not None and budget.overrun_needs_alarm(conn, admission):
+        _raise_alarm(
+            conn, sys_uid, "ALERT_BUDGET_OVERRUN",
+            f"{admission.raised_today} alerts today against a budget of {admission.config.per_day}, from "
+            "veto rules and machine actions the guard may not hold back. Retune those rules.",
         )
 
     return outcome
+
+
+def raise_alert(
+    conn: Any,
+    sys_uid: int,
+    *,
+    decision_id: int,
+    transaction_id: int,
+    transaction_ref: str,
+    subject_token: str,
+    occurred_at: datetime,
+    risk_level: str,
+    score: int,
+    signal_codes: list[str],
+    disposition: str,
+    rule_only: bool,
+    released_from: int | None = None,
+) -> tuple[int, int]:
+    """Attach an alert to its case, audit it, ring the doorbell. Returns (alert, case)."""
+    case_id, created = correlation.attach(
+        conn,
+        subject_token=subject_token,
+        risk_level=risk_level,
+        at=occurred_at,
+    )
+    # D80: a case the system can act on is MACHINE-handled; the first alert
+    # that needs a person makes it HUMAN, and it never goes back.
+    with conn.cursor() as cur:
+        if created and disposition == tiers.MACHINE_ACTION:
+            cur.execute("UPDATE cases SET handling = 'MACHINE' WHERE id = %s", (case_id,))
+        elif disposition == tiers.HUMAN_REVIEW:
+            cur.execute("UPDATE cases SET handling = 'HUMAN' WHERE id = %s AND handling <> 'HUMAN'", (case_id,))
+    if disposition == tiers.MACHINE_ACTION:
+        _machine_action(conn, sys_uid, case_id, signal_codes, transaction_ref)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO alerts
+                (decision_id, transaction_id, case_id, subject_token,
+                 risk_level, score_0_100)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (decision_id, transaction_id, case_id, subject_token, risk_level, score),
+        )
+        a_row = cur.fetchone()
+        alert_id = int(a_row["id"] if isinstance(a_row, dict) else a_row[0])
+
+    payload = {
+        "case_id": case_id,
+        "case_created": created,
+        "decision_id": decision_id,
+        "transaction_ref": transaction_ref,
+        "score": score,
+        "signals": signal_codes,
+        "rule_only_mode": rule_only,
+    }
+    if released_from is not None:
+        payload["released_from_deferral"] = released_from
+    chain.append(
+        conn,
+        actor_user_id=sys_uid,
+        action="ALERT_RAISED",
+        object_type="alert",
+        object_id=alert_id,
+        to_state=risk_level,
+        payload=payload,
+    )
+    _publish(conn, "alert", {"alert_id": alert_id, "case_id": case_id, "risk_level": risk_level, "score": score})
+    return alert_id, case_id
+
+
+_DEFERRAL_SQL = """
+    SELECT f.id, f.decision_id, f.transaction_id, f.subject_token, f.risk_level::text AS risk_level,
+           f.score_0_100, f.signals, d.disposition, d.rule_only_mode, t.transaction_ref, t.occurred_at
+      FROM alert_deferrals f
+      JOIN decisions d ON d.id = f.decision_id
+      JOIN transactions t ON t.id = f.transaction_id
+"""
+
+
+def _release(conn: Any, sys_uid: int, item: dict[str, Any], *, released_by: int | None, day: Any,
+             hour: int, now: datetime) -> dict[str, Any]:
+    alert_id, case_id = raise_alert(
+        conn, sys_uid,
+        decision_id=item["decision_id"], transaction_id=item["transaction_id"],
+        transaction_ref=item["transaction_ref"], subject_token=item["subject_token"],
+        occurred_at=item["occurred_at"], risk_level=item["risk_level"], score=int(item["score_0_100"]),
+        signal_codes=list(item["signals"] or []), disposition=item["disposition"] or tiers.HUMAN_REVIEW,
+        rule_only=bool(item["rule_only_mode"]), released_from=int(item["id"]),
+    )
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE alert_deferrals SET state = 'RELEASED', resolved_at = %s, alert_id = %s, released_by = %s "
+            "WHERE id = %s",
+            (now, alert_id, released_by, item["id"]),
+        )
+    budget.count_release(conn, day, hour)
+    return {"deferral_id": int(item["id"]), "alert_id": alert_id, "case_id": case_id}
+
+
+def release_deferred(conn: Any, sys_uid: int, *, now: datetime | None = None) -> dict[str, Any]:
+    """Raise deferred alerts while the budget has room; expire those that waited too long (D86).
+
+    Most serious first: CRITICAL before HIGH, then by probability. Runs in the
+    caller's transaction and holds the day's ledger lock throughout, so two
+    workers releasing at once cannot overspend.
+    """
+    now = now or datetime.now(timezone.utc)
+    config = budget.load_config(conn)
+    day, hour = budget.local_day_hour(now)
+    row = budget.lock_day(conn, day, config)
+    expired = budget.expire_waiting(conn, day, now)
+    for e in expired:
+        chain.append(
+            conn, actor_user_id=sys_uid, action="ALERT_DEFERRAL_EXPIRED", object_type="decision",
+            object_id=e["decision_id"], to_state="EXPIRED",
+            payload={"deferral_id": e["id"], "risk_level": e["risk_level"], "p_fraud": str(e["p_fraud"]),
+                     "note": "held back by the alert budget and never reached a person"},
+        )
+    room = budget.headroom(row, hour, config)
+    released: list[dict[str, Any]] = []
+    if room > 0:
+        with conn.cursor() as cur:
+            cur.execute(
+                _DEFERRAL_SQL + """
+                 WHERE f.state = 'WAITING'
+                 ORDER BY f.risk_level DESC, f.p_fraud DESC, f.deferred_at
+                 LIMIT %s
+                   FOR UPDATE OF f SKIP LOCKED
+                """,
+                (room,),
+            )
+            items = [dict(r) for r in cur.fetchall()]
+        for item in items:
+            released.append(_release(conn, sys_uid, item, released_by=None, day=day, hour=hour, now=now))
+    if expired:
+        _raise_alarm(conn, sys_uid, "ALERTS_EXPIRED_UNREVIEWED",
+                     f"{len(expired)} alert(s) waited {config.deferral_hours}h behind the budget and were never "
+                     "reviewed. Re-derive thresholds or raise the budget.")
+    return {"released": released, "expired": len(expired), "room_before": room}
+
+
+def release_one(conn: Any, sys_uid: int, deferral_id: int, *, user_id: int,
+                now: datetime | None = None) -> dict[str, Any] | None:
+    """A supervisor pulls one deferred alert in now, over the budget if need be. Counted and audited."""
+    now = now or datetime.now(timezone.utc)
+    config = budget.load_config(conn)
+    day, hour = budget.local_day_hour(now)
+    budget.lock_day(conn, day, config)
+    with conn.cursor() as cur:
+        cur.execute(_DEFERRAL_SQL + " WHERE f.id = %s AND f.state = 'WAITING' FOR UPDATE OF f", (deferral_id,))
+        item = cur.fetchone()
+    if not item:
+        return None
+    done = _release(conn, sys_uid, dict(item), released_by=user_id, day=day, hour=hour, now=now)
+    chain.append(conn, actor_user_id=user_id, action="ALERT_DEFERRAL_RELEASED", object_type="decision",
+                 object_id=item["decision_id"], to_state="RELEASED",
+                 payload={"deferral_id": deferral_id, "alert_id": done["alert_id"], "over_budget_allowed": True})
+    return done
 
 
 # ---------------------------------------------------------------------------
@@ -522,11 +659,51 @@ def _raise_alarm(conn: Any, sys_uid: int, code: str, detail: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+HEARTBEAT_SECONDS = 10.0
+RELEASE_SECONDS = 30.0
+
+
 class Worker:
     def __init__(self, batch_size: int = 64, idle_sleep: float = 0.25) -> None:
         self.batch_size = batch_size
         self.idle_sleep = idle_sleep
         self._stop = False
+        self.worker_id = f"{socket.gethostname()}:{os.getpid()}"
+        self.started_at = datetime.now(timezone.utc)
+        self.processed = 0
+        self.failed = 0
+        self._last_beat = 0.0
+        self._last_release = 0.0
+
+    def heartbeat(self, *, force: bool = False) -> None:
+        """Readiness reads this to tell an idle worker from a dead one."""
+        if not force and time.monotonic() - self._last_beat < HEARTBEAT_SECONDS:
+            return
+        self._last_beat = time.monotonic()
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO worker_heartbeats (worker_id, host, pid, started_at, seen_at, processed, failed)
+                VALUES (%s, %s, %s, %s, now(), %s, %s)
+                ON CONFLICT (worker_id) DO UPDATE
+                   SET seen_at = now(), processed = EXCLUDED.processed, failed = EXCLUDED.failed
+                """,
+                (self.worker_id, socket.gethostname(), os.getpid(), self.started_at, self.processed, self.failed),
+            )
+
+    def maybe_release(self) -> None:
+        """D86: every half minute, raise deferred alerts the budget now has room for."""
+        if time.monotonic() - self._last_release < RELEASE_SECONDS:
+            return
+        self._last_release = time.monotonic()
+        with connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM alert_deferrals WHERE state = 'WAITING' LIMIT 1")
+                if cur.fetchone() is None:
+                    return
+            done = release_deferred(conn, system_user_id(conn))
+        if done["released"] or done["expired"]:
+            log.info("budget: released %d deferred alert(s), %d expired", len(done["released"]), done["expired"])
 
     def request_stop(self, *_: Any) -> None:
         log.info("stop requested; finishing current batch")
@@ -594,7 +771,9 @@ class Worker:
                             "DELETE FROM scoring_queue WHERE transaction_id = %s", (tx_id,)
                         )
                 processed += 1
+                self.processed += 1
             except Exception as exc:  # noqa: BLE001 - must not kill the loop
+                self.failed += 1
                 log.exception("scoring failed for transaction %s", tx_id)
                 try:
                     self._record_failure(tx_id, exc)
@@ -605,23 +784,29 @@ class Worker:
     def run_forever(self) -> None:
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
-        log.info("scoring worker started")
+        log.info("scoring worker %s started", self.worker_id)
         while not self._stop:
             try:
+                self.heartbeat()
+                self.maybe_release()
                 if self.run_once() == 0:
                     time.sleep(self.idle_sleep)
             except Exception:  # noqa: BLE001
                 log.exception("worker loop error; backing off")
                 time.sleep(1.0)
+        try:
+            with connection() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM worker_heartbeats WHERE worker_id = %s", (self.worker_id,))
+        except Exception:  # noqa: BLE001 - leaving is best effort; readiness ages it out
+            log.exception("could not remove heartbeat")
         pool().close()
         log.info("scoring worker stopped")
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(name)s %(message)s",
-    )
+    from ..logsetup import configure
+
+    configure()
     Worker().run_forever()
 
 

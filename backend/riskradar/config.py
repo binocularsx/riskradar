@@ -72,6 +72,37 @@ class Settings:
         self.artifact_dir = REPO_ROOT / "ml" / "artifacts"
         self.fixture_dir = REPO_ROOT / "fixtures"
 
+        # --- serving (D87) -----------------------------------------------------
+        self.db_pool_min = int(os.environ.get("RISKRADAR_DB_POOL_MIN", "2"))
+        self.db_pool_max = int(os.environ.get("RISKRADAR_DB_POOL_MAX", "24"))
+        # The console's origins. Development defaults to the Vite server; a
+        # production deployment must name its own, or no browser can call it.
+        default_origins = "" if self.env == "production" else "http://localhost:5173,http://127.0.0.1:5173"
+        self.cors_origins = [o.strip() for o in os.environ.get("RISKRADAR_CORS_ORIGINS", default_origins).split(",")
+                             if o.strip()]
+        # Per API key, per API process: transactions a second, and the burst a
+        # caller may send at once before the rate applies. A multi-instance
+        # deployment divides the rate or enforces it at the gateway.
+        self.ingest_rate = float(os.environ.get("RISKRADAR_INGEST_RATE", "300"))
+        self.ingest_burst = float(os.environ.get("RISKRADAR_INGEST_BURST", "1500"))
+        # Replayed history has its own, larger allowance: it is bounded by the
+        # replay queue mark below, and a backfill should run at scoring speed.
+        self.replay_rate = float(os.environ.get("RISKRADAR_REPLAY_RATE", "2000"))
+        self.replay_burst = float(os.environ.get("RISKRADAR_REPLAY_BURST", "5000"))
+        # Live payments waiting to be scored. Above the soft mark callers are
+        # told to slow down; above the hard mark new work is refused with 503
+        # and Retry-After, so a stalled worker fleet never turns into an
+        # unbounded queue. Replayed history is refused earlier: it can wait.
+        self.queue_soft_limit = int(os.environ.get("RISKRADAR_QUEUE_SOFT_LIMIT", "2000"))
+        self.queue_hard_limit = int(os.environ.get("RISKRADAR_QUEUE_HARD_LIMIT", "20000"))
+        self.replay_queue_limit = int(os.environ.get("RISKRADAR_REPLAY_QUEUE_LIMIT", "50000"))
+        # Readiness: a worker unseen for this long is presumed dead.
+        self.worker_stale_seconds = int(os.environ.get("RISKRADAR_WORKER_STALE_SECONDS", "60"))
+        self.api_host = os.environ.get("RISKRADAR_API_HOST", "127.0.0.1")
+        self.api_port = int(os.environ.get("RISKRADAR_API_PORT", "8000"))
+        self.api_workers = int(os.environ.get("RISKRADAR_API_WORKERS", "1"))
+        self.log_json = os.environ.get("RISKRADAR_LOG_JSON", "true" if self.env == "production" else "false") == "true"
+
     # -- connection strings -------------------------------------------------
 
     def _dsn(self, user: str, password: str) -> str:
