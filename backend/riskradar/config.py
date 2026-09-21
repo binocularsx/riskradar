@@ -68,6 +68,18 @@ class Settings:
         # D27: 12h idle, 24h absolute.
         self.session_idle_hours = 12
         self.session_absolute_hours = 24
+        # D95: CSRF double-submit. The readable cookie the page echoes back in a
+        # header, and the header it echoes it in.
+        self.csrf_cookie = os.environ.get("RISKRADAR_CSRF_COOKIE", "rr_csrf")
+        self.csrf_header = "X-CSRF-Token"
+        # D95: rotate the session identifier this often. A cookie captured at
+        # rest is then replayable for at most this long, not the full 24h.
+        self.session_rotate_minutes = int(os.environ.get("RISKRADAR_SESSION_ROTATE_MINUTES", "15"))
+        # How long the just-superseded identifier is still accepted, so the
+        # several requests a page fires at once do not race into a logout.
+        self.session_rotate_grace_seconds = int(
+            os.environ.get("RISKRADAR_SESSION_ROTATE_GRACE_SECONDS", "90")
+        )
 
         self.artifact_dir = REPO_ROOT / "ml" / "artifacts"
         self.fixture_dir = REPO_ROOT / "fixtures"

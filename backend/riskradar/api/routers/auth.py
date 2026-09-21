@@ -13,26 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from ...audit import chain
 from ...config import settings
-from ...security import sessions
+from ...security import cookies, sessions
 from ...security.passwords import verify_password, verify_totp
 from ...security.rbac import mfa_required, permissions_for
 from ..deps import current_user, get_conn
 from ..schemas import LoginIn, LoginOut, MeOut
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
-
-
-def _set_cookie(response: Response, raw_token: str) -> None:
-    s = settings()
-    response.set_cookie(
-        key=s.session_cookie,
-        value=raw_token,
-        httponly=True,          # unreadable by any script, so XSS cannot lift it
-        secure=s.is_production,  # http is only tolerable on a local demo machine
-        samesite="lax",         # blocks cross-site POSTs while keeping normal navigation
-        max_age=s.session_absolute_hours * 3600,
-        path="/",
-    )
 
 
 @router.post("/login", response_model=LoginOut)
@@ -75,13 +62,14 @@ def login(
         if not verify_totp(user["totp_secret"], body.totp_code):
             raise invalid
 
-    raw = sessions.create(
+    raw, csrf = sessions.create(
         conn,
         user["id"],
         mfa_satisfied=bool(needs_mfa),
         user_agent=request.headers.get("user-agent"),
     )
-    _set_cookie(response, raw)
+    cookies.set_session_cookie(response, raw)
+    cookies.set_csrf_cookie(response, csrf)
 
     chain.append(
         conn,
@@ -114,8 +102,14 @@ def logout(
     a JWT here."""
     raw = request.cookies.get(settings().session_cookie)
     if raw:
-        session = sessions.resolve(conn, raw)
+        session = sessions.resolve(conn, raw, rotate=False)
         if session:
+            # D95: logout changes state, so it too carries the CSRF token — a
+            # forged cross-site logout is only a nuisance, but the control is
+            # uniform rather than case-by-case.
+            presented = request.headers.get(settings().csrf_header)
+            if not sessions.verify_csrf(session, presented):
+                raise HTTPException(status_code=403, detail="missing or invalid CSRF token")
             chain.append(
                 conn,
                 actor_user_id=session["user_id"],
@@ -124,7 +118,7 @@ def logout(
                 object_id=session["user_id"],
             )
         sessions.revoke(conn, raw)
-    response.delete_cookie(settings().session_cookie, path="/")
+    cookies.clear_session_cookies(response)
     return {"status": "ok"}
 
 

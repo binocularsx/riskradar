@@ -73,5 +73,12 @@ def new_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def new_csrf_token() -> str:
+    """D95: the double-submit CSRF token. Stored on the session in plaintext and
+    mirrored to a readable cookie by design — it is not a credential, it is a
+    value a cross-origin page cannot read or replay in a header."""
+    return secrets.token_urlsafe(32)
+
+
 def new_api_key() -> str:
     return "rr_" + secrets.token_urlsafe(32)

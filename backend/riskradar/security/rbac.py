@@ -96,8 +96,13 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     "SYSTEM": frozenset(),
 }
 
-# D12a: mandatory for these roles, default-on for ANALYST.
-MFA_REQUIRED_ROLES = frozenset({"FRAUD_OPS_LEAD", "ADMIN"})
+# D12a made MFA mandatory for FRAUD_OPS_LEAD and ADMIN and default-on for
+# ANALYST. D95 (implementation plan §3) closes the gap: MFA is mandatory for
+# *every* human role that can log in. An analyst and an infosec analyst both
+# read customer financial data and act on cases, so "default-on" — which a
+# future user row could quietly turn off — becomes "required", enforced on every
+# request. SYSTEM never logs in and holds no factor.
+MFA_REQUIRED_ROLES = frozenset({"ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"})
 
 
 def permissions_for(role: str) -> frozenset[Permission]:

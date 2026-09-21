@@ -115,6 +115,12 @@ def login(client, email: str, password: str) -> None:
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "ok", response.text
 
+    # D95: mirror the browser — read the readable CSRF cookie the login set and
+    # send it back on every unsafe request for the rest of this client's life.
+    csrf = client.cookies.get(settings().csrf_cookie)
+    if csrf:
+        client.headers[settings().csrf_header] = csrf
+
 
 def score_exclusively(conn, tx_id: int, **kwargs):
     """Score this transaction here, whatever the running workers are doing.

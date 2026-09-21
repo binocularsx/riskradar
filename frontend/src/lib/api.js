@@ -9,10 +9,31 @@
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/**
+ * The CSRF token (D95). The server mirrors it into a readable `rr_csrf` cookie
+ * at login; the double-submit defence is echoing it back in a header on every
+ * unsafe request. A cross-origin page can set neither this cookie nor this
+ * header, which is exactly what makes the pair unforgeable.
+ */
+function csrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)rr_csrf=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 async function request(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase()
+  const headers = { ...(options.headers || {}) }
+  if (UNSAFE_METHODS.has(method)) {
+    const token = csrfToken()
+    if (token) headers['X-CSRF-Token'] = token
+  }
+
   const response = await fetch(path, {
     credentials: 'include',
     ...options,
+    headers,
   })
 
   if (response.status === 401) {
