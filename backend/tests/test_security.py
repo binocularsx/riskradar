@@ -30,7 +30,8 @@ def test_admin_cannot_touch_a_case_at_all():
     for permission in (
         Permission.CASES_READ,
         Permission.CASES_REVIEW,
-        Permission.CASES_SET_OUTCOME,
+        Permission.CASES_SUBMIT_OUTCOME,
+        Permission.CASES_APPROVE_FRAUD,
         Permission.CASES_CLOSE,
         Permission.CASES_ESCALATE,
     ):
@@ -38,7 +39,9 @@ def test_admin_cannot_touch_a_case_at_all():
 
 
 def test_analyst_cannot_close_or_administer():
-    assert has("ANALYST", Permission.CASES_SET_OUTCOME)
+    assert has("ANALYST", Permission.CASES_SUBMIT_OUTCOME)
+    # D93: an analyst proposes a fraud finding; a lead decides it.
+    assert not has("ANALYST", Permission.CASES_APPROVE_FRAUD)
     assert not has("ANALYST", Permission.CASES_CLOSE)
     assert not has("ANALYST", Permission.ADMIN_THRESHOLDS)
     assert not has("ANALYST", Permission.ADMIN_RULES)
@@ -49,11 +52,13 @@ def test_infosec_investigates_but_does_not_set_commercial_outcomes():
     that answers a security question does not get to answer a fraud one."""
     assert has("INFOSEC_ANALYST", Permission.CASES_READ)
     assert has("INFOSEC_ANALYST", Permission.CASES_ESCALATE)
-    assert not has("INFOSEC_ANALYST", Permission.CASES_SET_OUTCOME)
+    assert not has("INFOSEC_ANALYST", Permission.CASES_SUBMIT_OUTCOME)
+    assert not has("INFOSEC_ANALYST", Permission.CASES_APPROVE_FRAUD)
 
 
 def test_lead_can_close_but_not_administer():
     assert has("FRAUD_OPS_LEAD", Permission.CASES_CLOSE)
+    assert has("FRAUD_OPS_LEAD", Permission.CASES_APPROVE_FRAUD)
     assert not has("FRAUD_OPS_LEAD", Permission.ADMIN_RULES)
 
 

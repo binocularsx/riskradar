@@ -108,12 +108,25 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     mine = analyst.get("/v1/worklist", params={"scope": "mine", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in mine], "handed back to the analyst who escalated"
 
-    # The analyst records the outcome; it waits for a lead.
+    # D93: the analyst proposes the outcome; a lead who did not write it decides.
     r = analyst.post(f"/v1/cases/{case_id}/disposition",
-                     json={"outcome": "CONFIRMED_FRAUD", "close": False, "followed_recommendation": True})
+                     json={"outcome": "CONFIRMED_FRAUD", "close": False, "followed_recommendation": True,
+                           "note": "SIM swap confirmed with the carrier and the customer denies the payments"})
     assert r.status_code == 200, r.text
-    assert stage(analyst, case_id) == "AWAITING_CLOSE"
+    assert r.json()["outcome"] is None and r.json()["proposed_outcome"] == "CONFIRMED_FRAUD"
+    assert stage(analyst, case_id) == "AWAITING_APPROVAL"
     assert case_id not in [c["id"] for c in analyst.get("/v1/worklist", params={"scope": "mine", "limit": 200}).json()["items"]]
+    proposed = lead.get("/v1/worklist", params={"scope": "awaiting_approval", "limit": 200}).json()["items"]
+    assert case_id in [c["id"] for c in proposed]
+
+    # A lead cannot close it before deciding, and deciding is what records the outcome.
+    too_early = lead.post(f"/v1/cases/{case_id}/close")
+    assert too_early.status_code == 409 and "waiting for a decision" in too_early.text
+    sid = r.json()["submission"]["id"]
+    assert lead.post(f"/v1/submissions/{sid}/decision",
+                     json={"decision": "APPROVE", "reason": "carrier evidence and customer denial both hold"}
+                     ).status_code == 200
+    assert stage(analyst, case_id) == "AWAITING_CLOSE"
     waiting = lead.get("/v1/worklist", params={"scope": "awaiting_close", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in waiting]
 
@@ -121,7 +134,7 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert stage(lead, case_id) == "CLOSED"
     lifecycle = [m["key"] for m in lead.get(f"/v1/cases/{case_id}/workflow").json()["lifecycle"]]
     for key in ("CASE_REVIEW_STARTED", "CASE_ACTION_RECORDED", "CASE_ESCALATED", "CASE_RETURNED",
-                "CASE_OUTCOME_SET", "CASE_CLOSED"):
+                "FRAUD_SUBMITTED", "FRAUD_APPROVED", "CASE_CLOSED"):
         assert key in lifecycle, key
 
     pipe = analyst.get("/v1/workflow/pipeline").json()

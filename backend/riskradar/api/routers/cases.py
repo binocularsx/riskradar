@@ -395,37 +395,33 @@ def add_note(
 def set_outcome(
     case_id: int,
     body: OutcomeIn,
-    user: dict = Depends(requires(Permission.CASES_SET_OUTCOME)),
+    user: dict = Depends(requires(Permission.CASES_SUBMIT_OUTCOME)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Record the analyst's verdict.
+    """Propose the analyst's verdict (D93). It is not the outcome until a lead approves.
 
-    D13c: these are not a UI status. ``CONFIRMED_FRAUD`` and ``FALSE_POSITIVE``
-    are analyst-labelled ground truth — the only non-circular labels this system
-    will ever produce, and the eventual exit from simulator-only training.
+    This endpoint used to write ``cases.outcome`` directly, which let one person
+    create both the bank's fraud record and the model's training label (D13c).
+    It now raises a submission, exactly as ``POST /v1/cases/{id}/submissions``
+    does, so the old caller keeps working and the control holds either way.
+    The note travels as the rationale when no separate one is given.
     """
+    from ...cases import submissions as subs
+
     case = _fetch_case(conn, case_id)
     if case["state"] not in ("UNDER_REVIEW", "ESCALATED"):
-        raise HTTPException(400, "open the case for review before recording an outcome")
-    if body.note:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO case_notes (case_id, author_id, body) VALUES (%s, %s, %s)",
-                (case_id, user["id"], body.note),
-            )
-    with conn.cursor() as cur:
-        cur.execute("UPDATE cases SET outcome = %s WHERE id = %s", (body.outcome, case_id))
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="CASE_OUTCOME_SET",
-        object_type="case",
-        object_id=case_id,
-        from_state=case["outcome"],
-        to_state=body.outcome,
-        payload={"role": user["role"]},
-    )
-    return _fetch_case(conn, case_id)
+        raise HTTPException(400, "open the case for review before proposing an outcome")
+    rationale = (body.note or "").strip()
+    if len(rationale) < 20:
+        raise HTTPException(422, "a proposed outcome needs a rationale of at least 20 characters in `note`: "
+                                 "a lead has to decide on something")
+    try:
+        submission = subs.submit(conn, case_id=case_id, user=user, proposed_outcome=body.outcome,
+                                 rationale=rationale, restrictions=[], expected_version=None)
+    except subs.SubmissionError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
+    return {"case": _fetch_case(conn, case_id), "submission": submission,
+            "note": "proposed, not decided: a Fraud Ops Lead who did not write it must approve (D93)"}
 
 
 @router.post("/cases/{case_id}/escalate")
@@ -713,11 +709,16 @@ def close_case(
     model. Recorded in the audit trail with the tokens added, because it is a
     control change made by a human and needs to be attributable.
     """
+    from ...cases import submissions as subs
+
     case = _fetch_case(conn, case_id)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "case is already closed")
-    if not case["outcome"]:
-        raise HTTPException(400, "record an outcome before closing")
+    # D93 / plan §4.3: closing is objective. Every condition is named, and the
+    # answer says which one is missing rather than "cannot close".
+    blockers = subs.closure_blockers(conn, case_id)
+    if blockers:
+        raise HTTPException(409, {"detail": "this case cannot close yet", "blockers": blockers})
 
     promoted: list[str] = []
     if case["outcome"] == "CONFIRMED_FRAUD":

@@ -355,6 +355,8 @@ class DispositionIn(Strict):
     note: Annotated[str | None, Field(max_length=4000)] = None
     close: bool = False
     followed_recommendation: bool | None = None
+    # D93: the case version the analyst read, so a stale verdict is refused.
+    expected_case_version: int | None = None
 
 
 class EscalateIn(Strict):
@@ -459,6 +461,32 @@ class ReportIn(Strict):
     @classmethod
     def _require_timezone(cls, v: datetime) -> datetime:
         return _aware(v)
+
+
+class RestrictionIn(Strict):
+    """D93: one action a submission asks the bank to take, from a fixed list."""
+
+    action: Literal["DEBIT_RESTRICTION", "CHANNEL_RESTRICTION", "CARD_FREEZE", "BENEFICIARY_RESTRICTION"]
+    account_token: Annotated[str | None, Field(max_length=128)] = None
+    beneficiary_token: Annotated[str | None, Field(max_length=128)] = None
+    channel: Channel | None = None
+    reason: Annotated[str | None, Field(max_length=500)] = None
+
+
+class FraudSubmissionIn(Strict):
+    """D93: the analyst's proposal. It decides nothing until a lead approves it."""
+
+    proposed_outcome: CaseOutcome
+    rationale: Annotated[str, Field(min_length=20, max_length=4000)]
+    restrictions: Annotated[list[RestrictionIn], Field(max_length=20)] = []
+    expected_case_version: int | None = None
+
+
+class FraudDecisionIn(Strict):
+    """D93: a lead's decision on somebody else's proposal."""
+
+    decision: Literal["APPROVE", "REJECT", "RETURN"]
+    reason: Annotated[str, Field(min_length=10, max_length=4000)]
 
 
 class CustomerReportIn(Strict):

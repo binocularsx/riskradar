@@ -27,7 +27,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...audit import chain
-from ...cases import workflow
+from ...cases import submissions, workflow
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import CaseActionIn, ReturnIn
@@ -111,6 +111,11 @@ def case_workflow(
             "CASE_RETURNED": "Handed back with findings",
             "CASE_ACTION_RECORDED": f"{workflow.ACTIONS.get((e['payload'] or {}).get('action_code'), {}).get('label', 'Action')}",
             "CASE_OUTCOME_SET": f"Outcome recorded: {(e['to_state'] or '').replace('_', ' ').lower()}",
+            # D93: proposed, then decided by someone else.
+            "FRAUD_SUBMITTED": f"{(e['to_state'] or '').replace('_', ' ').title()} proposed for approval",
+            "FRAUD_APPROVED": "Approved by a lead",
+            "FRAUD_REJECTED": "Rejected by a lead",
+            "FRAUD_RETURNED": "Returned by a lead for more work",
             "CASE_CLOSED": "Closed",
             "CASE_REASSIGNED": "Reassigned",
         }.get(e["action"])
@@ -118,7 +123,7 @@ def case_workflow(
             milestones.append({"key": e["action"], "label": label, "at": e["occurred_at"], "by": e["actor"],
                                "detail": (e["payload"] or {}).get("result_label") or (e["payload"] or {}).get("reason")})
 
-    current = workflow.stage(case)
+    current = workflow.stage(case, pending_submission=bool(submissions.pending(conn, case['id'])))
     return {
         "case_id": case_id,
         "stage": current,
@@ -136,26 +141,30 @@ def case_workflow(
         "steps": steps,
         "actions": actions,
         "lifecycle": milestones,
-        "next": _next_for(case, user),
+        "next": _next_for(case, user, current),
     }
 
 
-def _next_for(case: dict[str, Any], user: dict[str, Any]) -> str:
+def _next_for(case: dict[str, Any], user: dict[str, Any], st: str) -> str:
     """One sentence: what happens to this case next, and who does it."""
-    st = workflow.stage(case)
     perms = user["permissions"]
     if st == "CLOSED":
         return "Closed. Nothing more to do; the outcome is now a training label."
     if st == "AWAITING_CLOSE":
-        return ("Close it: the outcome is recorded." if "cases:close" in perms
-                else "Nothing more for you: a Fraud Ops lead reviews the outcome and closes it.")
+        return ("Close it: a lead has approved the outcome." if "cases:close" in perms
+                else "Nothing more for you: a Fraud Ops lead closes it now the outcome is approved.")
+    if st == "AWAITING_APPROVAL":
+        # D93: the analyst is finished; a different lead decides.
+        return ("Decide it: approve, reject or return the proposal — unless you wrote it."
+                if "cases:approve_fraud" in perms
+                else "Proposed. A Fraud Ops lead who did not write it approves, rejects or returns it.")
     if st == "ESCALATED":
         team = (case["escalated_to"] or "").replace("_", " ").title()
         return f"Waiting in {team}'s escalated queue. They take it, investigate, and hand it back or close it."
     if st == "NEW":
         return "Nobody has taken it. Take it to start the review."
     if case["assignee_id"] == user["id"]:
-        return "Yours: work the steps, then record an outcome."
+        return "Yours: work the steps, then propose an outcome for a lead to approve."
     return "Someone else is working it."
 
 
@@ -254,7 +263,9 @@ def pipeline(
                           WHERE a.case_id = c.id AND t.auth_result = 'APPROVED'), 0)::bigint AS exposure_minor,
                (SELECT max(occurred_at) FROM audit_log l WHERE l.object_type = 'case'
                    AND l.object_id = c.id::text AND l.action <> 'CASE_VIEWED') AS last_change_at,
-               (SELECT count(*) FROM case_actions x WHERE x.case_id = c.id) AS actions_recorded
+               (SELECT count(*) FROM case_actions x WHERE x.case_id = c.id) AS actions_recorded,
+               EXISTS (SELECT 1 FROM fraud_submissions f
+                        WHERE f.case_id = c.id AND f.state = 'PENDING') AS pending_submission
           FROM cases c LEFT JOIN users u ON u.id = c.assignee_id
          WHERE c.state <> 'CLOSED' OR c.closed_at > now() - interval '24 hours'
         """,
@@ -264,7 +275,7 @@ def pipeline(
     now = datetime.now(timezone.utc)
     stages: dict[str, list[dict[str, Any]]] = {s: [] for s in workflow.STAGES}
     for r in rows:
-        s = workflow.stage(r)
+        s = workflow.stage(r, pending_submission=bool(r["pending_submission"]))
         since = {"ESCALATED": r["escalated_at"], "CLOSED": r["closed_at"]}.get(s) or r["last_change_at"] or r["opened_at"]
         r["stage"] = s
         r["minutes_in_stage"] = round((now - since).total_seconds() / 60.0, 1)

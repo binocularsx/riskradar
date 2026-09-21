@@ -179,23 +179,28 @@ ESCALATION = {
 }
 
 # The path every case takes. A case is in exactly one stage.
-STAGES = ["NEW", "IN_REVIEW", "ESCALATED", "AWAITING_CLOSE", "CLOSED"]
+STAGES = ["NEW", "IN_REVIEW", "ESCALATED", "AWAITING_APPROVAL", "AWAITING_CLOSE", "CLOSED"]
 STAGE_LABEL = {
     "NEW": "New, nobody on it",
     "IN_REVIEW": "Being investigated",
     "ESCALATED": "Escalated",
-    "AWAITING_CLOSE": "Outcome recorded, waiting for a lead to close",
+    # D93: proposed is not decided. The analyst is finished; the case is not.
+    "AWAITING_APPROVAL": "Fraud finding proposed, waiting for a lead's decision",
+    "AWAITING_CLOSE": "Approved, waiting for a lead to close",
     "CLOSED": "Closed",
 }
 
 
-def stage(case: dict[str, Any]) -> str:
+def stage(case: dict[str, Any], *, pending_submission: bool = False) -> str:
     if case["state"] == "CLOSED":
         return "CLOSED"
+    if case.get("outcome"):
+        # An outcome exists only because a lead approved it (D93).
+        return "AWAITING_CLOSE"
+    if pending_submission:
+        return "AWAITING_APPROVAL"
     if case["state"] == "ESCALATED":
         return "ESCALATED"
-    if case.get("outcome"):
-        return "AWAITING_CLOSE"
     if case["state"] == "UNDER_REVIEW" or case.get("assignee_id"):
         return "IN_REVIEW"
     return "NEW"

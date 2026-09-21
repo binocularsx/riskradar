@@ -112,11 +112,20 @@ WORKLIST_SQL = """
 
            -- D90: payments on this case the detector missed and a customer reported.
            (SELECT count(*) FROM alerts a WHERE a.case_id = c.id AND a.source = 'CUSTOMER_REPORT')
-               AS missed_by_detector
+               AS missed_by_detector,
+
+           -- D93: proposed and waiting for a lead's decision.
+           EXISTS (SELECT 1 FROM fraud_submissions f WHERE f.case_id = c.id AND f.state = 'PENDING')
+               AS awaiting_approval
       FROM cases c
       LEFT JOIN users u ON u.id = c.assignee_id
      WHERE {where}
 """
+
+
+# D93: one definition of "a fraud finding is waiting on this case".
+_PENDING_SUBMISSION = ("EXISTS (SELECT 1 FROM fraud_submissions f "
+                       "WHERE f.case_id = c.id AND f.state = 'PENDING')")
 
 
 def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
@@ -177,7 +186,8 @@ def _clock_context(conn: Any) -> dict[str, Any]:
 
 @router.get("/worklist")
 def worklist(
-    scope: str = Query("all", pattern="^(all|mine|unassigned|breaching|machine|escalated|awaiting_close)$"),
+    scope: str = Query("all",
+                       pattern="^(all|mine|unassigned|breaching|machine|escalated|awaiting_approval|awaiting_close)$"),
     risk_level: str | None = None,
     limit: int = Query(60, ge=1, le=200),
     user: dict = Depends(requires(Permission.CASES_READ)),
@@ -194,8 +204,9 @@ def worklist(
 
     if scope == "mine":
         # D83: a case whose outcome is recorded is no longer the analyst's work;
-        # it waits for a lead in "awaiting close".
-        where.append("c.assignee_id = %(uid)s AND c.outcome IS NULL")
+        # it waits for a lead in "awaiting close". D93: nor is one whose fraud
+        # finding is proposed — the analyst is finished, a lead decides next.
+        where.append("c.assignee_id = %(uid)s AND c.outcome IS NULL AND NOT " + _PENDING_SUBMISSION)
         params["uid"] = user["id"]
     elif scope == "unassigned":
         # D80: machine-handled cases wait for a contact, not an investigation.
@@ -212,6 +223,9 @@ def worklist(
         else:
             where.append("c.state = 'ESCALATED' AND c.escalated_by = %(uid)s")
             params["uid"] = user["id"]
+    elif scope == "awaiting_approval":
+        # D93: proposed and waiting for a lead who did not write it.
+        where.append(_PENDING_SUBMISSION)
     elif scope == "awaiting_close":
         where.append("c.outcome IS NOT NULL")
     if risk_level:
@@ -251,6 +265,7 @@ def worklist(
             "mine": sum(1 for r in rows if r["assignee_id"] == user["id"]),
             "machine": sum(1 for r in rows if r["handling"] == "MACHINE"),
             "escalated": sum(1 for r in rows if r["state"] == "ESCALATED"),
+            "awaiting_approval": sum(1 for r in rows if r["awaiting_approval"]),
             "awaiting_close": sum(1 for r in rows if r["outcome"]),
         },
     }
@@ -335,18 +350,20 @@ def next_case(
 def disposition(
     case_id: int,
     body: DispositionIn,
-    user: dict = Depends(requires(Permission.CASES_SET_OUTCOME)),
+    user: dict = Depends(requires(Permission.CASES_SUBMIT_OUTCOME)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Record the verdict in one action.
+    """Propose the verdict in one action (D93).
 
-    Previously this was three requests: take for review, set outcome, close. An
-    analyst working forty cases a day should press one key, not three buttons —
-    and the state machine (D13b) is still respected underneath, with every
-    transition audited separately.
+    Previously this was three requests, and then one: take for review, write the
+    outcome, close. An analyst working forty cases a day should still press one
+    key — but that key now raises a **submission**, because one person may not
+    both find fraud and confirm it (plan §4). The case moves to "awaiting a
+    lead's decision"; the lead approves from their own queue.
 
-    Closing still requires ``cases:close``. An analyst records the outcome and
-    the case waits for a lead; a lead does both in the same keystroke.
+    ``close`` is kept in the request for the caller that already sends it, and
+    is now honoured only after an approval: it closes the case if the gate is
+    clear, and says what is missing if it is not.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT * FROM cases WHERE id = %s", (case_id,))
@@ -384,61 +401,54 @@ def disposition(
             )
         steps.append("note added")
 
-    # 3. The verdict. This is training data (D13c), not a status field.
-    with conn.cursor() as cur:
-        cur.execute("UPDATE cases SET outcome = %s WHERE id = %s", (body.outcome, case_id))
-    chain.append(
-        conn, actor_user_id=user["id"], action="CASE_OUTCOME_SET",
-        object_type="case", object_id=case_id,
-        from_state=case["outcome"], to_state=body.outcome,
-        payload={"followed_recommendation": body.followed_recommendation},
-    )
-    steps.append(f"outcome {body.outcome}")
+    # 3. The verdict — proposed, not written (D93). It is training data (D13c)
+    # and, when it asks for a restriction, a customer-impacting action: a
+    # different lead has to decide it.
+    from ...cases import submissions as subs
 
-    # 4. Close, if they are allowed and asked.
+    rationale = (body.note or "").strip()
+    if len(rationale) < 20:
+        raise HTTPException(422, "a proposed outcome needs a rationale of at least 20 characters in `note`")
+    try:
+        submission = subs.submit(conn, case_id=case_id, user=user, proposed_outcome=body.outcome,
+                                 rationale=rationale, restrictions=[], expected_version=body.expected_case_version)
+    except subs.SubmissionError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
+    steps.append(f"{body.outcome} proposed, waiting for a lead who did not write it")
+
+    # 4. Close, if they are allowed, asked, and the gate is clear. A fresh
+    # submission is never approved yet, so this only closes a case whose
+    # approval already happened.
     closed = False
-    promoted: list[str] = []
+    blockers = subs.closure_blockers(conn, case_id)
     if body.close:
         if "cases:close" not in user["permissions"]:
             steps.append("left open — closing is a Fraud Ops Lead action")
+        elif blockers:
+            steps.append("left open — " + "; ".join(blockers))
         else:
-            if body.outcome == "CONFIRMED_FRAUD":
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO beneficiary_lists (kind, token, note, added_by)
-                        SELECT DISTINCT 'KNOWN_MULE'::beneficiary_list_kind, t.beneficiary_token,
-                               'auto: confirmed fraud on case ' || %s, %s
-                          FROM alerts a JOIN transactions t ON t.id = a.transaction_id
-                         WHERE a.case_id = %s AND t.beneficiary_token IS NOT NULL
-                        ON CONFLICT DO NOTHING
-                        RETURNING token
-                        """,
-                        (case_id, user["id"], case_id),
-                    )
-                    promoted = [
-                        (r["token"] if isinstance(r, dict) else r[0]) for r in cur.fetchall()
-                    ]
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE cases SET state = 'CLOSED', closed_at = now(), closed_by = %s "
-                    "WHERE id = %s",
+                    "UPDATE cases SET state = 'CLOSED', closed_at = now(), closed_by = %s WHERE id = %s",
                     (user["id"], case_id),
                 )
             chain.append(
                 conn, actor_user_id=user["id"], action="CASE_CLOSED",
                 object_type="case", object_id=case_id,
                 from_state="UNDER_REVIEW", to_state="CLOSED",
-                payload={"outcome": body.outcome, "known_mule_tokens_added": promoted},
+                payload={"outcome": body.outcome},
             )
             closed = True
             steps.append("closed")
 
     return {
         "case_id": case_id,
-        "outcome": body.outcome,
+        "outcome": None,
+        "proposed_outcome": body.outcome,
+        "submission": submission,
         "closed": closed,
-        "known_mule_tokens_added": promoted,
+        "blockers": blockers,
+        "known_mule_tokens_added": [],
         "steps": steps,
     }
 

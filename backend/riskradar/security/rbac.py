@@ -36,7 +36,9 @@ from enum import StrEnum
 class Permission(StrEnum):
     CASES_READ = "cases:read"
     CASES_REVIEW = "cases:review"          # move to UNDER_REVIEW, add notes
-    CASES_SET_OUTCOME = "cases:set_outcome"
+    # D93: an analyst *proposes* an outcome; a different lead decides it.
+    CASES_SUBMIT_OUTCOME = "cases:submit_outcome"
+    CASES_APPROVE_FRAUD = "cases:approve_fraud"
     CASES_CLOSE = "cases:close"
     CASES_REASSIGN = "cases:reassign"
     CASES_ESCALATE = "cases:escalate"
@@ -54,7 +56,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         {
             Permission.CASES_READ,
             Permission.CASES_REVIEW,
-            Permission.CASES_SET_OUTCOME,
+            Permission.CASES_SUBMIT_OUTCOME,
             Permission.CASES_ESCALATE,
         }
     ),
@@ -62,7 +64,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         {
             Permission.CASES_READ,
             Permission.CASES_REVIEW,
-            Permission.CASES_SET_OUTCOME,
+            # A lead may also propose — and may never decide their own (D93).
+            Permission.CASES_SUBMIT_OUTCOME,
+            Permission.CASES_APPROVE_FRAUD,
             Permission.CASES_ESCALATE,
             Permission.CASES_CLOSE,
             Permission.CASES_REASSIGN,

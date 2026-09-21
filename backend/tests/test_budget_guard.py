@@ -110,7 +110,7 @@ def test_over_budget_an_alert_waits_and_is_raised_when_there_is_room(client, api
 
             # Tomorrow's room, today: the waiting alert is raised and counted.
             c.execute("UPDATE alert_budget_days SET raised = 0, rule_raised = 0, model_raised = 0, "
-                      "hourly = array_fill(0, ARRAY[24]) WHERE day = %s", (day,))
+                      "released = 0, hourly = array_fill(0, ARRAY[24]) WHERE day = %s", (day,))
             c.execute("UPDATE alert_deferrals SET state = 'EXPIRED' WHERE state = 'WAITING' "
                       "AND decision_id <> (SELECT id FROM decisions WHERE transaction_id = %s)", (first,))
             done = scoring.release_deferred(c, scoring.system_user_id(c))
