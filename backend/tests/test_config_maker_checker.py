@@ -9,6 +9,8 @@ a rejection — so the suite never changes the live detection configuration.
 
 from __future__ import annotations
 
+import uuid
+
 import psycopg
 import pytest
 
@@ -233,3 +235,91 @@ def test_a_non_admin_cannot_propose_a_rule_change(client):
     login(client, "analyst@riskradar.local", "Analyst#2026")
     r = client.patch("/v1/admin/rules/VELOCITY_BURST_1H", json={"enabled": False, "rationale": RATIONALE})
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# D98: the same control on model promotion and the rule lists
+# ---------------------------------------------------------------------------
+
+
+def test_model_promotion_takes_two_administrators(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    inactive = conn.execute(
+        "SELECT id, version FROM model_versions WHERE NOT is_active ORDER BY id LIMIT 1"
+    ).fetchone()
+    if not inactive:
+        pytest.skip("no inactive model version to promote")
+    active_before = conn.execute("SELECT id FROM model_versions WHERE is_active").fetchone()["id"]
+
+    res = governance.propose(
+        conn, maker, change_type="MODEL_PROMOTE", target=str(inactive["id"]),
+        summary="promote the retrained model",
+        payload={"model_version_id": inactive["id"], "comparison": {}},
+        before_snapshot={}, rationale="promoting the retrained model for the test",
+    )
+    # Not promoted on proposal.
+    assert conn.execute("SELECT id FROM model_versions WHERE is_active").fetchone()["id"] == active_before
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, maker, request_id=res["request"]["id"], action="APPROVE")
+    assert exc.value.status_code == 403
+
+    governance.decide(conn, checker, request_id=res["request"]["id"], action="APPROVE")
+    now = conn.execute("SELECT id, promoted_by FROM model_versions WHERE is_active").fetchone()
+    assert now["id"] == inactive["id"]
+    assert now["promoted_by"] == checker["id"]
+
+
+def test_a_list_entry_is_added_only_on_approval(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    token = "tok-add-" + uuid.uuid4().hex[:12]
+    res = governance.propose(
+        conn, maker, change_type="LIST_ADD", target=token, summary="add SANCTIONED entry",
+        payload={"kind": "SANCTIONED", "token": token, "account_token": None, "note": "sanctioned test destination"},
+        before_snapshot={}, rationale="adding a sanctioned destination for the test",
+    )
+    assert conn.execute("SELECT count(*) AS n FROM beneficiary_lists WHERE token = %s", (token,)).fetchone()["n"] == 0
+    governance.decide(conn, checker, request_id=res["request"]["id"], action="APPROVE")
+    row = conn.execute("SELECT kind::text AS kind, added_by FROM beneficiary_lists WHERE token = %s", (token,)).fetchone()
+    assert row["kind"] == "SANCTIONED"
+    assert row["added_by"] == maker["id"]  # the proposer authored it
+
+
+def test_removing_a_list_entry_takes_two(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    token = "tok-rm-" + uuid.uuid4().hex[:12]
+    entry_id = conn.execute(
+        "INSERT INTO beneficiary_lists (kind, token, added_by) VALUES ('KNOWN_MULE', %s, %s) RETURNING id",
+        (token, maker["id"]),
+    ).fetchone()["id"]
+
+    res = governance.propose(
+        conn, maker, change_type="LIST_REMOVE", target=str(entry_id), summary=f"remove entry #{entry_id}",
+        payload={"entry_id": entry_id}, before_snapshot={"token": token},
+        rationale="removing a stale known-mule entry for the test",
+    )
+    # Still there until approved.
+    assert conn.execute("SELECT count(*) AS n FROM beneficiary_lists WHERE id = %s", (entry_id,)).fetchone()["n"] == 1
+    governance.decide(conn, checker, request_id=res["request"]["id"], action="APPROVE")
+    assert conn.execute("SELECT count(*) AS n FROM beneficiary_lists WHERE id = %s", (entry_id,)).fetchone()["n"] == 0
+
+
+def test_proposing_a_list_entry_over_http_is_pending(client):
+    login(client, "admin@riskradar.local", "Admin#2026")
+    proposed = client.post(
+        "/v1/admin/lists",
+        json={"kind": "SANCTIONED", "beneficiary_account_id": f"ACC{uuid.uuid4().hex[:10]}",
+              "note": "sanctioned destination proposed for the maker-checker test"},
+    )
+    assert proposed.status_code == 200, proposed.text
+    body = proposed.json()
+    assert body["status"] == "pending"
+    # A second administrator rejects it, so nothing is added and no pending row lingers.
+    login(client, "admin2@riskradar.local", "Admin#2026")
+    rejected = client.post(
+        f"/v1/admin/change-requests/{body['request']['id']}/decision",
+        json={"action": "REJECT", "reason": "test cleanup — not a real entry"},
+    )
+    assert rejected.status_code == 200 and rejected.json()["status"] == "rejected"

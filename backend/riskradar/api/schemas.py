@@ -574,6 +574,8 @@ class ListEntryIn(Strict):
 class PromoteModelIn(Strict):
     model_version_id: int
     comparison: dict | None = None
+    # D98: promotion is now maker-checker; the second administrator reads this.
+    reason: Annotated[str | None, Field(max_length=2000)] = None
 
 
 class BudgetConfigIn(Strict):

@@ -502,16 +502,32 @@ function PendingChanges() {
 function Models() {
   const { data, error, reload, setError } = useAsync(() => api.models())
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
 
+  async function propose(m) {
+    const reason = window.prompt('Why promote this model? A second administrator approves it (D98).')
+    if (!reason) return
+    setBusy(true); setNotice(null)
+    try {
+      const res = await api.promoteModel(m.id, reason)
+      if (res?.status === 'pending') {
+        setNotice(`Promotion of ${m.name}:${m.version} proposed (#${res.request.id}). It goes live once a different administrator approves it (Pending tab).`)
+      }
+      reload()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
   return (
     <>
       <Banner kind="info">
-        Promotion repoints a pointer and is audited with the comparison attached.
-        Rollback is repointing it back — not a redeploy.
+        Promotion repoints a pointer and is audited. It is <strong>proposed</strong> to a
+        second administrator and goes live only on approval (D98). Rollback is proposing the
+        previous version back — not a redeploy.
       </Banner>
+      {notice && <Banner kind="ok">{notice}</Banner>}
       {data.items.map((m) => {
         const held = m.metrics?.held_out?.incident_level
         return (
@@ -526,11 +542,7 @@ function Models() {
                 </div>
               </div>
               {!m.is_active && (
-                <button disabled={busy} onClick={async () => {
-                  setBusy(true)
-                  try { await api.promoteModel(m.id); reload() }
-                  catch (e) { setError(e.message) } finally { setBusy(false) }
-                }}>Promote</button>
+                <button disabled={busy} onClick={() => propose(m)}>Propose promotion</button>
               )}
             </div>
             {held && (
@@ -558,20 +570,57 @@ function Lists() {
   const { data, error, reload, setError } = useAsync(() => api.lists())
   const [form, setForm] = useState({ kind: 'SANCTIONED', beneficiary_account_id: '', account_id: '', note: '' })
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
+
+  async function add() {
+    if (!(form.note || '').trim()) {
+      setError('A reason (note) is required — a second administrator reads it before approving.')
+      return
+    }
+    setBusy(true); setNotice(null)
+    try {
+      const res = await api.addListEntry({
+        kind: form.kind,
+        beneficiary_account_id: form.beneficiary_account_id,
+        account_id: form.kind === 'ALLOWLIST' ? form.account_id : null,
+        note: form.note,
+      })
+      setForm({ ...form, beneficiary_account_id: '', account_id: '', note: '' })
+      if (res?.status === 'pending') {
+        setNotice(`Entry proposed (#${res.request.id}). It joins the list once a different administrator approves it (Pending tab).`)
+      }
+      reload()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  async function remove(entry) {
+    const reason = window.prompt('Why remove this entry? A second administrator approves it (D98).')
+    if (!reason) return
+    setBusy(true); setNotice(null)
+    try {
+      const res = await api.removeListEntry(entry.id, reason)
+      if (res?.status === 'pending') {
+        setNotice(`Removal proposed (#${res.request.id}). It is removed once a different administrator approves it (Pending tab).`)
+      }
+      reload()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
 
   return (
     <>
       <Banner kind="info">
         Entries are supplied as account numbers and stored as one-way HMAC tokens.
-        Risk Radar can check membership; it can never resolve an entry back to an
-        account.
+        Adding or removing one is <strong>proposed</strong> to a second administrator and
+        applied only on approval (D98). Risk Radar can check membership; it can never
+        resolve an entry back to an account.
       </Banner>
+      {notice && <Banner kind="ok">{notice}</Banner>}
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h2>Add an entry</h2>
+        <h2>Propose an entry</h2>
         <div className="row wrap">
           <select style={{ width: 180 }} value={form.kind}
                   onChange={(e) => setForm({ ...form, kind: e.target.value })}>
@@ -587,22 +636,10 @@ function Lists() {
                    value={form.account_id}
                    onChange={(e) => setForm({ ...form, account_id: e.target.value })} />
           )}
-          <input style={{ flex: 1, minWidth: 160 }} placeholder="Note"
+          <input style={{ flex: 1, minWidth: 160 }} placeholder="Reason (read by the approver)"
                  value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           <button className="primary" disabled={busy || !form.beneficiary_account_id}
-                  onClick={async () => {
-                    setBusy(true)
-                    try {
-                      await api.addListEntry({
-                        kind: form.kind,
-                        beneficiary_account_id: form.beneficiary_account_id,
-                        account_id: form.kind === 'ALLOWLIST' ? form.account_id : null,
-                        note: form.note || null,
-                      })
-                      setForm({ ...form, beneficiary_account_id: '', account_id: '', note: '' })
-                      reload()
-                    } catch (e) { setError(e.message) } finally { setBusy(false) }
-                  }}>Add</button>
+                  onClick={add}>Propose</button>
         </div>
       </div>
 
@@ -619,9 +656,7 @@ function Lists() {
                   <td className="muted">{e.note}</td>
                   <td className="muted">{when(e.added_at)}</td>
                   <td>
-                    <button className="danger" onClick={async () => {
-                      await api.removeListEntry(e.id); reload()
-                    }}>Remove</button>
+                    <button className="danger" disabled={busy} onClick={() => remove(e)}>Remove</button>
                   </td>
                 </tr>
               ))}

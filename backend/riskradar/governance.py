@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .audit import chain
+from .model import registry
 from .security.rbac import Permission
 
 # The permission a proposer must hold, and an approver must hold too — approval
@@ -29,6 +30,9 @@ from .security.rbac import Permission
 PERMISSION_FOR: dict[str, Permission] = {
     "RULE_UPDATE": Permission.ADMIN_RULES,
     "THRESHOLD_PUBLISH": Permission.ADMIN_THRESHOLDS,
+    "MODEL_PROMOTE": Permission.ADMIN_MODELS,          # D98
+    "LIST_ADD": Permission.ADMIN_LISTS,                # D98
+    "LIST_REMOVE": Permission.ADMIN_LISTS,             # D98
 }
 
 _REVIEW_INTERVAL = timedelta(days=90)
@@ -146,9 +150,73 @@ def _apply_threshold_publish(
     return version
 
 
+def _apply_model_promote(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> int:
+    """Repoint the active-model pointer (was admin.promote_model). Promotion is a
+    pointer move, audited, and now it takes a second administrator (D15b, D98).
+    The approver is recorded as who put it live; the proposer is on the request."""
+    model_version_id = payload["model_version_id"]
+    target = _rows(conn, "SELECT id, name, version FROM model_versions WHERE id = %s",
+                   (model_version_id,))
+    if not target:
+        raise _Conflict("model version not found")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE model_versions SET is_active = false WHERE is_active")
+        cur.execute(
+            "UPDATE model_versions SET is_active = true, promoted_at = now(), promoted_by = %s WHERE id = %s",
+            (approver["id"], model_version_id),
+        )
+    registry.invalidate_cache()
+    # applied_version is the numeric model id (the string semver would not fit an int).
+    return int(model_version_id)
+
+
+def _apply_list_add(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> int | None:
+    """Add a sanctions / known-mule / allowlist entry (was admin.add_list_entry).
+
+    The account was tokenised at proposal time (D9c), so the payload carries only
+    tokens. The proposer is recorded as who added it; the approver is on the
+    request and the audit."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO beneficiary_lists (kind, token, account_token, note, added_by)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            RETURNING id
+            """,
+            (payload["kind"], payload["token"], payload.get("account_token"),
+             payload.get("note"), proposer_id),
+        )
+        row = cur.fetchone()
+    if not row:
+        raise _Conflict("that entry is already on the list")
+    return int(row["id"] if isinstance(row, dict) else row[0])
+
+
+def _apply_list_remove(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> int:
+    """Remove a list entry (was admin.remove_list_entry). Removing a sanctions or
+    known-mule entry unprotects, so it too takes two administrators (D98)."""
+    entry_id = payload["entry_id"]
+    existing = _rows(conn, "SELECT id FROM beneficiary_lists WHERE id = %s", (entry_id,))
+    if not existing:
+        raise _Conflict("that entry is no longer on the list")
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM beneficiary_lists WHERE id = %s", (entry_id,))
+    return int(entry_id)
+
+
 _APPLIERS = {
     "RULE_UPDATE": _apply_rule_update,
     "THRESHOLD_PUBLISH": _apply_threshold_publish,
+    "MODEL_PROMOTE": _apply_model_promote,
+    "LIST_ADD": _apply_list_add,
+    "LIST_REMOVE": _apply_list_remove,
 }
 
 

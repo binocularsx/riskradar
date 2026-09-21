@@ -19,7 +19,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ... import governance
 from ...audit import chain
-from ...model import registry
 from ...security.passwords import hash_password, new_api_key, new_totp_secret, totp_uri
 from ...security.rbac import Permission, mfa_required
 from ...security.tokens import account_token, hash_api_key
@@ -293,53 +292,48 @@ def add_list_entry(
     """
     if body.kind == "ALLOWLIST" and not body.account_id:
         raise HTTPException(400, "ALLOWLIST entries are scoped to one account")
+    if not (body.note and body.note.strip()):
+        raise HTTPException(422, "a reason (note) is required to propose a list entry")
+    # Tokenise at proposal time (D9c): the change request never holds an account
+    # number, only the one-way tokens the list will hold.
     token = account_token(body.beneficiary_account_id)
     scope = account_token(body.account_id) if body.account_id else None
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO beneficiary_lists (kind, token, account_token, note, added_by)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-            RETURNING id
-            """,
-            (body.kind, token, scope, body.note, user["id"]),
+    summary = f"add {body.kind} entry" + (" (scoped)" if scope else "")
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="LIST_ADD", target=token, summary=summary,
+            payload={"kind": body.kind, "token": token, "account_token": scope, "note": body.note},
+            before_snapshot={"kind": body.kind, "scoped_to_account": bool(scope)},
+            rationale=body.note,
         )
-        row = cur.fetchone()
-
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="LIST_ENTRY_ADDED",
-        object_type="beneficiary_list",
-        object_id=body.kind,
-        to_state=token,
-        payload={"scoped_to_account": bool(scope), "note": body.note},
-    )
-    return {"id": (row["id"] if isinstance(row, dict) else row[0]) if row else None, "token": token}
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
 
 
 @router.delete("/lists/{entry_id}")
 def remove_list_entry(
     entry_id: int,
+    reason: str = Query(..., min_length=1, description="why the entry is being removed"),
     user: dict = Depends(requires(Permission.ADMIN_LISTS)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
+    """Propose removing a list entry (D98). Removing a sanctions or known-mule
+    entry unprotects, so a second administrator approves it."""
     existing = _rows(conn, "SELECT kind, token FROM beneficiary_lists WHERE id = %s", (entry_id,))
     if not existing:
         raise HTTPException(404, "not found")
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM beneficiary_lists WHERE id = %s", (entry_id,))
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="LIST_ENTRY_REMOVED",
-        object_type="beneficiary_list",
-        object_id=existing[0]["kind"],
-        from_state=existing[0]["token"],
-    )
-    return {"status": "deleted"}
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="LIST_REMOVE", target=str(entry_id),
+            summary=f"remove {existing[0]['kind']} entry #{entry_id}",
+            payload={"entry_id": entry_id},
+            before_snapshot={"kind": existing[0]["kind"], "token": existing[0]["token"]},
+            rationale=reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
 
 
 # ---------------------------------------------------------------------------
@@ -370,38 +364,32 @@ def promote_model(
     user: dict = Depends(requires(Permission.ADMIN_MODELS)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Promotion is repointing a pointer, audited, with the comparison attached.
-
-    Rollback is repointing it back — not a redeploy. ADMIN executes; the metrics
-    are the authority (D15b).
+    """Propose promoting a model (D98). Promotion repoints the active-model
+    pointer and changes the live scoring engine, so a *different* administrator
+    approves it; the metrics are still the authority (D15b). Rollback is
+    proposing the previous version back — not a redeploy.
     """
     target = _rows(
-        conn, "SELECT id, name, version, metrics FROM model_versions WHERE id = %s",
+        conn, "SELECT id, name, version FROM model_versions WHERE id = %s",
         (body.model_version_id,),
     )
     if not target:
         raise HTTPException(404, "model version not found")
-    previous = _rows(conn, "SELECT id, name, version FROM model_versions WHERE is_active")
-
-    with conn.cursor() as cur:
-        cur.execute("UPDATE model_versions SET is_active = false WHERE is_active")
-        cur.execute(
-            "UPDATE model_versions SET is_active = true, promoted_at = now(), promoted_by = %s WHERE id = %s",
-            (user["id"], body.model_version_id),
+    if not (body.reason and body.reason.strip()):
+        raise HTTPException(422, "a reason is required to propose a model promotion")
+    previous = _rows(conn, "SELECT name, version FROM model_versions WHERE is_active")
+    summary = (f"promote {target[0]['name']}:{target[0]['version']}"
+               + (f" over {previous[0]['name']}:{previous[0]['version']}" if previous else ""))
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="MODEL_PROMOTE", target=str(body.model_version_id), summary=summary,
+            payload={"model_version_id": body.model_version_id, "comparison": body.comparison or {}},
+            before_snapshot={"active": f"{previous[0]['name']}:{previous[0]['version']}" if previous else None},
+            rationale=body.reason,
         )
-    registry.invalidate_cache()
-
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="MODEL_PROMOTED",
-        object_type="model_version",
-        object_id=body.model_version_id,
-        from_state=f"{previous[0]['name']}:{previous[0]['version']}" if previous else None,
-        to_state=f"{target[0]['name']}:{target[0]['version']}",
-        payload={"comparison": body.comparison or {}, "metrics": target[0]["metrics"]},
-    )
-    return {"status": "promoted", "active": target[0]}
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
 
 
 # ---------------------------------------------------------------------------

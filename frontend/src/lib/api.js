@@ -129,10 +129,11 @@ export const api = {
   configChanges: (state) => get(`/v1/admin/change-requests${state ? `?state=${state}` : ''}`),
   decideConfigChange: (id, data) => post(`/v1/admin/change-requests/${id}/decision`, data),
   models: () => get('/v1/admin/models'),
-  promoteModel: (id) => post('/v1/admin/models/promote', { model_version_id: id }),
+  // D98: model promotion and list changes are now maker-checker (propose → approve).
+  promoteModel: (id, reason) => post('/v1/admin/models/promote', { model_version_id: id, reason }),
   lists: (kind) => get(`/v1/admin/lists${kind ? `?kind=${kind}` : ''}`),
   addListEntry: (data) => post('/v1/admin/lists', data),
-  removeListEntry: (id) => del(`/v1/admin/lists/${id}`),
+  removeListEntry: (id, reason) => del(`/v1/admin/lists/${id}?reason=${encodeURIComponent(reason)}`),
   enforcementPolicy: () => get('/v1/admin/enforcement-policy'),
   directiveMetrics: (days = 7) => get(`/v1/metrics/directives?days=${days}`),
   audit: (params) => get(`/v1/admin/audit?${new URLSearchParams(params || {})}`),
