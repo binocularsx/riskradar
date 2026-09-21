@@ -19,46 +19,44 @@
  */
 
 :root {
-  /* Ground: near-black with a blue-steel bias, lifted in three steps. */
-  --bg:          #0a0e14;
-  --bg-2:        #0e141d;
-  --surface:     #141c28;
-  --surface-2:   #1b2533;
-  --surface-3:   #22303f;
-  --line:        #1f2a38;
-  --line-2:      #2c3d50;
+  color-scheme: light;
+  /* Ground: warm-neutral light (Risk Intelligence design), lifted in steps. */
+  --bg:          #f6f7f9;   /* page */
+  --bg-2:        #fbfbfc;   /* sidebar, topbar, subtle insets */
+  --surface:     #ffffff;   /* cards */
+  --surface-2:   #f3f4f6;   /* raised fill and hover */
+  --surface-3:   #e9ebef;   /* pressed / segmented-on */
+  --line:        #e5e7eb;   /* hairline */
+  --line-2:      #d3d6db;   /* stronger border */
 
-  --text:        #eef3f9;
-  --text-2:      #94a6bb;
-  --text-3:      #61748a;
+  --text:        #111827;   /* primary */
+  --text-2:      #4b5563;   /* secondary */
+  --text-3:      #9ca3af;   /* muted */
 
-  --accent:      #4da3ff;
-  --accent-2:    #7cc0ff;
-  --accent-dim:  #12283f;
+  --accent:      #e04403;   /* brand orange */
+  --accent-2:    #f2683a;   /* lifted */
+  --accent-dim:  #fdeee7;   /* faint orange wash */
 
-  /* Semantic risk ramp — the only saturated colour on the page. */
-  /* Validated with the dataviz palette checker against --bg: every adjacent
-     pair stays apart for colour-blind readers (worst difference 15.2), and
-     every level is also written as a word, never shown by colour alone. */
-  --low:         #3f9f6a;
-  --medium:      #ddc24e;
-  --high:        #e2692c;
-  --critical:    #b93b6a;
-  --critical-text: #e07aa1;  /* the critical hue lifted for small text */
+  /* Semantic risk ramp — the design's badge colours; still never colour alone. */
+  --low:         #059669;   /* green */
+  --medium:      #d97706;   /* amber */
+  --high:        #ea580c;   /* deep orange */
+  --critical:    #dc2626;   /* red */
+  --critical-text: #b91c1c; /* red for small text on a light ground */
 
-  --ok:          #2fbf71;
-  --warn:        #f0b429;
-  --danger:      #f2555a;
+  --ok:          #059669;
+  --warn:        #d97706;
+  --danger:      #dc2626;
 
-  --r:           18px;
-  --r-md:        12px;
+  --r:           12px;
+  --r-md:        10px;
   --r-sm:        8px;
 
-  --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.65);
-  --shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 18px 44px -18px rgba(0,0,0,.8);
+  --shadow:      0 1px 2px rgba(17,24,39,.05), 0 4px 16px -10px rgba(17,24,39,.14);
+  --shadow-lift: 0 2px 6px rgba(17,24,39,.08), 0 16px 40px -18px rgba(17,24,39,.22);
 
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  --sans: Onest, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -66,7 +64,7 @@
 body {
   margin: 0;
   font-family: var(--sans);
-  background: radial-gradient(1200px 520px at 70% -12%, #13304f 0%, var(--bg) 58%) fixed, var(--bg);
+  background: radial-gradient(1200px 560px at 78% -18%, #ffffff 0%, var(--bg) 60%) fixed, var(--bg);
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
@@ -90,14 +88,14 @@ button {
   transition: background .14s ease, border-color .14s ease, transform .08s ease;
   white-space: nowrap;
 }
-button:hover:not(:disabled) { background: var(--surface-3); border-color: #3a5170; }
+button:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-2); }
 button:active:not(:disabled) { transform: translateY(1px); }
-button:disabled { opacity: .35; cursor: not-allowed; }
+button:disabled { opacity: .45; cursor: not-allowed; }
 
 button.primary {
   background: linear-gradient(180deg, var(--accent-2), var(--accent));
-  border-color: transparent; color: #06101d; font-weight: 650;
-  box-shadow: 0 6px 18px -8px rgba(77,163,255,.8);
+  border-color: transparent; color: #ffffff; font-weight: 650;
+  box-shadow: 0 6px 16px -8px rgba(224,68,3,.55);
 }
 button.primary:hover:not(:disabled) { filter: brightness(1.06); }
 button.big { padding: 12px 22px; font-size: 14.5px; }
@@ -105,12 +103,12 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 button.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 
 /* Disposition buttons are filled, because they are the point of the screen. */
-button.confirm { background: rgba(242,85,90,.14); border-color: rgba(242,85,90,.45); color: #ffb0b2; font-weight: 600; }
-button.confirm:hover:not(:disabled) { background: rgba(242,85,90,.24); border-color: rgba(242,85,90,.7); }
-button.dismiss { background: rgba(47,191,113,.13); border-color: rgba(47,191,113,.45); color: #8ee7b6; font-weight: 600; }
-button.dismiss:hover:not(:disabled) { background: rgba(47,191,113,.22); border-color: rgba(47,191,113,.7); }
-button.unsure  { background: rgba(240,180,41,.12); border-color: rgba(240,180,41,.42); color: #f3d489; font-weight: 600; }
-button.unsure:hover:not(:disabled)  { background: rgba(240,180,41,.2); border-color: rgba(240,180,41,.68); }
+button.confirm { background: color-mix(in srgb, var(--danger) 10%, #fff); border-color: color-mix(in srgb, var(--danger) 40%, transparent); color: var(--danger); font-weight: 600; }
+button.confirm:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 16%, #fff); border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
+button.dismiss { background: color-mix(in srgb, var(--ok) 10%, #fff); border-color: color-mix(in srgb, var(--ok) 40%, transparent); color: var(--ok); font-weight: 600; }
+button.dismiss:hover:not(:disabled) { background: color-mix(in srgb, var(--ok) 16%, #fff); border-color: color-mix(in srgb, var(--ok) 60%, transparent); }
+button.unsure  { background: color-mix(in srgb, var(--warn) 12%, #fff); border-color: color-mix(in srgb, var(--warn) 42%, transparent); color: #b45309; font-weight: 600; }
+button.unsure:hover:not(:disabled)  { background: color-mix(in srgb, var(--warn) 18%, #fff); border-color: color-mix(in srgb, var(--warn) 62%, transparent); }
 
 /* Segmented pill group, from reference 1's period selector. */
 .segmented { display: inline-flex; flex-wrap: wrap; max-width: 100%; background: var(--bg-2); border: 1px solid var(--line);
@@ -124,8 +122,8 @@ button.unsure:hover:not(:disabled)  { background: rgba(240,180,41,.2); border-co
 
 kbd {
   font-family: var(--mono); font-size: 10px;
-  background: rgba(255,255,255,.08); border: 1px solid var(--line-2);
-  border-radius: 4px; padding: 2px 6px; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  border-radius: 4px; padding: 2px 6px; color: var(--text-2);
 }
 
 input, select, textarea {
@@ -217,16 +215,17 @@ h3 { font-size: 10.5px; margin: 0 0 12px; font-weight: 650; color: var(--text-3)
 .deskstat.money .badge { background: rgba(47,191,113,.14); color: var(--low); }
 
 /* The one figure that matters on a screen lives inside a filled block. */
-.deskstat.hero { background: linear-gradient(145deg, #2a78cf, #173a63 78%); border-color: #3b7fd0; }
-.deskstat.hero .badge { background: rgba(255,255,255,.16); color: #fff; }
-.deskstat.hero .k, .deskstat.hero .dim { color: #cfe3fb; }
+.deskstat.hero { background: linear-gradient(145deg, var(--accent-2), var(--accent) 82%); border-color: transparent; color: #fff; }
+.deskstat.hero .v { color: #fff; }
+.deskstat.hero .badge { background: rgba(255,255,255,.22); color: #fff; }
+.deskstat.hero .k, .deskstat.hero .dim { color: #ffe1d3; }
 
 /* Hand-drawn SVG charts share one tooltip style. */
 .chart { position: relative; }
 .chart svg { display: block; width: 100%; height: auto; }
-.chart-tip { position: absolute; pointer-events: none; background: #eef4fb; color: #0a121c;
-             border-radius: 10px; padding: 7px 10px; font-size: 12px; line-height: 1.35;
-             box-shadow: 0 8px 24px rgba(0,0,0,.45); white-space: nowrap;
+.chart-tip { position: absolute; pointer-events: none; background: #111827; color: #f9fafb;
+             border-radius: 8px; padding: 7px 10px; font-size: 12px; line-height: 1.35;
+             box-shadow: 0 8px 24px rgba(17,24,39,.25); white-space: nowrap;
              transform: translate(-50%, -115%); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-2); margin-top: 8px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -280,17 +279,17 @@ h3 { font-size: 10.5px; margin: 0 0 12px; font-weight: 650; color: var(--text-3)
 /* The single most important element. A filled card, not a hint. */
 .recommend {
   border-radius: var(--r); padding: 20px 22px; margin-bottom: 18px;
-  border: 1px solid var(--line-2);
-  background: linear-gradient(135deg, rgba(77,163,255,.16), rgba(77,163,255,.03) 62%);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, #fff), #fff 66%);
   box-shadow: var(--shadow);
 }
 .recommend.now {
-  border-color: rgba(242,85,90,.42);
-  background: linear-gradient(135deg, rgba(242,85,90,.2), rgba(242,85,90,.03) 62%);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 12%, #fff), #fff 66%);
 }
 .recommend.soon {
-  border-color: rgba(240,180,41,.4);
-  background: linear-gradient(135deg, rgba(240,180,41,.17), rgba(240,180,41,.03) 62%);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--warn) 13%, #fff), #fff 66%);
 }
 .recommend .k { font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
                 color: var(--text-2); margin-bottom: 7px; }
@@ -378,10 +377,96 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .evidence { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
 .timeline-row.alerted { background: color-mix(in srgb, var(--critical) 9%, transparent); }
 
-.login-wrap { display: grid; place-items: center; min-height: 100vh; padding: 20px;
-              background: radial-gradient(1100px 620px at 50% -10%, #16324f 0%, var(--bg) 62%); }
-.login-card { width: 100%; max-width: 396px; }
 .field { margin-bottom: 14px; }
+
+/* ============================ Risk Intelligence login (Figma 12:5397) ====== */
+.auth { min-height: 100vh; display: flex; flex-direction: column;
+        background: radial-gradient(1200px 700px at 50% -18%, color-mix(in srgb, var(--accent) 6%, #fff), var(--bg) 62%); }
+.logo-tile { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+             background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff;
+             font-weight: 800; font-size: 15px; box-shadow: 0 4px 12px -4px rgba(224,68,3,.5); }
+.auth-top { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 16px 28px; }
+.auth-brand { display: flex; align-items: center; gap: 10px; }
+.auth-word { font-weight: 680; font-size: 15px; letter-spacing: -.01em; }
+.auth-inst { font-size: 9px; font-weight: 700; letter-spacing: .16em; color: var(--text-3);
+             border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 7px; }
+.auth-status { display: flex; align-items: center; gap: 16px; font-size: 11.5px; }
+
+/* The two panels sit in one rounded, elevated card. */
+.auth-body {
+  align-self: center; width: min(1080px, 100%); margin: 8px auto 22px;
+  display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: var(--shadow-lift); overflow: hidden;
+}
+.auth-panel { min-width: 0; }
+.auth-signin { padding: 40px 44px; }
+.auth-stream { padding: 26px 28px; background: #fcfcfd; border-left: 1px solid var(--line); }
+
+.auth-h1 { font-size: 26px; font-weight: 680; letter-spacing: -.025em; margin: 0; }
+.auth-sub { color: var(--text-2); font-size: 14px; margin: 6px 0 24px; }
+.auth-error { background: color-mix(in srgb, var(--danger) 9%, #fff); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+              color: var(--danger); border-radius: var(--r-sm); padding: 10px 13px; font-size: 13px; margin-bottom: 16px; }
+.auth-note { background: var(--accent-dim); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+             color: var(--accent); border-radius: var(--r-sm); padding: 10px 13px; font-size: 13px; margin-bottom: 16px; }
+.auth-row { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 18px; font-size: 13px; }
+.checkline { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2);
+             text-transform: none; letter-spacing: 0; font-size: 13px; margin: 0; }
+.checkline input { width: auto; accent-color: var(--accent); }
+.auth-submit { width: 100%; justify-content: center; padding: 12px 18px; font-size: 14.5px; }
+.auth-submit .arr { font-weight: 400; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--text-3); font-size: 11px; letter-spacing: .1em; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.auth-sso { width: 100%; justify-content: center; background: var(--surface); color: var(--text);
+            border-color: var(--line-2); padding: 11px 18px; }
+.ms-glyph { display: inline-grid; grid-template-columns: 7px 7px; gap: 2px; }
+.ms-glyph i { width: 7px; height: 7px; display: block; }
+.ms-glyph i:nth-child(1){ background:#f25022 } .ms-glyph i:nth-child(2){ background:#7fba00 }
+.ms-glyph i:nth-child(3){ background:#00a4ef } .ms-glyph i:nth-child(4){ background:#ffb900 }
+.auth-legal { color: var(--text-3); font-size: 11px; line-height: 1.5; margin: 22px 0 0; }
+.auth-back { width: 100%; justify-content: center; margin-top: 10px; }
+
+.code-boxes { display: flex; gap: 10px; }
+.code-box { width: 100%; text-align: center; font-size: 22px; font-family: var(--mono); padding: 12px 0;
+            letter-spacing: 0; }
+
+/* stream panel */
+.stream-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.stream-title { display: flex; align-items: center; gap: 8px; font-weight: 620; font-size: 14px; }
+.stream-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.stream-stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px 13px; }
+.stream-stat .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--text-3); }
+.stream-stat .v { font-size: 18px; font-weight: 680; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.stream-stat .n { font-size: 10.5px; color: var(--low); margin-top: 2px; }
+.stream-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.stream-row { display: flex; justify-content: space-between; gap: 12px; align-items: center;
+              background: var(--surface); border: 1px solid var(--line); border-left-width: 3px;
+              border-radius: var(--r-sm); padding: 11px 13px; }
+.stream-row.critical { border-left-color: var(--critical); }
+.stream-row.medium   { border-left-color: var(--medium); }
+.stream-row.ok       { border-left-color: var(--low); }
+.stream-row-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 560; }
+.stream-row-meta { font-size: 11px; margin-top: 5px; }
+.stream-row-score { text-align: right; white-space: nowrap; }
+.stream-row-score .score { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.stream-chart { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px 15px; }
+.h3-inline { font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-3); font-weight: 650; }
+.tdist { display: flex; align-items: flex-end; gap: 3px; height: 84px; }
+.tbar { flex: 1; background: color-mix(in srgb, var(--accent) 22%, #fff); border-radius: 2px 2px 0 0; min-height: 3px; }
+.tbar.anomaly { background: var(--accent); }
+.tdist-axis { display: flex; justify-content: space-between; font-size: 9.5px; margin-top: 6px; }
+
+.auth-foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+             padding: 16px 28px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-3); }
+.auth-foot-links { display: flex; gap: 18px; }
+.auth-foot-links a { color: var(--text-2); }
+
+@media (max-width: 940px) {
+  .auth-body { grid-template-columns: 1fr; width: min(440px, 100%); }
+  .auth-stream { display: none; }
+  .auth-signin { padding: 32px 28px; }
+}
 
 .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg-2);
         border: 1px solid var(--line); border-radius: 999px; padding: 4px; width: fit-content; }
@@ -441,7 +526,7 @@ tr.flagged td { background: color-mix(in srgb, var(--high) 7%, transparent); }
 .stagebar .stage.done { color: var(--text-2); }
 .stagebar .stage.done .dot { background: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
 .stagebar .stage.current { color: var(--text); border-color: var(--accent); background: var(--accent-dim); }
-.stagebar .stage.current .dot { background: var(--accent); color: #04121f; }
+.stagebar .stage.current .dot { background: var(--accent); color: #fff; }
 .caseflow .next { margin: 12px 0 0; font-size: 13.5px; }
 .escalation-note { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm); font-size: 12.5px;
                    background: color-mix(in srgb, var(--warn) 9%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
@@ -484,4 +569,4 @@ tr.flagged td { background: color-mix(in srgb, var(--high) 7%, transparent); }
 .badge-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2);
               text-decoration: none; }
 .badge-chip.warn { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); }
-.badge-chip.danger { border-color: color-mix(in srgb, var(--danger) 55%, transparent); color: #ffb0b2; }
+.badge-chip.danger { border-color: color-mix(in srgb, var(--danger) 55%, transparent); color: var(--danger); }
