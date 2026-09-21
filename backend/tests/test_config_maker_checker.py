@@ -9,6 +9,7 @@ a rejection — so the suite never changes the live detection configuration.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import psycopg
@@ -323,3 +324,83 @@ def test_proposing_a_list_entry_over_http_is_pending(client):
         json={"action": "REJECT", "reason": "test cleanup — not a real entry"},
     )
     assert rejected.status_code == 200 and rejected.json()["status"] == "rejected"
+
+
+# ---------------------------------------------------------------------------
+# D99: creating a user, with the credential handled carefully
+# ---------------------------------------------------------------------------
+
+
+def test_creating_a_user_takes_two_administrators(conn):
+    from riskradar.security.passwords import hash_password
+
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    email = f"newuser_{uuid.uuid4().hex[:10]}@riskradar.local"
+
+    res = governance.propose(
+        conn, maker, change_type="USER_CREATE", target=email.lower(),
+        summary=f"create ANALYST {email}",
+        payload={"email": email, "display_name": "New Analyst", "role": "ANALYST",
+                 "password_hash": hash_password("Secret#2026")},
+        before_snapshot={"role": "ANALYST"}, rationale="onboarding a new analyst for the test",
+    )
+    request_id = res["request"]["id"]
+    # No account exists on proposal.
+    assert conn.execute("SELECT count(*) AS n FROM users WHERE email = %s", (email,)).fetchone()["n"] == 0
+
+    # The request holds a hash, never the plaintext password (D99).
+    payload = conn.execute(
+        "SELECT payload FROM config_change_requests WHERE id = %s", (request_id,)
+    ).fetchone()["payload"]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    assert payload["password_hash"].startswith("$argon2")
+    assert "Secret#2026" not in json.dumps(payload)
+
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, maker, request_id=request_id, action="APPROVE")
+    assert exc.value.status_code == 403
+
+    out = governance.decide(conn, checker, request_id=request_id, action="APPROVE")
+    assert out["status"] == "approved"
+    # The provisioning URI comes back once, to the approver.
+    assert out["totp_uri"].startswith("otpauth://")
+
+    row = conn.execute(
+        "SELECT role::text AS role, password_hash, totp_secret, totp_enabled FROM users WHERE email = %s",
+        (email,),
+    ).fetchone()
+    assert row["role"] == "ANALYST"
+    assert row["password_hash"].startswith("$argon2")   # a hash, from the request
+    assert row["totp_secret"] and row["totp_enabled"]   # the secret was minted at approval
+
+
+def test_a_non_admin_cannot_propose_a_user(client):
+    login(client, "lead@riskradar.local", "OpsLead#2026")
+    r = client.post("/v1/admin/users", params={
+        "email": f"x_{uuid.uuid4().hex[:8]}@riskradar.local", "display_name": "X",
+        "role": "ANALYST", "password": "Passw0rd#2026", "reason": "a sufficiently long reason",
+    })
+    assert r.status_code == 403
+
+
+def test_proposing_a_user_over_http_is_pending(client):
+    login(client, "admin@riskradar.local", "Admin#2026")
+    email = f"proposed_{uuid.uuid4().hex[:8]}@riskradar.local"
+    proposed = client.post("/v1/admin/users", params={
+        "email": email, "display_name": "Proposed User", "role": "ANALYST",
+        "password": "Passw0rd#2026", "reason": "onboarding a proposed analyst for the test",
+    })
+    assert proposed.status_code == 200, proposed.text
+    body = proposed.json()
+    assert body["status"] == "pending"
+    # The proposer never received a TOTP URI — it is minted only on approval.
+    assert "totp_uri" not in body
+    # A second admin rejects, so no account is created.
+    login(client, "admin2@riskradar.local", "Admin#2026")
+    rejected = client.post(
+        f"/v1/admin/change-requests/{body['request']['id']}/decision",
+        json={"action": "REJECT", "reason": "test cleanup — not a real user"},
+    )
+    assert rejected.status_code == 200

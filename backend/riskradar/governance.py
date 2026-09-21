@@ -23,6 +23,7 @@ from typing import Any
 
 from .audit import chain
 from .model import registry
+from .security.passwords import new_totp_secret, totp_uri
 from .security.rbac import Permission
 
 # The permission a proposer must hold, and an approver must hold too — approval
@@ -33,7 +34,12 @@ PERMISSION_FOR: dict[str, Permission] = {
     "MODEL_PROMOTE": Permission.ADMIN_MODELS,          # D98
     "LIST_ADD": Permission.ADMIN_LISTS,                # D98
     "LIST_REMOVE": Permission.ADMIN_LISTS,             # D98
+    "USER_CREATE": Permission.ADMIN_USERS,             # D99
 }
+
+# An applier returns ``(applied_version, extra)``: the version/id the change
+# produced (stored on the request), and any one-time material the approver needs
+# back but which is never stored — a new user's TOTP provisioning URI (D99).
 
 _REVIEW_INTERVAL = timedelta(days=90)
 
@@ -123,7 +129,7 @@ def _apply_rule_update(
                 (new_id, rule["code"], rule["power"], severity, enabled, json.dumps(params or {}),
                  owner, rule_rationale, approved_by, approved_at, next_review_at),
             )
-    return new_version
+    return new_version, {}
 
 
 def _apply_threshold_publish(
@@ -147,7 +153,7 @@ def _apply_threshold_publish(
             (version, p_monitor, p_review, p_hold, payload["alert_min_level"],
              payload.get("notes") or rationale, proposer_id),
         )
-    return version
+    return version, {}
 
 
 def _apply_model_promote(
@@ -169,7 +175,7 @@ def _apply_model_promote(
         )
     registry.invalidate_cache()
     # applied_version is the numeric model id (the string semver would not fit an int).
-    return int(model_version_id)
+    return int(model_version_id), {}
 
 
 def _apply_list_add(
@@ -194,7 +200,7 @@ def _apply_list_add(
         row = cur.fetchone()
     if not row:
         raise _Conflict("that entry is already on the list")
-    return int(row["id"] if isinstance(row, dict) else row[0])
+    return int(row["id"] if isinstance(row, dict) else row[0]), {}
 
 
 def _apply_list_remove(
@@ -208,7 +214,35 @@ def _apply_list_remove(
         raise _Conflict("that entry is no longer on the list")
     with conn.cursor() as cur:
         cur.execute("DELETE FROM beneficiary_lists WHERE id = %s", (entry_id,))
-    return int(entry_id)
+    return int(entry_id), {}
+
+
+def _apply_user_create(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Create the user (was admin.create_user), on a second administrator's
+    approval (D99). The password was hashed at proposal time, so no plaintext was
+    ever stored; the TOTP secret is generated *here*, at approval, so no
+    authenticator secret sits in the change-request payload. The provisioning URI
+    is returned once to the approver and stored nowhere it can be read again."""
+    # Check first rather than catching a unique violation: a caught constraint
+    # error would leave the transaction aborted and fail the rest of decide().
+    if _rows(conn, "SELECT 1 FROM users WHERE lower(email) = lower(%s)", (payload["email"],)):
+        raise _Conflict("a user with that email already exists")
+    secret = new_totp_secret()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO users (email, display_name, password_hash, role, totp_secret, totp_enabled)
+            VALUES (%s, %s, %s, %s, %s, true)
+            RETURNING id
+            """,
+            (payload["email"], payload["display_name"], payload["password_hash"],
+             payload["role"], secret),
+        )
+        row = cur.fetchone()
+    uid = int(row["id"] if isinstance(row, dict) else row[0])
+    return uid, {"user_id": uid, "totp_uri": totp_uri(secret, payload["email"])}
 
 
 _APPLIERS = {
@@ -217,6 +251,7 @@ _APPLIERS = {
     "MODEL_PROMOTE": _apply_model_promote,
     "LIST_ADD": _apply_list_add,
     "LIST_REMOVE": _apply_list_remove,
+    "USER_CREATE": _apply_user_create,
 }
 
 
@@ -356,12 +391,13 @@ def decide(
 
     now = datetime.now(timezone.utc)
     applied_version: int | None = None
+    extra: dict[str, Any] = {}
     if action == "APPROVE":
         payload = request["payload"]
         if isinstance(payload, str):
             payload = json.loads(payload)
         try:
-            applied_version = _APPLIERS[request["change_type"]](
+            applied_version, extra = _APPLIERS[request["change_type"]](
                 conn, request["proposed_by"], actor, request["rationale"], payload
             )
         except _Conflict as exc:
@@ -395,4 +431,4 @@ def decide(
             "reason": reason,
         },
     )
-    return {"status": new_state.lower(), "applied_version": applied_version}
+    return {"status": new_state.lower(), "applied_version": applied_version, **extra}

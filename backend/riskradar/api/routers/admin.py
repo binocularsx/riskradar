@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ... import governance
 from ...audit import chain
-from ...security.passwords import hash_password, new_api_key, new_totp_secret, totp_uri
+from ...security.passwords import hash_password, new_api_key
 from ...security.rbac import Permission, mfa_required
 from ...security.tokens import account_token, hash_api_key
 from ..deps import current_user, get_conn, requires
@@ -419,37 +419,35 @@ def create_user(
     display_name: str,
     role: str,
     password: str,
+    reason: str,
     user: dict = Depends(requires(Permission.ADMIN_USERS)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
+    """Propose a new user (D99). A *different* administrator approves it, and only
+    then does the account exist — creating an ADMIN is privilege escalation and
+    should never be one person's act.
+
+    The password is hashed here, at proposal time, so no plaintext is ever
+    stored; the TOTP secret is generated at approval, so no authenticator secret
+    waits in the change-request payload. The provisioning URI comes back to the
+    approver.
+    """
     if role not in ("ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"):
         raise HTTPException(400, "invalid role")
-    secret = new_totp_secret()
-    # D12a: mandatory for leads and admins, default-on for analysts. So: on.
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO users (email, display_name, password_hash, role, totp_secret, totp_enabled)
-            VALUES (%s, %s, %s, %s, %s, true)
-            RETURNING id
-            """,
-            (email, display_name, hash_password(password), role, secret),
+    if _rows(conn, "SELECT 1 FROM users WHERE lower(email) = lower(%s)", (email,)):
+        raise HTTPException(409, "a user with that email already exists")
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_CREATE", target=email.lower(),
+            summary=f"create {role} {email}",
+            payload={"email": email, "display_name": display_name, "role": role,
+                     "password_hash": hash_password(password)},
+            before_snapshot={"role": role, "mfa_required": mfa_required(role)},
+            rationale=reason,
         )
-        row = cur.fetchone()
-        uid = int(row["id"] if isinstance(row, dict) else row[0])
-
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="USER_CREATED",
-        object_type="user",
-        object_id=uid,
-        to_state=role,
-        payload={"email": email, "mfa_required": mfa_required(role)},
-    )
-    # The secret is returned exactly once, at creation, and never stored anywhere
-    # the admin can read it again.
-    return {"id": uid, "totp_uri": totp_uri(secret, email)}
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
 
 
 @router.post("/api-keys")

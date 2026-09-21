@@ -440,6 +440,7 @@ function PendingChanges() {
   const { data, error, reload, setError } = useAsync(() =>
     Promise.all([api.configChanges('PENDING'), api.me()]))
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
@@ -451,9 +452,14 @@ function PendingChanges() {
       reason = window.prompt(`Reason to ${action.toLowerCase()} this change:`)
       if (!reason) return
     }
-    setBusy(true)
+    setBusy(true); setNotice(null)
     try {
-      await api.decideConfigChange(req.id, { action, reason })
+      const res = await api.decideConfigChange(req.id, { action, reason })
+      // D99: a created user's TOTP provisioning URI is returned once, here, to
+      // the approver — it is stored nowhere it can be read again. Hand it over.
+      if (res?.totp_uri) {
+        setNotice(`User created. Give them this authenticator setup (shown once): ${res.totp_uri}`)
+      }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -461,10 +467,11 @@ function PendingChanges() {
   return (
     <>
       <Banner kind="info">
-        Changes to rules and thresholds are proposed by one administrator and
-        approved by another (D96). Even the account that tunes detection cannot
-        tune it alone.
+        Changes to detection and to accounts are proposed by one administrator and
+        approved by another (D96, D98, D99). Even the account that tunes detection
+        cannot tune it alone.
       </Banner>
+      {notice && <Banner kind="ok"><span style={{ wordBreak: 'break-all' }}>{notice}</span></Banner>}
       {!pending.items.length && <Empty>No changes awaiting approval.</Empty>}
       {pending.items.map((r) => {
         const mine = r.proposed_by_id === me.id
