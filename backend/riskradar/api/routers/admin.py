@@ -13,23 +13,20 @@ work they shape.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ... import governance
 from ...audit import chain
 from ...model import registry
 from ...security.passwords import hash_password, new_api_key, new_totp_secret, totp_uri
 from ...security.rbac import Permission, mfa_required
 from ...security.tokens import account_token, hash_api_key
-from ..deps import get_conn, requires
-from ..schemas import ListEntryIn, PromoteModelIn, RuleUpdateIn, ThresholdsIn
+from ..deps import current_user, get_conn, requires
+from ..schemas import ConfigDecisionIn, ListEntryIn, PromoteModelIn, RuleUpdateIn, ThresholdsIn
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
-
-# D69e: a rule changed with a stated reason is due for review again in 90 days.
-REVIEW_INTERVAL = timedelta(days=90)
 
 
 def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
@@ -90,99 +87,68 @@ def update_rule(
     user: dict = Depends(requires(Permission.ADMIN_RULES)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Enable, disable or retune a rule without a code change.
+    """Propose a rule change (D96). A *different* administrator approves it, and
+    only then is a new ruleset version published.
 
-    The change is versioned by creating a new ruleset rather than editing the
-    active one in place: decisions record the ruleset version that applied
-    (FR-042), and mutating a version that decisions already point at would make
-    those decisions unreproducible — quietly, and only discoverably months later.
+    Until D96 this applied the change directly, and `approved_by` recorded the
+    one person who made it (D69e). Enabling, disabling or retuning a rule changes
+    how sensitive detection is, so it now takes two administrators — the same
+    maker-checker as a fraud finding (D93). The change is still versioned rather
+    than edited in place (FR-042); that just happens on approval.
     """
     active = _rows(conn, "SELECT id, version FROM rulesets WHERE is_active LIMIT 1")
     if not active:
         raise HTTPException(500, "no active ruleset")
-    old = _rows(
-        conn,
-        """
-        SELECT code, power, severity, enabled, params,
-               owner, rationale, approved_by, approved_at, next_review_at
-          FROM rule_configs WHERE ruleset_id = %s
-        """,
-        (active[0]["id"],),
+    current = next(
+        (
+            r
+            for r in _rows(
+                conn,
+                "SELECT code, power, severity, enabled, params FROM rule_configs WHERE ruleset_id = %s",
+                (active[0]["id"],),
+            )
+            if r["code"] == code
+        ),
+        None,
     )
-    current = next((r for r in old if r["code"] == code), None)
     if not current:
         raise HTTPException(404, f"unknown rule {code}")
+    if not (body.rationale and body.rationale.strip()):
+        raise HTTPException(422, "a rationale is required to propose a rule change")
 
-    new_version = active[0]["version"] + 1
-    with conn.cursor() as cur:
-        cur.execute("UPDATE rulesets SET is_active = false WHERE is_active")
-        cur.execute(
-            """
-            INSERT INTO rulesets (version, notes, created_by, is_active)
-            VALUES (%s, %s, %s, true) RETURNING id
-            """,
-            (new_version, f"{code} updated by {user['email']}", user["id"]),
-        )
-        row = cur.fetchone()
-        new_id = int(row["id"] if isinstance(row, dict) else row[0])
+    changes = []
+    if body.enabled is not None and body.enabled != current["enabled"]:
+        changes.append("enable" if body.enabled else "disable")
+    if body.params is not None:
+        changes.append("retune " + ", ".join(body.params))
+    if body.severity is not None:
+        changes.append(f"severity → {body.severity}")
+    summary = f"{code}: " + ("; ".join(changes) if changes else "no-op") + f" (ruleset v{active[0]['version']})"
 
-        for rule in old:
-            params = rule["params"]
-            if isinstance(params, str):
-                params = json.loads(params)
-            enabled = rule["enabled"]
-            severity = rule["severity"]
-            # Governance travels with every version (D69e), so an unchanged
-            # rule keeps its owner and review date across unrelated edits.
-            owner, rationale = rule["owner"], rule["rationale"]
-            approved_by, approved_at = rule["approved_by"], rule["approved_at"]
-            next_review_at = rule["next_review_at"]
-            if rule["code"] == code:
-                if body.enabled is not None:
-                    enabled = body.enabled
-                if body.params is not None:
-                    params = body.params
-                if body.severity is not None:
-                    severity = body.severity
-                if body.owner is not None:
-                    owner = body.owner
-                if body.rationale:
-                    rationale = body.rationale
-                    approved_by = user["email"]
-                    approved_at = datetime.now(timezone.utc)
-                    next_review_at = approved_at + REVIEW_INTERVAL
-            cur.execute(
-                """
-                INSERT INTO rule_configs (ruleset_id, code, power, severity, enabled, params,
-                                          owner, rationale, approved_by, approved_at, next_review_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (new_id, rule["code"], rule["power"], severity, enabled, json.dumps(params or {}),
-                 owner, rationale, approved_by, approved_at, next_review_at),
-            )
-
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="RULE_UPDATED",
-        object_type="rule",
-        object_id=code,
-        from_state=json.dumps(
-            {"enabled": current["enabled"], "severity": current["severity"], "params": current["params"]},
-            default=str,
-        ),
-        to_state=json.dumps(
-            {
-                "enabled": body.enabled if body.enabled is not None else current["enabled"],
-                "severity": body.severity or current["severity"],
-                "params": body.params if body.params is not None else current["params"],
+    payload = {
+        "code": code,
+        "enabled": body.enabled,
+        "params": body.params,
+        "severity": body.severity,
+        "owner": body.owner,
+    }
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="RULE_UPDATE",
+            target=code,
+            summary=summary,
+            payload=payload,
+            before_snapshot={
+                "ruleset_version": active[0]["version"],
+                "enabled": current["enabled"],
+                "severity": current["severity"],
+                "params": current["params"],
             },
-            default=str,
-        ),
-        payload={"new_ruleset_version": new_version, "rationale": body.rationale,
-                 "owner": body.owner},
-    )
-    return list_rules(user=user, conn=conn)
+            rationale=body.rationale,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
 
 
 # ---------------------------------------------------------------------------
@@ -213,48 +179,80 @@ def create_thresholds(
     user: dict = Depends(requires(Permission.ADMIN_THRESHOLDS)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """New version, activated. Never an in-place edit, for the same reason as rules."""
+    """Propose a new threshold version (D96). A different administrator approves
+    it, and only then is it published and activated.
+
+    Thresholds set how much fraud the desk sees against its alert budget (D11d);
+    moving them alone is exactly the single-hand tuning D69e closed for rules,
+    so it now takes a second signature too. Still versioned, never edited in
+    place — that happens on approval.
+    """
     if not (body.p_monitor <= body.p_review <= body.p_hold):
         raise HTTPException(400, "thresholds must be ordered: monitor <= review <= hold")
+    if not (body.notes and body.notes.strip()):
+        raise HTTPException(422, "a reason (notes) is required to propose a threshold change")
 
     old = _rows(
         conn,
         "SELECT version, p_monitor, p_review, p_hold, alert_min_level FROM threshold_sets WHERE is_active",
     )
-    with conn.cursor() as cur:
-        cur.execute("SELECT coalesce(max(version), 0) + 1 AS v FROM threshold_sets")
-        row = cur.fetchone()
-        version = int(row["v"] if isinstance(row, dict) else row[0])
-        cur.execute("UPDATE threshold_sets SET is_active = false WHERE is_active")
-        cur.execute(
-            """
-            INSERT INTO threshold_sets
-                (version, p_monitor, p_review, p_hold, alert_min_level, notes, created_by, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, true)
-            RETURNING id, version
-            """,
-            (
-                version,
-                body.p_monitor,
-                body.p_review,
-                body.p_hold,
-                body.alert_min_level,
-                body.notes,
-                user["id"],
-            ),
-        )
-        created = cur.fetchone()
-
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="THRESHOLDS_CHANGED",
-        object_type="threshold_set",
-        object_id=version,
-        from_state=json.dumps(old[0], default=str) if old else None,
-        to_state=json.dumps(body.model_dump(), default=str),
+    summary = (
+        f"thresholds → monitor {body.p_monitor:g} / review {body.p_review:g} / "
+        f"hold {body.p_hold:g}, alert ≥ {body.alert_min_level}"
     )
-    return dict(created) if not isinstance(created, dict) else created
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="THRESHOLD_PUBLISH",
+            target="thresholds",
+            summary=summary,
+            payload=body.model_dump(),
+            before_snapshot=old[0] if old else {},
+            rationale=body.notes,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+# ---------------------------------------------------------------------------
+# Privileged-access maker-checker: the second administrator (D96)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/change-requests")
+def list_change_requests(
+    state: str | None = Query(None, description="PENDING (default view), or a specific state"),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """The detection-tuning changes awaiting or having had a second signature.
+
+    Readable by anyone who can already read admin metrics; deciding one still
+    needs the change's own permission (and not being its proposer).
+    """
+    states = (state,) if state else ("PENDING",)
+    return {"items": governance.list_requests(conn, states=states)}
+
+
+@router.post("/change-requests/{request_id}/decision")
+def decide_change_request(
+    request_id: int,
+    body: ConfigDecisionIn,
+    user: dict = Depends(current_user),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Approve, reject or return a proposed change (D96).
+
+    No fixed permission on the route: `governance.decide` checks that the actor
+    holds the *change's own* permission (ADMIN_RULES or ADMIN_THRESHOLDS) and is
+    not the proposer, so one guard cannot be right for both change types.
+    """
+    try:
+        return governance.decide(
+            conn, user, request_id=request_id, action=body.action, reason=body.reason
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
 
 
 # ---------------------------------------------------------------------------

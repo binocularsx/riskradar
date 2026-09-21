@@ -549,6 +549,13 @@ class ThresholdsIn(Strict):
     notes: str | None = None
 
 
+class ConfigDecisionIn(Strict):
+    """D96: a second administrator's verdict on a proposed detection-tuning change."""
+
+    action: Literal["APPROVE", "REJECT", "RETURN"]
+    reason: Annotated[str | None, Field(max_length=2000)] = None
+
+
 class ListEntryIn(Strict):
     kind: Literal["SANCTIONED", "KNOWN_MULE", "ALLOWLIST"]
     beneficiary_account_id: str

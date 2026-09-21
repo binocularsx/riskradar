@@ -119,9 +119,12 @@ export const api = {
 
   // administration
   rules: () => get('/v1/admin/rules'),
+  // D96: a rule or threshold change is now a *proposal*; a different admin approves it.
   updateRule: (code, data) => patch(`/v1/admin/rules/${code}`, data),
   thresholds: () => get('/v1/admin/thresholds'),
   createThresholds: (data) => post('/v1/admin/thresholds', data),
+  configChanges: (state) => get(`/v1/admin/change-requests${state ? `?state=${state}` : ''}`),
+  decideConfigChange: (id, data) => post(`/v1/admin/change-requests/${id}/decision`, data),
   models: () => get('/v1/admin/models'),
   promoteModel: (id) => post('/v1/admin/models/promote', { model_version_id: id }),
   lists: (kind) => get(`/v1/admin/lists${kind ? `?kind=${kind}` : ''}`),

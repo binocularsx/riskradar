@@ -39,6 +39,9 @@ USERS = [
     ("lead@riskradar.local", "Femi Fraud-Ops", "FRAUD_OPS_LEAD", "OpsLead#2026"),
     ("infosec@riskradar.local", "Ngozi InfoSec", "INFOSEC_ANALYST", "InfoSec#2026"),
     ("admin@riskradar.local", "Tunde Admin", "ADMIN", "Admin#2026"),
+    # D96: detection tuning is maker-checker, so one administrator is not enough
+    # — a second proposes-or-approves the other's changes.
+    ("admin2@riskradar.local", "Bola Admin", "ADMIN", "Admin#2026"),
 ]
 
 SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"

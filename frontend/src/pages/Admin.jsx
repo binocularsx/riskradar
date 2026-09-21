@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, when } from '../lib/api'
 import { Banner, Empty } from '../components/ui'
 
-const TABS = ['Rules', 'Thresholds', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Audit']
+const TABS = ['Rules', 'Thresholds', 'Pending', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Audit']
 
 /**
  * Administration (FR-040 to FR-042).
@@ -31,6 +31,7 @@ export default function Admin() {
       </div>
       {tab === 'Rules' && <Rules />}
       {tab === 'Thresholds' && <Thresholds />}
+      {tab === 'Pending' && <PendingChanges />}
       {tab === 'Models' && <Models />}
       {tab === 'Lists' && <Lists />}
       {tab === 'Enforcement' && <Enforcement />}
@@ -178,16 +179,25 @@ function Enforcement() {
 function Rules() {
   const { data, error, reload, setError } = useAsync(() => api.rules())
   const [busy, setBusy] = useState(false)
-  // D69e (base PRD FR-506): a change can carry its reason. Given, it becomes the
-  // rule's rationale and restarts its 90-day review clock.
+  const [notice, setNotice] = useState(null)
+  // D69e/D96: a change carries its reason and becomes a *proposal*. A second
+  // administrator approves it before it takes effect.
   const [reasons, setReasons] = useState({})
   const reasonFor = (code) => (reasons[code] || '').trim() || undefined
 
   async function change(rule, patch) {
+    if (!reasonFor(rule.code)) {
+      setError('A reason is required — the change is proposed to a second administrator, who reads it.')
+      return
+    }
     setBusy(true)
+    setNotice(null)
     try {
-      await api.updateRule(rule.code, { ...patch, rationale: reasonFor(rule.code) })
+      const res = await api.updateRule(rule.code, { ...patch, rationale: reasonFor(rule.code) })
       setReasons((r) => ({ ...r, [rule.code]: '' }))
+      if (res?.status === 'pending') {
+        setNotice(`Proposed change #${res.request.id} to ${rule.code}. It applies once a different administrator approves it (Pending tab).`)
+      }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -200,10 +210,12 @@ function Rules() {
   return (
     <>
       <Banner kind="info">
-        Active ruleset <strong>v{data.ruleset.version}</strong>. Changing anything
-        here publishes a new version; decisions keep pointing at the version that
-        actually produced them.
+        Active ruleset <strong>v{data.ruleset.version}</strong>. A change here is
+        <strong> proposed</strong>, not applied: a different administrator approves it
+        (Pending tab), and only then is a new version published (D96). Decisions keep
+        pointing at the version that actually produced them.
       </Banner>
+      {notice && <Banner kind="ok">{notice}</Banner>}
 
       {['ESCALATE', 'OVERRIDE', 'SUPPRESS'].map((power) => (
         <div className="card" key={power} style={{ marginBottom: 14 }}>
@@ -290,6 +302,7 @@ function Thresholds() {
   const { data, error, reload, setError } = useAsync(() => api.thresholds())
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   useEffect(() => {
     const active = data?.versions?.find((v) => v.is_active)
@@ -308,9 +321,17 @@ function Thresholds() {
   if (!data || !form) return <p className="muted">Loading…</p>
 
   async function save() {
+    if (!(form.notes || '').trim()) {
+      setError('A reason is required — a second administrator reads it before approving.')
+      return
+    }
     setBusy(true)
+    setNotice(null)
     try {
-      await api.createThresholds(form)
+      const res = await api.createThresholds(form)
+      if (res?.status === 'pending') {
+        setNotice(`Proposed threshold change #${res.request.id}. It publishes once a different administrator approves it (Pending tab).`)
+      }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -321,8 +342,10 @@ function Thresholds() {
         Thresholds are derived <strong>backwards from the alert budget</strong> —
         analysts multiplied by reviewable alerts per day — then checked against
         recall. Never from "80 sounds high". <code>scripts/derive_thresholds.py</code>{' '}
-        computes them from a scored sample.
+        computes them from a scored sample. Publishing is <strong>proposed</strong> to a
+        second administrator and applied only on approval (D96).
       </Banner>
+      {notice && <Banner kind="ok">{notice}</Banner>}
 
       <div className="card" style={{ marginBottom: 14 }}>
         <h2>Publish a new threshold version</h2>
@@ -374,6 +397,75 @@ function Thresholds() {
           </table>
         </div>
       </div>
+    </>
+  )
+}
+
+/* -------------------------------------------------- pending config changes */
+
+/**
+ * D96: detection tuning is maker-checker. A rule or threshold change proposed on
+ * the Rules/Thresholds tabs waits here for a *different* administrator to approve
+ * it. The server refuses a proposer approving their own change (403); the button
+ * is disabled here too, but the control is the 403, not the disabled button.
+ */
+function PendingChanges() {
+  const { data, error, reload, setError } = useAsync(() =>
+    Promise.all([api.configChanges('PENDING'), api.me()]))
+  const [busy, setBusy] = useState(false)
+
+  if (error) return <Banner kind="error">{error}</Banner>
+  if (!data) return <p className="muted">Loading…</p>
+  const [pending, me] = data
+
+  async function decide(req, action) {
+    let reason = null
+    if (action !== 'APPROVE') {
+      reason = window.prompt(`Reason to ${action.toLowerCase()} this change:`)
+      if (!reason) return
+    }
+    setBusy(true)
+    try {
+      await api.decideConfigChange(req.id, { action, reason })
+      reload()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      <Banner kind="info">
+        Changes to rules and thresholds are proposed by one administrator and
+        approved by another (D96). Even the account that tunes detection cannot
+        tune it alone.
+      </Banner>
+      {!pending.items.length && <Empty>No changes awaiting approval.</Empty>}
+      {pending.items.map((r) => {
+        const mine = r.proposed_by_id === me.id
+        return (
+          <div className="card" key={r.id} style={{ marginBottom: 12 }}>
+            <div className="between">
+              <div>
+                <span className="pill">{r.change_type.replace('_', ' ')}</span>{' '}
+                <strong>{r.summary}</strong>
+                <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
+                  Proposed by {r.proposed_by} · {when(r.proposed_at)}
+                </div>
+              </div>
+              <div className="row" style={{ gap: 6 }}>
+                <button className="primary" disabled={busy || mine}
+                        title={mine ? 'You proposed this — a different administrator must approve it' : ''}
+                        onClick={() => decide(r, 'APPROVE')}>Approve</button>
+                <button disabled={busy || mine} onClick={() => decide(r, 'RETURN')}>Return</button>
+                <button className="danger" disabled={busy || mine} onClick={() => decide(r, 'REJECT')}>Reject</button>
+              </div>
+            </div>
+            <p style={{ fontSize: 13, marginTop: 8, marginBottom: 0 }}>{r.rationale}</p>
+            {mine && <p className="dim" style={{ fontSize: 12, marginBottom: 0 }}>
+              You proposed this change; it needs a second administrator.
+            </p>}
+          </div>
+        )
+      })}
     </>
   )
 }
