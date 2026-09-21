@@ -81,6 +81,10 @@ On top of that, every alert passes the budget guard:
   `ceil(budget × hourly_burst ÷ 24)`, a discretionary alert is **deferred**.
   It waits in `alert_deferrals`, most serious first, and is raised as soon as
   there is room. Workers check every 30 seconds.
+- The budget is split into two envelopes (D92): `alert_budget_rule_share` of
+  the day is reserved for rule alerts and the rest is the model's, so neither
+  layer can crowd the other out. Each releases its own waiting alerts. Setting
+  the share to 1.0 restores the old rules-first behaviour.
 - Veto rules (sanctions, known mule) and machine actions are never deferred;
   they are counted. If they alone overrun the day, the alarm is
   `ALERT_BUDGET_OVERRUN`: retune those rules.

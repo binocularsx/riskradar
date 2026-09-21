@@ -117,8 +117,15 @@ def implied(sample: Sample, thresholds: Thresholds) -> dict[str, Any]:
     }
 
 
-def derive(sample: Sample, budget: int, *, min_sample: int = 2000) -> dict[str, Any]:
-    """Thresholds that spend ``budget`` alerts a day on this traffic, rules first (D61b)."""
+def derive(sample: Sample, budget: int, *, min_sample: int = 2000, rule_share: float = 0.6) -> dict[str, Any]:
+    """Thresholds that spend the model's envelope of ``budget`` alerts a day (D92).
+
+    Until D92 the rules were spent first and the model got the remainder, which
+    measured (D91) as the rules taking 45 of 75 alerts at precision 0.605 while
+    the model ranked better. Now each layer has a share: the model's threshold
+    is solved for ``budget × (1 - rule_share)``, and rule alerts over their own
+    share are paced by the budget guard rather than crowding the model out.
+    """
     if len(sample.p) < min_sample:
         raise CalibrationRefused(
             f"only {len(sample.p)} scored decisions; need at least {min_sample}. Let the worker drain first."
@@ -126,7 +133,8 @@ def derive(sample: Sample, budget: int, *, min_sample: int = 2000) -> dict[str, 
     p = sample.p
     rules = rule_driven(sample)
     rule_per_day = float(rules.sum()) / sample.span_days
-    remaining = budget - rule_per_day
+    rule_quota = budget * rule_share
+    remaining = budget - min(rule_per_day, rule_quota)
     by_rule: Counter = Counter()
     for sigs, flagged in zip(sample.signals, rules):
         if flagged:
@@ -136,9 +144,16 @@ def derive(sample: Sample, budget: int, *, min_sample: int = 2000) -> dict[str, 
     rules_per_day = {code: round(n / sample.span_days, 1) for code, n in by_rule.most_common()}
     if remaining <= 0:
         raise CalibrationRefused(
-            f"the rules alone raise {rule_per_day:.0f} a day, over the whole {budget} a day budget; "
-            f"retune them first: {rules_per_day}"
+            f"the rules' share alone ({rule_quota:.0f} a day) is the whole {budget} a day budget; "
+            f"leave the model a share: {rules_per_day}"
         )
+    note = None
+    if rule_per_day > rule_quota:
+        # Not a refusal any more (D92): the guard ranks rule alerts and paces
+        # the ones over the share, so the model's envelope is safe either way.
+        note = (f"the rules would raise {rule_per_day:.0f} a day against their share of {rule_quota:.0f}; "
+                f"the guard will pace the rest, most serious first. Retune if that is not what you want: "
+                f"{rules_per_day}")
 
     p_free = p[~rules]
     alert_rate = min(1.0, remaining / max(sample.daily_volume * (1 - rules.mean()), 1e-9))
@@ -157,6 +172,10 @@ def derive(sample: Sample, budget: int, *, min_sample: int = 2000) -> dict[str, 
     system = rules | (p >= p_monitor)
     return {
         "budget": budget,
+        "rule_share": rule_share,
+        "rule_quota_per_day": round(rule_quota, 1),
+        "model_quota_per_day": round(budget - rule_quota, 1),
+        "note": note,
         "p_monitor": p_monitor,
         "p_review": p_review,
         "p_hold": p_hold,

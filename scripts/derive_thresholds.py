@@ -58,13 +58,18 @@ def main() -> None:
 
         sample = calibration.load_sample(conn, last_days=args.last_days)
         try:
-            result = calibration.derive(sample, budget, min_sample=args.min_sample)
+            from riskradar.policy.budget import load_config
+
+            result = calibration.derive(sample, budget, min_sample=args.min_sample,
+                                        rule_share=load_config(conn).rule_share)
         except calibration.CalibrationRefused as exc:
             print(f"REFUSING: {exc}")
             raise SystemExit(2) from exc
 
         # The budget is for the WHOLE SYSTEM, not for the model (D61b): the
         # rules' own alerts are spent first and the model competes for the rest.
+        if result.get("note"):
+            print(f"  note: {result['note']}\n")
         print("rule-driven alerts (raised even if the model scored zero):")
         print(f"  {result['rules_alone_per_day']:.1f}/day of a {budget}/day budget")
         for code, n in result["rules_per_day"].items():

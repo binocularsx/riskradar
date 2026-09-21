@@ -43,7 +43,8 @@ def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
 
 def _config_dict(cfg: budget.BudgetConfig) -> dict[str, Any]:
     return {"per_day": cfg.per_day, "hourly_burst": cfg.hourly_burst, "hour_ceiling": cfg.hour_ceiling,
-            "enforced": cfg.enforced, "deferral_hours": cfg.deferral_hours}
+            "enforced": cfg.enforced, "deferral_hours": cfg.deferral_hours,
+            "rule_share": cfg.rule_share, "rule_quota": cfg.rule_quota, "model_quota": cfg.model_quota}
 
 
 def budget_status(conn: Any, now: datetime | None = None) -> dict[str, Any]:
@@ -173,7 +174,7 @@ def calibration_check(
     sample = calibration.load_sample(conn, last_days=last_days)
     current = calibration.implied(sample, active)
     try:
-        proposed = calibration.derive(sample, cfg.per_day, min_sample=500)
+        proposed = calibration.derive(sample, cfg.per_day, min_sample=500, rule_share=cfg.rule_share)
         refused = None
     except calibration.CalibrationRefused as exc:
         proposed, refused = None, str(exc)
@@ -209,6 +210,7 @@ def set_budget(
     values = {
         "alert_budget_per_day": body.per_day,
         "alert_budget_hourly_burst": body.hourly_burst,
+        "alert_budget_rule_share": body.rule_share,
         "alert_budget_enforced": body.enforced,
         "alert_deferral_hours": body.deferral_hours,
     }
@@ -239,7 +241,7 @@ def derive_thresholds(
     cfg = budget.load_config(conn)
     sample = calibration.load_sample(conn, last_days=body.last_days)
     try:
-        result = calibration.derive(sample, cfg.per_day, min_sample=body.min_sample)
+        result = calibration.derive(sample, cfg.per_day, min_sample=body.min_sample, rule_share=cfg.rule_share)
     except calibration.CalibrationRefused as exc:
         raise HTTPException(409, str(exc)) from exc
     if not body.publish:

@@ -534,6 +534,8 @@ class BudgetConfigIn(Strict):
 
     per_day: Annotated[int, Field(ge=1, le=10_000)]
     hourly_burst: Annotated[float, Field(ge=1.0, le=24.0)] = 3.0
+    # D92: the share of the day reserved for rule alerts; the model gets the rest.
+    rule_share: Annotated[float, Field(ge=0.0, le=1.0)] = 0.6
     enforced: bool = True
     deferral_hours: Annotated[int, Field(ge=1, le=168)] = 24
     reason: Annotated[str, Field(min_length=10, max_length=2000)]

@@ -57,6 +57,11 @@ from ..policy import budget
 from ..policy import directives
 from ..policy import disposition as tiers
 from ..policy.engine import Thresholds, apply as apply_policy
+
+# D92: "would the rules have raised this even if the model said zero?" Asked
+# with the real policy engine and thresholds no probability can reach, so the
+# answer cannot drift from what the policy actually does.
+MODEL_SILENT = Thresholds(id=0, version=0, p_monitor=2.0, p_review=2.0, p_hold=2.0, alert_min_level="MEDIUM")
 from ..rules.engine import RuleContext, evaluate as evaluate_rules
 
 log = logging.getLogger("riskradar.worker")
@@ -363,6 +368,7 @@ def score_transaction(
             conn,
             mandatory=any(s.power == "OVERRIDE" for s in signals),
             machine=disposition == tiers.MACHINE_ACTION,
+            rule_driven=apply_policy(0.0, signals, MODEL_SILENT).actionable,
         )
         result.trace.append(admission.as_trace())
 
@@ -529,7 +535,8 @@ def raise_alert(
 
 _DEFERRAL_SQL = """
     SELECT f.id, f.decision_id, f.transaction_id, f.subject_token, f.risk_level::text AS risk_level,
-           f.score_0_100, f.signals, d.disposition, d.rule_only_mode, t.transaction_ref, t.occurred_at
+           f.score_0_100, f.signals, f.rule_driven, d.disposition, d.rule_only_mode,
+           t.transaction_ref, t.occurred_at
       FROM alert_deferrals f
       JOIN decisions d ON d.id = f.decision_id
       JOIN transactions t ON t.id = f.transaction_id
@@ -552,7 +559,7 @@ def _release(conn: Any, sys_uid: int, item: dict[str, Any], *, released_by: int 
             "WHERE id = %s",
             (now, alert_id, released_by, item["id"]),
         )
-    budget.count_release(conn, day, hour)
+    budget.count_release(conn, day, hour, rule_driven=bool(item.get("rule_driven")))
     return {"deferral_id": int(item["id"]), "alert_id": alert_id, "case_id": case_id}
 
 
@@ -577,16 +584,21 @@ def release_deferred(conn: Any, sys_uid: int, *, now: datetime | None = None) ->
         )
     room = budget.headroom(row, hour, config)
     released: list[dict[str, Any]] = []
-    if room > 0:
+    # D92: each envelope releases its own, most serious first, and the hour's
+    # own ceiling still caps the two together.
+    for envelope, rule_driven in (("rules", True), ("model", False)):
+        left = min(room[envelope], room["total"] - len(released))
+        if left <= 0:
+            continue
         with conn.cursor() as cur:
             cur.execute(
                 _DEFERRAL_SQL + """
-                 WHERE f.state = 'WAITING'
+                 WHERE f.state = 'WAITING' AND f.rule_driven = %s
                  ORDER BY f.risk_level DESC, f.p_fraud DESC, f.deferred_at
                  LIMIT %s
                    FOR UPDATE OF f SKIP LOCKED
                 """,
-                (room,),
+                (rule_driven, left),
             )
             items = [dict(r) for r in cur.fetchall()]
         for item in items:

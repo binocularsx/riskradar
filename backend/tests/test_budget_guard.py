@@ -87,23 +87,30 @@ def test_over_budget_an_alert_waits_and_is_raised_when_there_is_room(client, api
             c.execute("UPDATE app_config SET value = 'true' WHERE key = 'alert_budget_enforced'")
             # A whole day's budget may land in one hour here; pacing has its own test.
             c.execute("UPDATE app_config SET value = '24' WHERE key = 'alert_budget_hourly_burst'")
+            # This is about the day's cap, so the whole budget is the model's;
+            # the envelopes have their own tests (D92).
+            c.execute("UPDATE app_config SET value = '0' WHERE key = 'alert_budget_rule_share'")
             day, _ = budget.local_day_hour(datetime.now(timezone.utc))
             c.execute("INSERT INTO alert_budget_days (day, budget, raised) VALUES (%s, 2, 2) "
-                      "ON CONFLICT (day) DO UPDATE SET raised = 2, budget = 2", (day,))
+                      "ON CONFLICT (day) DO UPDATE SET raised = 2, budget = 2, rule_raised = 0, model_raised = 2",
+                      (day,))
 
+            before = c.execute("SELECT deferred FROM alert_budget_days WHERE day = %s", (day,)).fetchone()["deferred"]
             held = _score(c, first)
             assert held["alert_id"] is None and held["deferred"]["reason"] == budget.DAILY_CAP
             trace = c.execute("SELECT policy_trace FROM decisions WHERE transaction_id = %s", (first,)).fetchone()
             step = [s for s in trace["policy_trace"] if s["step"] == "budget"][0]
             assert step["verdict"] == "DEFER" and step["per_day"] == 2
-            assert c.execute("SELECT deferred FROM alert_budget_days WHERE day = %s", (day,)).fetchone()["deferred"] == 1
+            # A delta, not an absolute: the demo bank's own day shares this ledger row.
+            assert c.execute("SELECT deferred FROM alert_budget_days WHERE day = %s",
+                             (day,)).fetchone()["deferred"] == before + 1
 
             # Nothing released while the day is spent.
             assert scoring.release_deferred(c, scoring.system_user_id(c))["released"] == []
 
             # Tomorrow's room, today: the waiting alert is raised and counted.
-            c.execute("UPDATE alert_budget_days SET raised = 0, hourly = array_fill(0, ARRAY[24]) WHERE day = %s",
-                      (day,))
+            c.execute("UPDATE alert_budget_days SET raised = 0, rule_raised = 0, model_raised = 0, "
+                      "hourly = array_fill(0, ARRAY[24]) WHERE day = %s", (day,))
             c.execute("UPDATE alert_deferrals SET state = 'EXPIRED' WHERE state = 'WAITING' "
                       "AND decision_id <> (SELECT id FROM decisions WHERE transaction_id = %s)", (first,))
             done = scoring.release_deferred(c, scoring.system_user_id(c))
@@ -128,9 +135,11 @@ def test_a_deferred_alert_that_waits_too_long_expires_and_is_counted(client, api
         try:
             c.execute("UPDATE app_config SET value = '1' WHERE key = 'alert_budget_per_day'")
             c.execute("UPDATE app_config SET value = 'true' WHERE key = 'alert_budget_enforced'")
+            c.execute("UPDATE app_config SET value = '0' WHERE key = 'alert_budget_rule_share'")
             day, _ = budget.local_day_hour(datetime.now(timezone.utc))
             c.execute("INSERT INTO alert_budget_days (day, budget, raised) VALUES (%s, 1, 1) "
-                      "ON CONFLICT (day) DO UPDATE SET raised = 1, budget = 1", (day,))
+                      "ON CONFLICT (day) DO UPDATE SET raised = 1, budget = 1, rule_raised = 0, model_raised = 1",
+                      (day,))
             assert _score(c, tx)["deferred"]
             c.execute("UPDATE alert_deferrals SET expires_at = now() - interval '1 minute' WHERE state = 'WAITING'")
             done = scoring.release_deferred(c, scoring.system_user_id(c))
@@ -218,3 +227,34 @@ def test_the_drift_report_answers(client):
     assert body["status"] in {"STABLE", "WATCH", "SHIFTED", "TOO_FEW", "NO_DATA"}
     if body["status"] != "NO_DATA":
         assert {"score", "features", "rules"} <= set(body)
+
+
+# --- D92: two envelopes, neither able to starve the other --------------------
+
+ENV = budget.BudgetConfig(per_day=100, hourly_burst=24.0, rule_share=0.35)
+
+
+def test_each_layer_spends_its_own_share():
+    assert (ENV.rule_quota, ENV.model_quota) == (35, 65)
+    # The rules have spent their share; a rule alert waits, the model's does not.
+    spent_rules = dict(raised_today=40, hour_count=0, config=ENV, mandatory=False, machine=False,
+                       rule_raised=35, model_raised=5)
+    assert budget.judge(rule_driven=True, **spent_rules) == (budget.DEFER, budget.RULE_QUOTA)
+    assert budget.judge(rule_driven=False, **spent_rules) == (budget.RAISE, budget.WITHIN_BUDGET)
+    # And the other way: a busy model cannot eat the rules' share.
+    spent_model = dict(raised_today=70, hour_count=0, config=ENV, mandatory=False, machine=False,
+                       rule_raised=5, model_raised=65)
+    assert budget.judge(rule_driven=False, **spent_model) == (budget.DEFER, budget.MODEL_QUOTA)
+    assert budget.judge(rule_driven=True, **spent_model) == (budget.RAISE, budget.WITHIN_BUDGET)
+
+
+def test_a_veto_or_machine_action_is_outside_both_envelopes():
+    full = dict(raised_today=100, hour_count=99, config=ENV, rule_raised=35, model_raised=65)
+    assert budget.judge(mandatory=True, machine=False, rule_driven=True, **full) == (budget.RAISE, budget.MANDATORY)
+    assert budget.judge(mandatory=False, machine=True, rule_driven=True, **full) == (budget.RAISE, budget.MACHINE)
+
+
+def test_headroom_is_reported_per_envelope():
+    row = {"raised": 40, "rule_raised": 35, "model_raised": 5, "hourly": [0] * 24}
+    room = budget.headroom(row, 3, ENV)
+    assert room["rules"] == 0 and room["model"] == 60 and room["total"] == 60
