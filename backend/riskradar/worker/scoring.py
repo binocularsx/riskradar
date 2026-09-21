@@ -47,7 +47,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..audit import chain
-from ..cases import correlation
+from ..cases import assignment, correlation
 from ..db import connection, pool
 from ..features import MODEL_FEATURE_NAMES, compute_features, load_history_sql, to_vector
 from ..features.spec import FEATURE_SPEC_VERSION
@@ -495,6 +495,11 @@ def raise_alert(
             cur.execute("UPDATE cases SET handling = 'HUMAN' WHERE id = %s AND handling <> 'HUMAN'", (case_id,))
     if disposition == tiers.MACHINE_ACTION:
         _machine_action(conn, sys_uid, case_id, signal_codes, transaction_ref)
+    elif created:
+        # D94: work reaches an analyst rather than waiting to be claimed. Same
+        # transaction as the alert that opened the case, so a case never exists
+        # unrouted because something failed in between.
+        assignment.route(conn, case_id, sys_uid=sys_uid)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -661,6 +666,7 @@ def _raise_alarm(conn: Any, sys_uid: int, code: str, detail: str) -> None:
 
 HEARTBEAT_SECONDS = 10.0
 RELEASE_SECONDS = 30.0
+ROUTE_SECONDS = 60.0
 
 
 class Worker:
@@ -679,6 +685,7 @@ class Worker:
         self.failed = 0
         self._last_beat = 0.0
         self._last_release = 0.0
+        self._last_route = 0.0
 
     def heartbeat(self, *, force: bool = False) -> None:
         """Readiness reads this to tell an idle worker from a dead one."""
@@ -713,6 +720,22 @@ class Worker:
         except registry.ModelUnavailable as exc:
             log.warning("no model to warm (%s); scoring will run rules-only and raise the alarm", exc)
         self.heartbeat(force=True)
+
+    def maybe_route(self) -> None:
+        """D94: cases nobody could be routed to are retried, not forgotten."""
+        if time.monotonic() - self._last_route < ROUTE_SECONDS:
+            return
+        self._last_route = time.monotonic()
+        with connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM cases WHERE assignee_id IS NULL AND state <> 'CLOSED' "
+                            "AND handling = 'HUMAN' LIMIT 1")
+                if cur.fetchone() is None:
+                    return
+            done = assignment.sweep(conn, sys_uid=system_user_id(conn))
+        if done["assigned"] or done["waiting"]:
+            log.info("routing: %d assigned, %d still waiting for an eligible analyst",
+                     done["assigned"], done["waiting"])
 
     def maybe_release(self) -> None:
         """D86: every half minute, raise deferred alerts the budget now has room for."""
@@ -821,6 +844,7 @@ class Worker:
             try:
                 self.heartbeat()
                 self.maybe_release()
+                self.maybe_route()
                 if self.run_once() == 0:
                     time.sleep(self.idle_sleep)
             except Exception:  # noqa: BLE001

@@ -44,7 +44,8 @@ def case_id():
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
         row = c.execute(
             "INSERT INTO cases (subject_token, state, risk_level, opened_at, last_alert_at, "
-            "correlation_expires_at) VALUES (%s, 'OPEN', 'HIGH', %s, %s, %s) RETURNING id",
+            "correlation_expires_at, assignee_id, assigned_at) VALUES (%s, 'OPEN', 'HIGH', %s, %s, %s, "
+            "(SELECT id FROM users WHERE email = 'analyst@riskradar.local'), now()) RETURNING id",
             (subject, now, now, now + timedelta(hours=24)),
         ).fetchone()
         c.commit()

@@ -696,7 +696,7 @@
           "cases"
         ],
         "summary": "List Cases",
-        "description": "FR-033: sortable by score, filterable by risk level, channel and state.",
+        "description": "FR-033: sortable by score, filterable by risk level, channel and state.\n\nD94: the list is scoped on the server. An analyst's \"all\" is their own work.",
         "operationId": "list_cases_v1_cases_get",
         "parameters": [
           {
@@ -1665,7 +1665,7 @@
           "worklist"
         ],
         "summary": "Next Case",
-        "description": "Hand this analyst the next case and put their name on it.\n\nAssigning on hand-out is what stops two analysts working the same case, and\nit is also what makes \"cases per analyst per day\" a real number rather than\nan estimate. A case already assigned to *this* analyst is returned first \u2014\nfinish what you started before taking something new.",
+        "description": "Hand this person the next case **they already own** (D94).\n\nThis used to claim from a shared pile, which is how two analysts ended up\non one case and how nobody owned anything until they volunteered. Cases are\nnow routed to an analyst as they open (``cases/assignment.py``), so this\nanswers a different question: of the work that is already mine, what should\nI do next? Highest priority first, and a case I had already started before\nanything new.\n\nA lead or InfoSec, who are handed escalations rather than routed cases,\nstill take from their own team's escalation pool \u2014 that is a hand-off\nbetween teams, not a claim on the general queue.",
         "operationId": "next_case_v1_worklist_next_post",
         "responses": {
           "200": {
@@ -1946,7 +1946,7 @@
           "workflow"
         ],
         "summary": "Pipeline",
-        "description": "Every case in its stage, oldest first, with how long it has waited there.",
+        "description": "Every case in its stage, oldest first, with how long it has waited there.\n\nD94: \"every case\" means every case this person may see.",
         "operationId": "pipeline_v1_workflow_pipeline_get",
         "parameters": [
           {

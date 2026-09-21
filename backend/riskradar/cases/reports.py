@@ -32,7 +32,7 @@ from ..audit import chain
 from ..clocks import sweep as clock_sweep
 from ..events import publish
 from ..policy import budget
-from . import correlation
+from . import assignment, correlation
 
 
 class ReportError(Exception):
@@ -148,6 +148,9 @@ def report_payments(conn: Any, *, user: dict[str, Any], sys_uid: int, transactio
         )
         publish(conn, "alert", {"alert_id": alert_id, "case_id": case_id, "risk_level": "CRITICAL",
                                 "score": int(t["score_0_100"] or 0), "source": "CUSTOMER_REPORT"})
+        if created:
+            # D94: a customer's report opens a case like any other, and it is routed.
+            assignment.route(conn, case_id, sys_uid=sys_uid)
         case_ids.add(case_id)
         raised.append({"transaction_ref": t["transaction_ref"], "alert_id": alert_id, "case_id": case_id,
                        "detector_risk_level": t["risk_level"]})

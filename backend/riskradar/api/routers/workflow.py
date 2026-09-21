@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...audit import chain
 from ...cases import submissions, workflow
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import CaseActionIn, ReturnIn
@@ -42,8 +43,11 @@ def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
         return [dict(r) if not isinstance(r, dict) else r for r in cur.fetchall()]
 
 
-def _case(conn: Any, case_id: int) -> dict[str, Any]:
-    rows = _rows(conn, "SELECT * FROM cases WHERE id = %s", (case_id,))
+def _case(conn: Any, case_id: int, user: dict[str, Any] | None = None) -> dict[str, Any]:
+    """D94: scoped. 404 rather than 403, so nothing is learned from the answer."""
+    sql, params = ("TRUE", {}) if user is None else visibility.predicate(user)
+    rows = _rows(conn, f"SELECT c.* FROM cases c WHERE c.id = %(case_id)s AND {sql}",
+                 {**params, "case_id": case_id})
     if not rows:
         raise HTTPException(404, "case not found")
     return rows[0]
@@ -61,7 +65,7 @@ def case_workflow(
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
     """Stage, lifecycle and steps for one case."""
-    case = _case(conn, case_id)
+    case = _case(conn, case_id, user)
     rows = _rows(conn, triage_router.WORKLIST_SQL.format(where="c.id = %(id)s"), {"id": case_id})
     rec = triage_router._enrich(rows[0], triage_router._clock_context(conn))["recommendation"] if rows else {}
 
@@ -180,7 +184,7 @@ def record_action(
     Only the person working the case records steps on it, so the record says who
     did what. Risk Radar does not perform the step (D7); it remembers it.
     """
-    case = _case(conn, case_id)
+    case = _case(conn, case_id, user)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "the case is closed")
     if case["assignee_id"] != user["id"]:
@@ -226,7 +230,7 @@ def return_case(
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
     """Hand an escalated case back to the analyst who raised it, with findings."""
-    case = _case(conn, case_id)
+    case = _case(conn, case_id, user)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "the case is closed")
     if not case["escalated_by"]:
@@ -241,7 +245,16 @@ def return_case(
     chain.append(conn, actor_user_id=user["id"], action="CASE_RETURNED", object_type="case", object_id=case_id,
                  from_state=case["state"], to_state="UNDER_REVIEW",
                  payload={"returned_to": case["escalated_by"], "reason": body.findings[:500]})
-    return case_workflow(case_id, user, conn)
+    # D94: handing it back gives it away. The person returning it may no longer
+    # see the case, so they get a confirmation rather than a 404 on their own
+    # successful action.
+    if visibility.can_read(conn, user, case_id):
+        return case_workflow(case_id, user, conn)
+    owner = _rows(conn, "SELECT u.display_name FROM cases c JOIN users u ON u.id = c.assignee_id "
+                        "WHERE c.id = %s", (case_id,))
+    return {"case_id": case_id, "returned": True,
+            "assignee": owner[0]["display_name"] if owner else None,
+            "note": "Handed back with your findings. It is theirs again, so it has left your queue."}
 
 
 @router.get("/workflow/pipeline")
@@ -250,7 +263,11 @@ def pipeline(
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Every case in its stage, oldest first, with how long it has waited there."""
+    """Every case in its stage, oldest first, with how long it has waited there.
+
+    D94: "every case" means every case this person may see.
+    """
+    scope_sql, scope_params = visibility.predicate(user)
     rows = _rows(
         conn,
         """
@@ -267,8 +284,9 @@ def pipeline(
                EXISTS (SELECT 1 FROM fraud_submissions f
                         WHERE f.case_id = c.id AND f.state = 'PENDING') AS pending_submission
           FROM cases c LEFT JOIN users u ON u.id = c.assignee_id
-         WHERE c.state <> 'CLOSED' OR c.closed_at > now() - interval '24 hours'
-        """,
+         WHERE (c.state <> 'CLOSED' OR c.closed_at > now() - interval '24 hours') AND {scope}
+        """.format(scope=scope_sql),
+        scope_params,
     )
     from datetime import datetime, timezone
 

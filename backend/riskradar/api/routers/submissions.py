@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...cases import submissions
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import FraudDecisionIn, FraudSubmissionIn
@@ -69,6 +70,8 @@ def history(
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
+    if not visibility.can_read(conn, user, case_id):
+        raise HTTPException(404, "case not found")
     items = _rows(
         conn,
         """

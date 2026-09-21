@@ -33,6 +33,7 @@ from ...cases import triage
 from ...clocks import engine as clock_engine
 from ...clocks import sweep as clock_sweep
 from ...clocks import watchlist
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import DispositionIn
@@ -199,8 +200,10 @@ def worklist(
     combines money, a clock and severity — expressing that in an ORDER BY would
     hide the one piece of logic somebody will want to argue with.
     """
-    where = ["c.state = ANY(%(open_states)s)"]
-    params: dict[str, Any] = {"open_states": list(OPEN_STATES)}
+    # D94: what this person may see at all, before any scope filter.
+    scope_sql, scope_params = visibility.predicate(user)
+    where = ["c.state = ANY(%(open_states)s)", scope_sql]
+    params: dict[str, Any] = {"open_states": list(OPEN_STATES), **scope_params}
 
     if scope == "mine":
         # D83: a case whose outcome is recorded is no longer the analyst's work;
@@ -276,74 +279,77 @@ def next_case(
     user: dict = Depends(requires(Permission.CASES_REVIEW)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Hand this analyst the next case and put their name on it.
+    """Hand this person the next case **they already own** (D94).
 
-    Assigning on hand-out is what stops two analysts working the same case, and
-    it is also what makes "cases per analyst per day" a real number rather than
-    an estimate. A case already assigned to *this* analyst is returned first —
-    finish what you started before taking something new.
+    This used to claim from a shared pile, which is how two analysts ended up
+    on one case and how nobody owned anything until they volunteered. Cases are
+    now routed to an analyst as they open (``cases/assignment.py``), so this
+    answers a different question: of the work that is already mine, what should
+    I do next? Highest priority first, and a case I had already started before
+    anything new.
+
+    A lead or InfoSec, who are handed escalations rather than routed cases,
+    still take from their own team's escalation pool — that is a hand-off
+    between teams, not a claim on the general queue.
     """
     context = _clock_context(conn)
-    mine = [
-        _enrich(r, context)
-        for r in _rows(
-            conn,
-            WORKLIST_SQL.format(where="c.state = 'UNDER_REVIEW' AND c.assignee_id = %(uid)s AND c.outcome IS NULL"),
-            {"uid": user["id"]},
-        )
-    ]
+    scope_sql, scope_params = visibility.predicate(user)
+
+    def pool(where: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        rows = _rows(conn, WORKLIST_SQL.format(where=where), params)
+        items = [_enrich(r, context) for r in rows]
+        items.sort(key=lambda r: r["priority"], reverse=True)
+        return items
+
+    started = pool("c.state = 'UNDER_REVIEW' AND c.assignee_id = %(uid)s AND c.outcome IS NULL AND NOT "
+                   + _PENDING_SUBMISSION, {"uid": user["id"]})
+    if started:
+        return {"case": started[0], "resumed": True}
+
+    mine = pool("c.assignee_id = %(uid)s AND c.state <> 'CLOSED' AND c.outcome IS NULL AND NOT "
+                + _PENDING_SUBMISSION, {"uid": user["id"]})
     if mine:
-        mine.sort(key=lambda r: r["priority"], reverse=True)
-        return {"case": mine[0], "resumed": True}
+        chosen = mine[0]
+        with conn.cursor() as cur:
+            cur.execute("UPDATE cases SET state = 'UNDER_REVIEW', version = version + 1 "
+                        "WHERE id = %s AND state = 'OPEN'", (chosen["id"],))
+        chosen["state"] = "UNDER_REVIEW"
+        return {"case": chosen, "resumed": False}
 
-    # D83: InfoSec and leads are handed what was escalated to them first; an
-    # analyst is never handed someone else's escalation.
+    # A team's escalation pool: still taken, because handing work between teams
+    # is a decision a person makes, not one the router can make for them.
     team = {"INFOSEC_ANALYST": "INFOSEC", "FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
-    pools = ([("c.state = 'ESCALATED' AND c.assignee_id IS NULL AND c.escalated_to = %(team)s", {"team": team})]
-             if team else [])
-    if user["role"] != "INFOSEC_ANALYST":
-        pools.append(("c.state IN ('OPEN', 'UNDER_REVIEW') AND c.assignee_id IS NULL AND c.handling = 'HUMAN' "
-                      "AND c.outcome IS NULL", {}))
-    available = []
-    for where, pool_params in pools:
-        available = [_enrich(r, context) for r in _rows(conn, WORKLIST_SQL.format(where=where), pool_params)]
-        if available:
-            break
-    if not available:
-        return {"case": None, "resumed": False}
+    if team:
+        waiting = pool("c.state = 'ESCALATED' AND c.assignee_id IS NULL AND c.escalated_to = %(team)s",
+                       {"team": team})
+        if waiting:
+            chosen = waiting[0]
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE cases SET assignee_id = %s, assigned_at = now(), "
+                    "assignment_reason = 'taken from the team escalation queue', escalated_to = NULL, "
+                    "state = 'UNDER_REVIEW', version = version + 1 WHERE id = %s AND assignee_id IS NULL "
+                    "RETURNING id",
+                    (user["id"], chosen["id"]),
+                )
+                if not cur.fetchone():
+                    raise HTTPException(409, "a colleague took that escalation — ask again")
+            chain.append(conn, actor_user_id=user["id"], action="CASE_ASSIGNED_FROM_ESCALATION",
+                         object_type="case", object_id=chosen["id"], to_state="UNDER_REVIEW",
+                         payload={"team": team, "priority": round(chosen["priority"], 1)})
+            chosen["assignee_id"] = user["id"]
+            chosen["state"] = "UNDER_REVIEW"
+            return {"case": chosen, "resumed": False}
 
-    available.sort(key=lambda r: r["priority"], reverse=True)
-    chosen = available[0]
-
-    with conn.cursor() as cur:
-        # Only claim it if nobody took it between the read and the write.
-        cur.execute(
-            """
-            UPDATE cases
-               SET assignee_id = %s,
-                   escalated_to = CASE WHEN state = 'ESCALATED' THEN NULL ELSE escalated_to END,
-                   state = CASE WHEN state IN ('OPEN', 'ESCALATED') THEN 'UNDER_REVIEW' ELSE state END
-             WHERE id = %s AND assignee_id IS NULL
-            RETURNING id
-            """,
-            (user["id"], chosen["id"]),
-        )
-        if not cur.fetchone():
-            raise HTTPException(409, "another analyst took that case — ask again")
-
-    chain.append(
-        conn,
-        actor_user_id=user["id"],
-        action="CASE_ASSIGNED_FROM_WORKLIST",
-        object_type="case",
-        object_id=chosen["id"],
-        from_state=chosen["state"],
-        to_state="UNDER_REVIEW",
-        payload={"priority": round(chosen["priority"], 1)},
-    )
-    chosen["state"] = "UNDER_REVIEW"
-    chosen["assignee_id"] = user["id"]
-    return {"case": chosen, "resumed": False}
+    # Nothing of theirs. If work is sitting unrouted, say so rather than
+    # pretending the desk is empty: somebody owns that exception (plan §4.1).
+    unassigned = _rows(conn, "SELECT count(*) AS n FROM cases c WHERE c.assignee_id IS NULL "
+                             "AND c.state <> 'CLOSED' AND c.handling = 'HUMAN'")[0]["n"]
+    return {"case": None, "resumed": False,
+            "note": ("Your queue is clear." if not unassigned else
+                     f"Your queue is clear. {unassigned} case(s) are waiting to be routed; "
+                     "a Fraud Ops lead owns that queue."),
+            "unrouted_cases": int(unassigned), **({} if scope_params else {})}
 
 
 @router.post("/cases/{case_id}/disposition")

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Query
 
 from ...cases import performance
 from ...config import settings
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 
@@ -289,8 +290,11 @@ def search_transactions(
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    where = ["1=1"]
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    # D94: search is scoped like every other read. A payment is visible when the
+    # caller holds a case for that customer; a lead sees everything.
+    scope_sql, scope_params = visibility.subject_predicate(user, "t.subject_token")
+    where = [scope_sql]
+    params: dict[str, Any] = {"limit": limit, "offset": offset, **scope_params}
     if q:
         where.append("(t.transaction_ref ILIKE %(q)s OR t.display_name ILIKE %(q)s)")
         params["q"] = f"%{q}%"

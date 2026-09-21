@@ -43,8 +43,10 @@ def case_id():
     now = datetime.now(timezone.utc)
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
         row = c.execute(
-            "INSERT INTO cases (subject_token, state, risk_level, opened_at, last_alert_at, correlation_expires_at) "
-            "VALUES (%s, 'OPEN', 'HIGH', %s, %s, %s) RETURNING id",
+            "INSERT INTO cases (subject_token, state, risk_level, opened_at, last_alert_at, "
+            "correlation_expires_at, assignee_id, assigned_at) "
+            "VALUES (%s, 'OPEN', 'HIGH', %s, %s, %s, "
+            "(SELECT id FROM users WHERE email = 'analyst@riskradar.local'), now()) RETURNING id",
             (subject, now, now, now + timedelta(hours=24)),
         ).fetchone()
         c.commit()
@@ -68,7 +70,8 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     analyst, infosec, lead = (as_user(e) for e in PASSWORDS)
     me = analyst.get("/v1/auth/me").json()["id"]
 
-    assert stage(analyst, case_id) == "NEW"
+    # D94: the case was routed to this analyst, so it is already theirs.
+    assert stage(analyst, case_id) == "IN_REVIEW"
     assert analyst.post(f"/v1/cases/{case_id}/review").status_code == 200
     assert stage(analyst, case_id) == "IN_REVIEW"
 
@@ -81,8 +84,9 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert ok.status_code == 200, ok.text
     assert any(a["action_code"] == "CUSTOMER_CONTACTED" for a in ok.json()["workflow"]["actions"])
     # Somebody not working the case cannot record steps on it.
-    assert infosec.post(f"/v1/cases/{case_id}/actions",
-                        json={"action_code": "TIMELINE_REVIEWED", "result": "UNUSUAL"}).status_code == 403
+    assert (infosec.post(f"/v1/cases/{case_id}/actions",
+                        json={"action_code": "TIMELINE_REVIEWED", "result": "UNUSUAL"}).status_code == 404,
+            "D94: outside their scope InfoSec is not told the case exists")
 
     # Escalation needs a reason, then leaves the analyst's queue for InfoSec's.
     assert analyst.post(f"/v1/cases/{case_id}/escalate", json={"target": "INFOSEC"}).status_code == 400
@@ -104,7 +108,10 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert analyst.post(f"/v1/cases/{case_id}/return", json={"findings": "nothing"}).status_code == 400
     back = infosec.post(f"/v1/cases/{case_id}/return", json={"findings": "SIM swap confirmed with the carrier"})
     assert back.status_code == 200, back.text
-    assert back.json()["assignee"] and stage(analyst, case_id) == "IN_REVIEW"
+    assert back.json()["assignee"] and back.json()["returned"] is True
+    assert stage(analyst, case_id) == "IN_REVIEW"
+    # D94: it has left InfoSec's queue entirely.
+    assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
     mine = analyst.get("/v1/worklist", params={"scope": "mine", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in mine], "handed back to the analyst who escalated"
 

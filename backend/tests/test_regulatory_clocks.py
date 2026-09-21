@@ -154,8 +154,9 @@ def _user(conn, email, template):
 def case_id(conn):
     return conn.execute(
         """
-        INSERT INTO cases (subject_token, risk_level, correlation_expires_at, state)
-        VALUES ('test-clocks-subject', 'HIGH', now() + interval '1 day', 'UNDER_REVIEW')
+        INSERT INTO cases (subject_token, risk_level, correlation_expires_at, state, assignee_id, assigned_at)
+        VALUES ('test-clocks-subject', 'HIGH', now() + interval '1 day', 'UNDER_REVIEW',
+                (SELECT id FROM users WHERE email = 'analyst@riskradar.local'), now())
         RETURNING id
         """
     ).fetchone()["id"]

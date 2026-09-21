@@ -26,6 +26,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 
@@ -47,7 +48,10 @@ def case_links(
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    case = _rows(conn, "SELECT id, subject_token, outcome, state FROM cases WHERE id = %s", (case_id,))
+    # D94: the connections view is case content, so it is scoped like the case.
+    scope_sql, scope_params = visibility.predicate(user)
+    case = _rows(conn, f"SELECT c.id, c.subject_token, c.outcome, c.state FROM cases c "
+                       f"WHERE c.id = %(case_id)s AND {scope_sql}", {**scope_params, "case_id": case_id})
     if not case:
         raise HTTPException(404, "case not found")
     subject = case[0]["subject_token"]

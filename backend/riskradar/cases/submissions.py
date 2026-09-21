@@ -124,7 +124,8 @@ def submit(conn: Any, *, case_id: int, user: dict[str, Any], proposed_outcome: s
     if expected_version is not None and int(case["version"]) != expected_version:
         raise SubmissionError(409, f"the case has moved on: it is at version {case['version']}, "
                                    f"you read version {expected_version}. Reload and look again.")
-    if case["assignee_id"] not in (None, user["id"]):
+    if case["assignee_id"] not in (None, user["id"]) and "cases:reassign" not in user.get("permissions", []):
+        # A lead holds the desk and may act on any case; an analyst works their own.
         raise SubmissionError(403, "this case belongs to someone else; a lead can reassign it")
     wanted = validate_restrictions(restrictions)
     if wanted and proposed_outcome != "CONFIRMED_FRAUD":

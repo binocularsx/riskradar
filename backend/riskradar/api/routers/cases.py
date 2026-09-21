@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ...audit import chain
 from ...clocks import sweep as clock_sweep
 from ...clocks import watchlist
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
 from ..schemas import (
@@ -45,9 +46,15 @@ router = APIRouter(prefix="/v1", tags=["cases"])
 OPEN_STATES = ("OPEN", "UNDER_REVIEW", "ESCALATED")
 
 
-def _fetch_case(conn: Any, case_id: int) -> dict[str, Any]:
+def _fetch_case(conn: Any, case_id: int, user: dict[str, Any] | None = None) -> dict[str, Any]:
+    """One case, and — when the caller is named — only if they may see it (D94).
+
+    404, not 403: a person outside the scope should not learn that a case with
+    that number exists, which is what a different answer would tell them.
+    """
+    sql, params = ("TRUE", {}) if user is None else visibility.predicate(user)
     with conn.cursor() as cur:
-        cur.execute("SELECT * FROM cases WHERE id = %s", (case_id,))
+        cur.execute(f"SELECT c.* FROM cases c WHERE c.id = %(case_id)s AND {sql}", {**params, "case_id": case_id})
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="case not found")
@@ -77,9 +84,13 @@ def list_cases(
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """FR-033: sortable by score, filterable by risk level, channel and state."""
-    where = ["1=1"]
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    """FR-033: sortable by score, filterable by risk level, channel and state.
+
+    D94: the list is scoped on the server. An analyst's "all" is their own work.
+    """
+    scope_sql, scope_params = visibility.predicate(user)
+    where = [scope_sql]
+    params: dict[str, Any] = {"limit": limit, "offset": offset, **scope_params}
 
     if state:
         where.append("c.state = %(state)s")
@@ -139,6 +150,8 @@ def list_alerts(
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
+    # D94: alerts belong to cases, so they are scoped like cases.
+    scope_sql, scope_params = visibility.predicate(user)
     items = _rows(
         conn,
         """
@@ -147,13 +160,14 @@ def list_alerts(
                t.instrument, t.rail, t.auth_result, t.display_name,
                d.decision, d.signals
           FROM alerts a
+          JOIN cases c ON c.id = a.case_id
           JOIN transactions t ON t.id = a.transaction_id
           JOIN decisions   d ON d.id = a.decision_id
-         WHERE a.id > %s
+         WHERE a.id > %(since_id)s AND {scope}
          ORDER BY a.id DESC
-         LIMIT %s
-        """,
-        (since_id, limit),
+         LIMIT %(limit)s
+        """.format(scope=scope_sql),
+        {"since_id": since_id, "limit": limit, **scope_params},
     )
     return {"items": items}
 
@@ -177,7 +191,7 @@ def case_detail(
     only ever see the slice that tripped a threshold, and could not tell a
     six-transaction extraction from a one-off.
     """
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
 
     alerts = _rows(
         conn,
@@ -346,7 +360,7 @@ def start_review(
     user: dict = Depends(requires(Permission.CASES_REVIEW)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     if case["state"] not in ("OPEN", "ESCALATED"):
         raise HTTPException(400, f"cannot start review from {case['state']}")
     return _transition(
@@ -370,7 +384,7 @@ def add_note(
     user: dict = Depends(requires(Permission.CASES_REVIEW)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "cannot annotate a closed case")
     with conn.cursor() as cur:
@@ -408,7 +422,7 @@ def set_outcome(
     """
     from ...cases import submissions as subs
 
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     if case["state"] not in ("UNDER_REVIEW", "ESCALATED"):
         raise HTTPException(400, "open the case for review before proposing an outcome")
     rationale = (body.note or "").strip()
@@ -420,7 +434,7 @@ def set_outcome(
                                  rationale=rationale, restrictions=[], expected_version=None)
     except subs.SubmissionError as exc:
         raise HTTPException(exc.status, exc.detail) from exc
-    return {"case": _fetch_case(conn, case_id), "submission": submission,
+    return {"case": _fetch_case(conn, case_id, user), "submission": submission,
             "note": "proposed, not decided: a Fraud Ops Lead who did not write it must approve (D93)"}
 
 
@@ -431,7 +445,7 @@ def escalate(
     user: dict = Depends(requires(Permission.CASES_ESCALATE)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "cannot escalate a closed case")
     # D83: a reason is required. The team receiving it has to know why without
@@ -508,7 +522,7 @@ def record_report(
                              counterparty_institution=body.counterparty_institution, note=body.note)
     except reports.ReportError as exc:
         raise HTTPException(exc.status, exc.detail) from exc
-    return {"case": _fetch_case(conn, case_id), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
+    return {"case": _fetch_case(conn, case_id, user), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
 
 
 @router.post("/cases/{case_id}/milestones")
@@ -524,7 +538,7 @@ def record_milestone(
     Reimbursement pays money back, so it needs ``cases:close`` (a Fraud Ops Lead),
     and it needs a concluded investigation that confirmed fraud first.
     """
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     column = MILESTONE_COLUMN[body.milestone]
     if not case["first_reported_at"]:
         raise HTTPException(400, "record the customer's report first; it starts the clocks")
@@ -568,7 +582,7 @@ def record_milestone(
         payload={"at": at.isoformat(), "recorded_at": now.isoformat(),
                  "counterparty_institution": body.counterparty_institution},
     )
-    return {"case": _fetch_case(conn, case_id), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
+    return {"case": _fetch_case(conn, case_id, user), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +621,7 @@ def place_watchlist_flag(
 
     Risk Radar records the flag; the bank applies it to the customer's BVN.
     """
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     flag = _watchlist_call(watchlist.place, conn, case=case, user_id=user["id"],
                            reason=body.reason, hours=body.hours)
     return {"flag": flag}
@@ -680,7 +694,7 @@ def assign(
     user: dict = Depends(requires(Permission.CASES_REASSIGN)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     with conn.cursor() as cur:
         cur.execute("UPDATE cases SET assignee_id = %s WHERE id = %s", (body.assignee_id, case_id))
     chain.append(
@@ -692,7 +706,7 @@ def assign(
         from_state=str(case["assignee_id"]),
         to_state=str(body.assignee_id),
     )
-    return _fetch_case(conn, case_id)
+    return _fetch_case(conn, case_id, user)
 
 
 @router.post("/cases/{case_id}/close")
@@ -711,7 +725,7 @@ def close_case(
     """
     from ...cases import submissions as subs
 
-    case = _fetch_case(conn, case_id)
+    case = _fetch_case(conn, case_id, user)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "case is already closed")
     # D93 / plan §4.3: closing is objective. Every condition is named, and the
