@@ -209,6 +209,10 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         <LinkGraph caseId={summary.id} />
       </div>
 
+      {/* D97: restrictions a lead approved, and what the bank did about them */}
+      <Restrictions caseId={summary.id} />
+
+
       {/* ------------------------------------ 4. what the activity looks like */}
       {detail?.timeline?.length > 0 && <Timeline items={detail.timeline} />}
 
@@ -348,5 +352,58 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * D97: the restrictions a lead approved on this case, and what the bank did.
+ * Risk Radar restricts nothing itself — it recommends, dispatches to the bank,
+ * and records the outcome — so the wording says "recommended", never "applied".
+ */
+const RESTRICTION_LABELS = {
+  DEBIT_RESTRICTION: 'Stop debits',
+  CHANNEL_RESTRICTION: 'Block a channel',
+  CARD_FREEZE: 'Freeze the card',
+  BENEFICIARY_RESTRICTION: 'Block a destination',
+}
+const RESTRICTION_STATUS = {
+  RECOMMENDED: ['queued for the bank', ''],
+  DELIVERED: ['sent to the bank, awaiting confirmation', ''],
+  APPLIED: ['the bank applied it', 'suppress'],
+  NOT_APPLIED: ['the bank did not apply it', 'escalate'],
+  REJECTED: ['the bank declined it', 'override'],
+}
+
+function Restrictions({ caseId }) {
+  const [items, setItems] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    api.caseRestrictions(caseId)
+      .then((d) => !cancelled && setItems(d.items))
+      .catch(() => !cancelled && setItems([]))
+    return () => { cancelled = true }
+  }, [caseId])
+
+  if (!items || !items.length) return null
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <h3>Restrictions asked of the bank</h3>
+      <p className="dim" style={{ fontSize: 12, marginTop: 0 }}>
+        Advisory (D7): Risk Radar recommends and records; the bank applies and confirms.
+      </p>
+      {items.map((r) => {
+        const [text, cls] = RESTRICTION_STATUS[r.status] || [r.status, '']
+        return (
+          <div key={r.restriction_ref} className="between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bg-2)' }}>
+            <div>
+              <strong>{RESTRICTION_LABELS[r.action] || r.action}</strong>
+              {r.channel && <span className="muted"> · {r.channel.replace(/_/g, ' ').toLowerCase()}</span>}
+              {r.reason && <div className="dim" style={{ fontSize: 12 }}>{r.reason}</div>}
+            </div>
+            <span className={`pill ${cls}`}>{text}</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }

@@ -556,6 +556,14 @@ class ConfigDecisionIn(Strict):
     reason: Annotated[str | None, Field(max_length=2000)] = None
 
 
+class RestrictionAckIn(Strict):
+    """D97: what the bank did about a recommended restriction — reconciliation."""
+
+    outcome: Literal["APPLIED", "NOT_APPLIED", "REJECTED"]
+    reason: Annotated[str | None, Field(max_length=2000)] = None
+    taken_at: datetime | None = None
+
+
 class ListEntryIn(Strict):
     kind: Literal["SANCTIONED", "KNOWN_MULE", "ALLOWLIST"]
     beneficiary_account_id: str

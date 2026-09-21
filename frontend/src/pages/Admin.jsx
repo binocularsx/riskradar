@@ -58,17 +58,19 @@ function useAsync(fn, deps = []) {
  * them. A message that cannot be sent yet is shown with its reason, not hidden.
  */
 function Integrations() {
-  const { data, error } = useAsync(() => api.integrations())
+  const { data, error } = useAsync(() => Promise.all([api.integrations(), api.restrictionStatus()]))
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
-  const cov = data.bvn_coverage_30d
+  const [integrations, restrictions] = data
+  const cov = integrations.bvn_coverage_30d
   return (
     <>
-      <div className="grid cols-3" style={{ marginBottom: 14 }}>
+      <div className="grid cols-4" style={{ marginBottom: 14 }}>
         {[
-          ['Core banking (BVN lookup)', data.adapters.core_resolver],
-          ['Identity registry', data.adapters.identity_registry],
-          ['Industry watch-list', data.adapters.industry_connector],
+          ['Core banking (BVN lookup)', integrations.adapters.core_resolver],
+          ['Identity registry', integrations.adapters.identity_registry],
+          ['Industry watch-list', integrations.adapters.industry_connector],
+          ['Restriction channel (D97)', restrictions.connector],
         ].map(([label, value]) => (
           <div className="card" key={label}>
             <div className="stat-label">{label}</div>
@@ -80,20 +82,20 @@ function Integrations() {
         <h2>Identity</h2>
         <p style={{ fontSize: 13, marginTop: 0 }}>
           {cov.with_bvn} of {cov.customers} customers seen in 30 days have a known BVN.
-          {' '}Institution code <span className="mono">{data.adapters.institution_code}</span>.
+          {' '}Institution code <span className="mono">{integrations.adapters.institution_code}</span>.
         </p>
         <div className="row wrap" style={{ gap: 8 }}>
-          {data.verification.map((v) => <span key={v.status} className="pill">{v.status.toLowerCase()} {v.n}</span>)}
+          {integrations.verification.map((v) => <span key={v.status} className="pill">{v.status.toLowerCase()} {v.n}</span>)}
         </div>
       </div>
-      <div className="card">
+      <div className="card" style={{ marginBottom: 14 }}>
         <h2>Industry watch-list</h2>
-        {data.outbox.length ? (
+        {integrations.outbox.length ? (
           <div className="table-scroll">
             <table>
               <thead><tr><th>Outbox</th><th className="num">Messages</th><th>Oldest</th><th>Last reason</th></tr></thead>
               <tbody>
-                {data.outbox.map((o) => (
+                {integrations.outbox.map((o) => (
                   <tr key={o.status}>
                     <td className="mono">{o.status}</td><td className="num">{o.n}</td>
                     <td className="mono dim">{when(o.oldest)}</td><td className="dim">{o.last_error || '—'}</td>
@@ -104,9 +106,34 @@ function Integrations() {
           </div>
         ) : <Empty>No flags placed yet.</Empty>}
         <p className="dim" style={{ fontSize: 12, marginBottom: 0 }}>
-          Received from other institutions: {data.inbound.active} in force, {data.inbound.total} in all
-          {data.inbound.last_received ? `, last ${when(data.inbound.last_received)}` : ''}.
+          Received from other institutions: {integrations.inbound.active} in force, {integrations.inbound.total} in all
+          {integrations.inbound.last_received ? `, last ${when(integrations.inbound.last_received)}` : ''}.
         </p>
+      </div>
+      <div className="card">
+        <h2>Restriction delivery (D97)</h2>
+        <p className="dim" style={{ fontSize: 12, marginTop: 0 }}>
+          A lead's approved restriction is dispatched to the bank and its outcome recorded.
+          Risk Radar restricts nothing itself (D7).
+        </p>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <span className="pill">{restrictions.lifecycle.total} recommended</span>
+          <span className="pill">{restrictions.lifecycle.awaiting_delivery} awaiting the bank</span>
+          <span className="pill">{restrictions.lifecycle.awaiting_ack} awaiting confirmation</span>
+          <span className="pill suppress">{restrictions.lifecycle.acknowledged} confirmed</span>
+        </div>
+        {restrictions.outbox.length > 0 && (
+          <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
+            {restrictions.outbox.map((o) => (
+              <span key={o.status} className="pill" title={o.last_error || ''}>{o.status.toLowerCase()} {o.n}</span>
+            ))}
+          </div>
+        )}
+        {restrictions.by_outcome.length > 0 && (
+          <p className="dim" style={{ fontSize: 12, marginBottom: 0, marginTop: 8 }}>
+            Bank outcomes: {restrictions.by_outcome.map((o) => `${o.outcome.toLowerCase().replace(/_/g, ' ')} ${o.n}`).join(' · ')}.
+          </p>
+        )}
       </div>
     </>
   )

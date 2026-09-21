@@ -1,0 +1,290 @@
+"""Delivering an approved restriction to the bank, and recording what it did (D97).
+
+Plain English
+-------------
+When a lead approves a fraud finding that asks the bank to restrict a customer's
+account (D93), that ask has to reach the bank and its outcome has to come back.
+Three stages, and Risk Radar still never restricts anything itself (D7):
+
+1. **Outbox.** On approval, one *restriction order* per ask is written, and one
+   outbox message beside it, in the same transaction as the approval — so an
+   approved restriction can never exist without its message.
+2. **Execution.** A sweep hands due messages to the bank's restriction connector
+   (unconnected by default, so a message waits in the outbox with its reason,
+   visibly — never silently). The bank applies the restriction on its side; the
+   order records when the bank was first told.
+3. **Reconciliation.** The bank acknowledges the outcome — APPLIED, NOT_APPLIED
+   or REJECTED — once. Advice nobody confirms is advice nobody should trust, so
+   the record shows what was asked, when the bank was told, and what it did.
+
+Everything is tokens (D9c, D9d): the bank maps a token to the real account, card
+or destination on its own side. Every step is written to the hash-chained record.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from .audit import chain
+from .events import publish
+from .identity import adapters
+
+log = logging.getLogger("riskradar.restrictions")
+
+MAX_ATTEMPTS = 10
+NOT_CONNECTED_RETRY = timedelta(minutes=5)
+ACK_OUTCOMES = ("APPLIED", "NOT_APPLIED", "REJECTED")
+
+
+class RestrictionError(Exception):
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+
+
+def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return [dict(r) if not isinstance(r, dict) else r for r in cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# 1. Create the orders on approval (transactional outbox)
+# ---------------------------------------------------------------------------
+
+
+def create_orders(conn: Any, submission: dict[str, Any], approver_id: int) -> list[dict[str, Any]]:
+    """Write one order and one outbox message per restriction on an approved
+    submission, in the caller's (the approval's) transaction. Idempotent: a
+    submission already turned into orders is not turned into them again."""
+    restrictions = submission.get("restrictions")
+    if isinstance(restrictions, str):
+        restrictions = json.loads(restrictions)
+    if not restrictions:
+        return []
+
+    existing = _rows(
+        conn, "SELECT count(*) AS n FROM restriction_orders WHERE submission_id = %s",
+        (submission["id"],),
+    )[0]["n"]
+    if existing:
+        return []  # approval replayed; the orders are already there
+
+    created: list[dict[str, Any]] = []
+    for item in restrictions:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO restriction_orders
+                    (submission_id, case_id, action, account_token, beneficiary_token,
+                     channel, reason, approved_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, restriction_ref, action, account_token, beneficiary_token,
+                          channel, reason, case_id
+                """,
+                (submission["id"], submission["case_id"], item["action"],
+                 item.get("account_token"), item.get("beneficiary_token"),
+                 item.get("channel"), item.get("reason"), approver_id),
+            )
+            order = dict(cur.fetchone())
+        payload = {
+            "restriction_ref": str(order["restriction_ref"]),
+            "action": order["action"],
+            "account_token": order["account_token"],
+            "beneficiary_token": order["beneficiary_token"],
+            "channel": order["channel"],
+            "reason": order["reason"],
+            "case_id": order["case_id"],
+        }
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO restriction_outbox (order_id, payload) VALUES (%s, %s)",
+                (order["id"], json.dumps(payload)),
+            )
+        chain.append(
+            conn, actor_user_id=approver_id, action="RESTRICTION_ISSUED",
+            object_type="restriction_order", object_id=order["id"],
+            to_state=order["action"],
+            payload={"case_id": order["case_id"], "submission_id": submission["id"],
+                     "restriction_ref": str(order["restriction_ref"]),
+                     "target": order["account_token"] or order["beneficiary_token"],
+                     "channel": order["channel"]},
+        )
+        created.append(order)
+
+    if created:
+        publish(conn, "restrictions_issued",
+                {"case_id": submission["case_id"], "count": len(created)})
+    return created
+
+
+# ---------------------------------------------------------------------------
+# 2. Dispatch — hand due messages to the bank's connector
+# ---------------------------------------------------------------------------
+
+
+def dispatch(conn: Any, *, connector: adapters.RestrictionConnector | None = None,
+             now: datetime | None = None, limit: int = 100) -> dict[str, int]:
+    """Send due outbox messages. Runs inside the caller's transaction."""
+    connector = connector or adapters.restriction_connector()
+    now = now or datetime.now(timezone.utc)
+    due = _rows(
+        conn,
+        "SELECT id, order_id, payload, attempts FROM restriction_outbox "
+        "WHERE status = 'PENDING' AND next_attempt_at <= %s ORDER BY id LIMIT %s FOR UPDATE SKIP LOCKED",
+        (now, limit),
+    )
+    counts = {"sent": 0, "waiting": 0, "failed": 0}
+    for row in due:
+        payload = row["payload"] if isinstance(row["payload"], dict) else json.loads(row["payload"])
+        attempts = row["attempts"] + 1
+        try:
+            ref = connector.publish(payload)
+        except adapters.NotConnected as exc:
+            _retry(conn, row["id"], attempts=attempts, error=str(exc),
+                   next_at=now + NOT_CONNECTED_RETRY)
+            counts["waiting"] += 1
+            continue
+        except Exception as exc:  # noqa: BLE001 - a bank outage must not stop the sweep
+            final = attempts >= MAX_ATTEMPTS
+            _retry(conn, row["id"], attempts=attempts, error=f"{type(exc).__name__}: {exc}",
+                   next_at=now + timedelta(seconds=30 * 2 ** min(attempts, 8)),
+                   status="FAILED" if final else "PENDING")
+            counts["failed" if final else "waiting"] += 1
+            continue
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE restriction_outbox SET status = 'SENT', attempts = %s, sent_at = %s, "
+                "external_ref = %s, last_error = NULL WHERE id = %s",
+                (attempts, now, ref, row["id"]),
+            )
+            # The order records that the bank has been told.
+            cur.execute(
+                "UPDATE restriction_orders SET first_delivered_at = COALESCE(first_delivered_at, %s), "
+                "delivery_count = delivery_count + 1 WHERE id = %s",
+                (now, row["order_id"]),
+            )
+        counts["sent"] += 1
+    return counts
+
+
+def _retry(conn: Any, outbox_id: int, *, attempts: int, error: str,
+           next_at: datetime, status: str = "PENDING") -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE restriction_outbox SET status = %s, attempts = %s, last_error = %s, "
+            "next_attempt_at = %s WHERE id = %s",
+            (status, attempts, error[:500], next_at, outbox_id),
+        )
+
+
+# ---------------------------------------------------------------------------
+# The bank poll feed, and reconciliation
+# ---------------------------------------------------------------------------
+
+_ORDER_COLUMNS = """
+    id, restriction_ref, submission_id, case_id, action::text AS action,
+    account_token, beneficiary_token, channel, reason, issued_at,
+    first_delivered_at, delivery_count, acknowledged_at, ack_outcome::text AS ack_outcome,
+    ack_reason, ack_taken_at
+"""
+
+
+def mark_delivered(conn: Any, order_ids: list[int], *, now: datetime | None = None) -> None:
+    if not order_ids:
+        return
+    now = now or datetime.now(timezone.utc)
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE restriction_orders SET first_delivered_at = COALESCE(first_delivered_at, %s), "
+            "delivery_count = delivery_count + 1 WHERE id = ANY(%s)",
+            (now, order_ids),
+        )
+
+
+def feed(conn: Any, *, after_id: int, limit: int) -> list[dict[str, Any]]:
+    return _rows(conn, f"SELECT {_ORDER_COLUMNS} FROM restriction_orders "
+                       "WHERE id > %s ORDER BY id LIMIT %s", (after_id, limit))
+
+
+def by_ref(conn: Any, restriction_ref: str) -> dict[str, Any] | None:
+    rows = _rows(conn, f"SELECT {_ORDER_COLUMNS} FROM restriction_orders WHERE restriction_ref = %s",
+                 (restriction_ref,))
+    return rows[0] if rows else None
+
+
+def for_case(conn: Any, case_id: int) -> list[dict[str, Any]]:
+    return _rows(conn, f"SELECT {_ORDER_COLUMNS} FROM restriction_orders "
+                       "WHERE case_id = %s ORDER BY issued_at", (case_id,))
+
+
+def acknowledge(conn: Any, *, restriction_ref: str, outcome: str, reason: str | None,
+                taken_at: datetime | None) -> dict[str, Any]:
+    """The bank reports what it did. Once; a repeat with the same answer is a
+    no-op, a different answer is a 409 (the directive-ack posture, D74)."""
+    if outcome not in ACK_OUTCOMES:
+        raise RestrictionError(422, f"outcome must be one of {', '.join(ACK_OUTCOMES)}")
+    rows = _rows(conn, "SELECT * FROM restriction_orders WHERE restriction_ref = %s FOR UPDATE",
+                 (restriction_ref,))
+    if not rows:
+        raise RestrictionError(404, "unknown restriction_ref")
+    order = rows[0]
+    now = datetime.now(timezone.utc)
+    taken = taken_at or now
+
+    if order["acknowledged_at"] is not None:
+        same = (order["ack_outcome"], order["ack_reason"]) == (outcome, reason)
+        if not same:
+            raise RestrictionError(409, "this restriction is already acknowledged with a different answer")
+        return {"status": "duplicate", "restriction_ref": restriction_ref}
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE restriction_orders SET acknowledged_at = %s, ack_outcome = %s, ack_reason = %s, "
+            "ack_taken_at = %s, first_delivered_at = COALESCE(first_delivered_at, %s) "
+            "WHERE id = %s",
+            (now, outcome, reason, taken, now, order["id"]),
+        )
+    chain.append(
+        conn, actor_user_id=_system_user(conn), action="RESTRICTION_ACKNOWLEDGED",
+        object_type="restriction_order", object_id=order["id"], to_state=outcome,
+        payload={"restriction_ref": restriction_ref, "case_id": order["case_id"], "reason": reason},
+    )
+    publish(conn, "restriction_acknowledged",
+            {"case_id": order["case_id"], "outcome": outcome})
+    return {"status": "acknowledged", "restriction_ref": restriction_ref, "outcome": outcome}
+
+
+def _system_user(conn: Any) -> int:
+    """The bank's acknowledgement is a machine action; the actor is never null
+    (D12c), so it is attributed to the reserved system principal."""
+    return _rows(conn, "SELECT id FROM users WHERE is_system LIMIT 1")[0]["id"]
+
+
+def status(conn: Any) -> dict[str, Any]:
+    """What an operator needs: the connector in use, delivery health, and what
+    the bank has said about the recommendations sent to it."""
+    outbox = _rows(conn, "SELECT status, count(*) AS n, "
+                         "max(last_error) FILTER (WHERE last_error IS NOT NULL) AS last_error, "
+                         "min(created_at) AS oldest FROM restriction_outbox GROUP BY status ORDER BY status")
+    lifecycle = _rows(conn, """
+        SELECT count(*) AS total,
+               count(*) FILTER (WHERE first_delivered_at IS NULL) AS awaiting_delivery,
+               count(*) FILTER (WHERE first_delivered_at IS NOT NULL AND acknowledged_at IS NULL) AS awaiting_ack,
+               count(*) FILTER (WHERE acknowledged_at IS NOT NULL) AS acknowledged
+          FROM restriction_orders
+    """)[0]
+    by_outcome = _rows(conn, "SELECT ack_outcome::text AS outcome, count(*) AS n FROM restriction_orders "
+                             "WHERE acknowledged_at IS NOT NULL GROUP BY 1 ORDER BY 1")
+    by_action = _rows(conn, "SELECT action::text AS action, count(*) AS n FROM restriction_orders GROUP BY 1 ORDER BY 1")
+    return {
+        "connector": adapters.restriction_connector().name,
+        "outbox": outbox,
+        "lifecycle": {k: int(v) for k, v in lifecycle.items()},
+        "by_outcome": by_outcome,
+        "by_action": by_action,
+    }

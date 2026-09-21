@@ -31,6 +31,7 @@ from .routers import (
     links,
     metrics,
     reports,
+    restrictions,
     stream,
     submissions,
     system,
@@ -125,6 +126,8 @@ app.include_router(stream.router)
 app.include_router(admin.router)
 app.include_router(budget.router)
 app.include_router(reports.router)
+app.include_router(restrictions.router)
+app.include_router(restrictions.staff_router)
 app.include_router(submissions.router)
 app.include_router(system.router)
 

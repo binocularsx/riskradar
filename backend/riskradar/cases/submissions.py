@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .. import restrictions as restriction_delivery
 from ..audit import chain
 from ..events import publish
 
@@ -197,6 +198,7 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
         submission = dict(cur.fetchone())
 
     promoted: list[str] = []
+    restrictions_issued: list[str] = []
     if state == APPROVED:
         with conn.cursor() as cur:
             cur.execute("UPDATE cases SET outcome = %s WHERE id = %s",
@@ -217,6 +219,11 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
                     (case["id"], user["id"], case["id"]),
                 )
                 promoted = [dict(r)["token"] for r in cur.fetchall()]
+        # D97: the restrictions the finding asked for become orders and outbox
+        # messages, written here in the approval's own transaction. Risk Radar
+        # still restricts nothing; it records and dispatches the recommendation.
+        orders = restriction_delivery.create_orders(conn, submission, user["id"])
+        restrictions_issued = [str(o["restriction_ref"]) for o in orders]
     elif state == RETURNED:
         # Back to the analyst who proposed it, with instructions.
         with conn.cursor() as cur:
@@ -230,11 +237,13 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
         payload={"submission_id": submission_id, "submitted_by": submission["submitted_by"],
                  "proposed_outcome": submission["proposed_outcome"], "reason": reason,
                  "known_mule_tokens_added": promoted, "case_version": version,
-                 "restrictions": submission["restrictions"]},
+                 "restrictions": submission["restrictions"],
+                 "restrictions_issued": restrictions_issued},
     )
     publish(conn, "fraud_decided", {"case_id": case["id"], "submission_id": submission_id, "decision": state,
                                     "decided_by": user["id"], "submitted_by": submission["submitted_by"]})
-    return {"submission": submission, "known_mule_tokens_added": promoted, "case_version": version}
+    return {"submission": submission, "known_mule_tokens_added": promoted, "case_version": version,
+            "restrictions_issued": restrictions_issued}
 
 
 def closure_blockers(conn: Any, case_id: int) -> list[str]:

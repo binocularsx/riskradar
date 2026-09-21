@@ -227,9 +227,58 @@ class NibssIndustryConnector:
         raise NotConnected("NIBSS watch-list is not configured (RISKRADAR_NIBSS_WATCHLIST_URL)")
 
 
+# --------------------------------------------------------------------------
+# 4. The restriction channel (D97): where a lead's approved restriction is sent
+# --------------------------------------------------------------------------
+
+
+class RestrictionConnector(Protocol):
+    name: str
+
+    def publish(self, message: dict[str, Any]) -> str: ...
+
+
+class NoRestrictionConnector:
+    name = "none"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        raise NotConnected("no restriction connector configured (RISKRADAR_RESTRICTION_CONNECTOR)")
+
+
+class LoopbackRestrictionConnector:
+    """Accepts every recommendation as a bank's system would, and returns a
+    reference — for demonstrating the outbox end to end. It enforces nothing;
+    the bank still reconciles the outcome through the ack (D7)."""
+
+    name = "loopback"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        return f"LOOPBACK-RESTRICT-{message['restriction_ref']}"
+
+
+class CoreRestrictionConnector:
+    """The bank's core/channel systems, which actually place a debit
+    restriction, block a channel, freeze a card or block a beneficiary.
+
+    A message carries tokens, not account numbers; the bank-side connector maps
+    each token to the real account, card or destination inside its own network,
+    where it holds the pepper (D9d). Until ``RISKRADAR_RESTRICTION_URL`` is set
+    this raises and the recommendation waits in the outbox, visibly."""
+
+    name = "core"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        raise NotConnected("bank restriction channel is not configured (RISKRADAR_RESTRICTION_URL)")
+
+
 _RESOLVERS = {"none": NoCoreResolver, "fixture": FixtureCoreResolver, "finacle": FinacleCoreResolver}
 _REGISTRIES = {"format": FormatRegistry, "nibss": NibssRegistry}
 _CONNECTORS = {"none": NoIndustryConnector, "loopback": LoopbackIndustryConnector, "nibss": NibssIndustryConnector}
+_RESTRICTION_CONNECTORS = {
+    "none": NoRestrictionConnector,
+    "loopback": LoopbackRestrictionConnector,
+    "core": CoreRestrictionConnector,
+}
 _cache: dict[str, Any] = {}
 
 
@@ -253,6 +302,10 @@ def identity_registry() -> IdentityRegistry:
 
 def industry_connector() -> IndustryConnector:
     return _choose("industry", "RISKRADAR_INDUSTRY_CONNECTOR", "none", _CONNECTORS)
+
+
+def restriction_connector() -> RestrictionConnector:
+    return _choose("restriction", "RISKRADAR_RESTRICTION_CONNECTOR", "none", _RESTRICTION_CONNECTORS)
 
 
 def institution_code() -> str:

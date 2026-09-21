@@ -89,6 +89,9 @@ export const api = {
   recordAction: (id, data) => post(`/v1/cases/${id}/actions`, data),
   returnCase: (id, findings) => post(`/v1/cases/${id}/return`, { findings }),
   caseLinks: (id, days = 30) => get(`/v1/cases/${id}/links?days=${days}`),
+  // D97: restrictions a lead approved on a case, and how their delivery is going.
+  caseRestrictions: (id) => get(`/v1/cases/${id}/restrictions`),
+  restrictionStatus: () => get('/v1/metrics/restrictions'),
 
   // queue and cases
   cases: (params) => get(`/v1/cases?${new URLSearchParams(params)}`),

@@ -161,6 +161,7 @@ def sweep(conn: Any, *, system_user_id: int, now: datetime | None = None) -> lis
 def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - process loop
     import psycopg
 
+    from .. import restrictions as restriction_delivery
     from ..config import settings
     from ..identity import industry_sync
     from ..worker.scoring import system_user_id
@@ -182,8 +183,14 @@ def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - proce
                 sync = industry_sync.dispatch(conn)
                 received = industry_sync.pull(conn)
                 conn.commit()
+                # D97: push approved restrictions to the bank's connector. Its own
+                # commit for the same reason — a bank outage undoes nothing here.
+                restr = restriction_delivery.dispatch(conn)
+                conn.commit()
             if sync["sent"] or sync["failed"] or received["stored"]:
                 log.info("industry watch-list: %s, received %s", sync, received)
+            if restr["sent"] or restr["failed"]:
+                log.info("restrictions dispatched: %s", restr)
             for e in expired:
                 log.warning("watch-list flag %s expired%s", e["flag_id"],
                             " without customer contact" if e["contact_missed"] else "")
