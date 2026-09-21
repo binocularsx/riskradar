@@ -49,6 +49,60 @@ Put a TLS-terminating proxy in front of the API. It trusts `X-Forwarded-*`
 headers in production. Each response carries `X-Request-ID`; quote it when
 reporting a problem, because every log line for that request carries it too.
 
+## Going live in the cloud (D101)
+
+D26 kept hosting local-only; D101 adds a live cloud instance for a shareable
+demo, without deleting the local path. Two rules make the deployment safe:
+
+- **One origin (D101b).** The dashboard calls the API on relative paths and the
+  session is a `SameSite=Lax` first-party cookie (D12, D95). Serving the frontend
+  and the API from different domains would silently stop the cookie travelling
+  and break login. So the public edge is one Caddy container (`deploy/Caddyfile`,
+  `deploy/Dockerfile.web`) that serves the built dashboard and reverse-proxies
+  `/v1`, `/v1/stream` and `/health` to the API. `RISKRADAR_CORS_ORIGINS` stays
+  **empty** — same origin needs no CORS.
+- **Synthetic data only (D101a).** The public instance ingests only the
+  simulator's synthetic traffic. Ingesting real transactions needs the NDPA
+  assessment of D28, which this deployment does not have.
+
+On a plain VM (simplest — the whole stack in Docker Compose):
+
+1. Point a DNS `A` record at the VM and open only ports **80 and 443** to the
+   internet at the cloud firewall. 8000 stays closed; the proxy reaches the API
+   over the internal compose network as `api:8000`.
+2. `cp .env.example .env` and set, as real secrets, `RISKRADAR_HMAC_PEPPER`
+   (long, random, permanent — changing it orphans every baseline), the two
+   database-role passwords, `RISKRADAR_PG_SUPERUSER_PASSWORD`, and set
+   `RISKRADAR_ENV=production`, `RISKRADAR_SITE_ADDRESS=<your domain>` and
+   `RISKRADAR_ACME_EMAIL=<you>`. Leave `RISKRADAR_CORS_ORIGINS` empty.
+3. Bring it up with both compose files:
+
+   ```
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml \
+     --env-file .env up -d --build
+   ```
+
+   Postgres → migrate+seed → API, workers, clocks, and the Caddy edge. Caddy
+   requests a certificate for the domain on first start (needs 80/443 reachable).
+4. Match the database role passwords to `.env` (the bootstrap sets development
+   ones): `ALTER ROLE riskradar_app PASSWORD '…'` and the same for
+   `riskradar_migrate`, then restart `api`, `worker` and `clocks`.
+5. **Revoke the public development API key** and issue a real one, or readiness
+   stays failed (D87): `POST /v1/admin/api-keys?name=demo` then
+   `DELETE /v1/admin/api-keys/{id}` for the seeded one.
+6. Promote a model and derive thresholds (see below), then drive synthetic
+   traffic with `simulator/riskradar_sim` pointed at `https://<your domain>`.
+7. Confirm: `GET https://<domain>/health/ready` is 200, the dashboard loads,
+   and login works (the cookie is set on the same origin).
+
+A managed platform (Render, Railway) works too: run the same five services from
+`deploy/Dockerfile`, add the Caddy edge (or the platform's own router **only if**
+it keeps one origin), attach a managed Postgres, and set the same secrets. The
+single-origin rule (D101b) is the one that must not be broken, whatever the host.
+
+Credentials never pass through the person preparing this: account creation, the
+secret values and the deploy command are the operator's to run.
+
 ## Protecting the service (D87)
 
 - **Rate limits.** Each API key has two token buckets: live traffic
