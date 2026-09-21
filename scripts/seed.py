@@ -137,6 +137,22 @@ CONFIG = {
     # regulatory clock work of D71 and D73.
     "alert_budget_per_day": 75,
     "analyst_desk_size": 3,
+    # D92 (per-rule shares): a daily cap per rule, so a noisy low-precision rule
+    # (the velocity burst on a market day) cannot spend the rules envelope and
+    # defer a better one behind it. cap = ceil(measured alerts/day x 1.5);
+    # derived by ml/rule_allocation.py from the published firing rates. OVERRIDE
+    # vetoes (sanctions, known mule) are always mandatory and never capped.
+    "alert_budget_rule_caps": {
+        "VELOCITY_BURST_1H": 32,
+        "CARD_TESTING_PROBES": 17,
+        "SIM_SWAP_TRANSFER": 12,
+        "MULE_INBOUND_FANIN": 11,
+        "ACCOUNT_TAKEOVER_SEQUENCE": 9,
+        "SECOND_LEG_ONWARD_PAYMENT": 8,
+        "DORMANT_ACCOUNT_REACTIVATION": 5,
+        "CARD_PRESENT_NEW_REGION_CASHOUT": 5,
+        "SCAM_BENEFICIARY_FANIN": 2,
+    },
 }
 
 

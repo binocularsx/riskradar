@@ -34,7 +34,7 @@ features use), not the transaction's own time: capacity is analysts' hours.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -49,6 +49,7 @@ DAILY_CAP = "DAILY_CAP"
 HOURLY_PACE = "HOURLY_PACE"
 RULE_QUOTA = "RULE_QUOTA"
 MODEL_QUOTA = "MODEL_QUOTA"
+RULE_CAP = "RULE_CAP"
 MANDATORY = "MANDATORY"
 MACHINE = "MACHINE"
 NOT_ENFORCED = "NOT_ENFORCED"
@@ -64,6 +65,11 @@ class BudgetConfig:
     # D92: the share of the day reserved for discretionary rule alerts. The
     # model gets the rest, and neither layer can spend the other's envelope.
     rule_share: float = 0.6
+    # D92 refinement: a per-rule daily cap, keyed by rule code. A rule absent
+    # here is uncapped and draws only against the rules envelope, as before. A
+    # capped rule defers once it has raised its cap, even if the rules envelope
+    # still has room — so a noisy rule cannot crowd out a better one.
+    rule_caps: dict[str, int] = field(default_factory=dict)
 
     @property
     def hour_ceiling(self) -> int:
@@ -78,6 +84,9 @@ class BudgetConfig:
     def model_quota(self) -> int:
         return self.per_day - self.rule_quota
 
+    def cap_for(self, rule: str | None) -> int | None:
+        return self.rule_caps.get(rule) if rule else None
+
 
 @dataclass(frozen=True)
 class Admission:
@@ -89,13 +98,14 @@ class Admission:
     hour_count: int       # after this admission
     config: BudgetConfig
     rule_driven: bool = False   # D92: which envelope it was judged against
+    budget_rule: str | None = None  # D92: the rule charged, if rule-driven
 
     @property
     def raised(self) -> bool:
         return self.verdict == RAISE
 
     def as_trace(self) -> dict[str, Any]:
-        return {
+        trace = {
             "step": "budget",
             "verdict": self.verdict,
             "reason": self.reason,
@@ -109,6 +119,10 @@ class Admission:
             "rule_quota": self.config.rule_quota,
             "model_quota": self.config.model_quota,
         }
+        if self.rule_driven and self.budget_rule:
+            trace["budget_rule"] = self.budget_rule
+            trace["rule_cap"] = self.config.cap_for(self.budget_rule)
+        return trace
 
 
 def local_day_hour(now: datetime) -> tuple[date, int]:
@@ -116,8 +130,23 @@ def local_day_hour(now: datetime) -> tuple[date, int]:
     return local.date(), local.hour
 
 
+_SEVERITY_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+
+
+def primary_rule(signals: Any) -> str | None:
+    """D92: the rule charged for a rule-driven alert — the highest-severity
+    ESCALATE signal, tie broken by code so it is deterministic. OVERRIDE signals
+    are mandatory and outside the caps; SUPPRESS never raises. None when no rule
+    escalated (a model-only alert)."""
+    escalating = [s for s in signals if getattr(s, "power", None) == "ESCALATE"]
+    if not escalating:
+        return None
+    return max(escalating, key=lambda s: (_SEVERITY_RANK.get(s.severity, 0), s.code)).code
+
+
 def judge(*, raised_today: int, hour_count: int, config: BudgetConfig, mandatory: bool, machine: bool,
-          rule_driven: bool = False, rule_raised: int = 0, model_raised: int = 0) -> tuple[str, str]:
+          rule_driven: bool = False, rule_raised: int = 0, model_raised: int = 0,
+          budget_rule: str | None = None, rule_count: int = 0) -> tuple[str, str]:
     """Pure: raise or defer one alert, given what the day, the hour and each envelope have spent."""
     if mandatory:
         return RAISE, MANDATORY
@@ -136,6 +165,11 @@ def judge(*, raised_today: int, hour_count: int, config: BudgetConfig, mandatory
         return DEFER, RULE_QUOTA
     if not rule_driven and model_raised >= config.model_quota:
         return DEFER, MODEL_QUOTA
+    # D92 refinement: within the rules envelope, a capped rule defers once it has
+    # spent its own cap, so it cannot crowd out a better rule with room to spare.
+    cap = config.cap_for(budget_rule)
+    if rule_driven and cap is not None and rule_count >= cap:
+        return DEFER, RULE_CAP
     return RAISE, WITHIN_BUDGET
 
 
@@ -149,15 +183,19 @@ def load_config(conn: Any) -> BudgetConfig:
         cur.execute(
             "SELECT key, value FROM app_config WHERE key IN "
             "('alert_budget_per_day', 'alert_budget_hourly_burst', 'alert_budget_enforced', "
-            "'alert_deferral_hours', 'alert_budget_rule_share')"
+            "'alert_deferral_hours', 'alert_budget_rule_share', 'alert_budget_rule_caps')"
         )
         rows = {r["key"]: r["value"] for r in (dict(x) for x in cur.fetchall())}
+    caps_raw = _config_value(rows, "alert_budget_rule_caps", {}) or {}
+    # Ignore any non-integer/negative entry rather than trust the map blindly.
+    rule_caps = {str(k): int(v) for k, v in dict(caps_raw).items() if isinstance(v, (int, float)) and int(v) >= 0}
     return BudgetConfig(
         per_day=int(_config_value(rows, "alert_budget_per_day", 75)),
         hourly_burst=float(_config_value(rows, "alert_budget_hourly_burst", 3.0)),
         enforced=bool(_config_value(rows, "alert_budget_enforced", True)),
         deferral_hours=int(_config_value(rows, "alert_deferral_hours", 24)),
         rule_share=float(_config_value(rows, "alert_budget_rule_share", 0.35)),
+        rule_caps=rule_caps,
     )
 
 
@@ -192,16 +230,21 @@ def lock_day(conn: Any, day: date, config: BudgetConfig) -> dict[str, Any]:
 
 
 def admit(conn: Any, *, mandatory: bool, machine: bool, rule_driven: bool = False,
-          now: datetime | None = None, config: BudgetConfig | None = None) -> Admission:
+          budget_rule: str | None = None, now: datetime | None = None,
+          config: BudgetConfig | None = None) -> Admission:
     """Decide one alert and write it to the ledger. Runs in the caller's transaction."""
     now = now or datetime.now(timezone.utc)
     config = config or load_config(conn)
     day, hour = local_day_hour(now)
     row = lock_day(conn, day, config)
     raised_today, hour_count = int(row["raised"]), int(row["hourly"][hour])
+    counts = dict(row.get("rule_counts") or {})
+    charged = rule_driven and not (mandatory or machine)  # which alerts spend a rule's cap
     verdict, reason = judge(raised_today=raised_today, hour_count=hour_count, config=config,
                             mandatory=mandatory, machine=machine, rule_driven=rule_driven,
-                            rule_raised=int(row["rule_raised"]), model_raised=int(row["model_raised"]))
+                            rule_raised=int(row["rule_raised"]), model_raised=int(row["model_raised"]),
+                            budget_rule=budget_rule if charged else None,
+                            rule_count=int(counts.get(budget_rule, 0)) if budget_rule else 0)
     with conn.cursor() as cur:
         if verdict == RAISE:
             cur.execute(
@@ -212,20 +255,24 @@ def admit(conn: Any, *, mandatory: bool, machine: bool, rule_driven: bool = Fals
                        machine = machine + %(x)s,
                        rule_raised = rule_raised + %(r)s,
                        model_raised = model_raised + %(o)s,
+                       rule_counts = CASE WHEN %(rule)s::text IS NULL THEN rule_counts
+                            ELSE jsonb_set(rule_counts, ARRAY[%(rule)s::text],
+                                 to_jsonb(coalesce((rule_counts->>%(rule)s::text)::int, 0) + 1), true) END,
                        hourly[%(h)s] = hourly[%(h)s] + 1,
                        updated_at = now()
                  WHERE day = %(d)s
                 """,
                 # A veto or a machine action is outside both envelopes (D92).
                 {"m": int(mandatory), "x": int(machine and not mandatory), "h": hour + 1, "d": day,
-                 "r": int(rule_driven and not (mandatory or machine)),
-                 "o": int(not rule_driven and not (mandatory or machine))},
+                 "r": int(charged), "o": int(not rule_driven and not (mandatory or machine)),
+                 "rule": budget_rule if charged else None},
             )
             raised_today, hour_count = raised_today + 1, hour_count + 1
         else:
             cur.execute("UPDATE alert_budget_days SET deferred = deferred + 1, updated_at = now() WHERE day = %s",
                         (day,))
-    return Admission(verdict, reason, day, hour, raised_today, hour_count, config, rule_driven=rule_driven)
+    return Admission(verdict, reason, day, hour, raised_today, hour_count, config,
+                     rule_driven=rule_driven, budget_rule=budget_rule if charged else None)
 
 
 def undo(conn: Any, admission: Admission) -> None:
@@ -239,6 +286,8 @@ def undo(conn: Any, admission: Admission) -> None:
     """
     with conn.cursor() as cur:
         if admission.verdict == RAISE:
+            charged = admission.rule_driven and admission.reason not in (MANDATORY, MACHINE)
+            rule = admission.budget_rule if charged else None
             cur.execute(
                 """
                 UPDATE alert_budget_days
@@ -247,14 +296,17 @@ def undo(conn: Any, admission: Admission) -> None:
                        machine = greatest(machine - %(x)s, 0),
                        rule_raised = greatest(rule_raised - %(r)s, 0),
                        model_raised = greatest(model_raised - %(o)s, 0),
+                       rule_counts = CASE WHEN %(rule)s::text IS NULL THEN rule_counts
+                            ELSE jsonb_set(rule_counts, ARRAY[%(rule)s::text],
+                                 to_jsonb(greatest(coalesce((rule_counts->>%(rule)s::text)::int, 0) - 1, 0)), true) END,
                        hourly[%(h)s] = greatest(hourly[%(h)s] - 1, 0),
                        updated_at = now()
                  WHERE day = %(d)s
                 """,
                 {"m": int(admission.reason == MANDATORY), "x": int(admission.reason == MACHINE),
-                 "r": int(admission.rule_driven and admission.reason not in (MANDATORY, MACHINE)),
+                 "r": int(charged),
                  "o": int(not admission.rule_driven and admission.reason not in (MANDATORY, MACHINE)),
-                 "h": admission.hour + 1, "d": admission.day},
+                 "rule": rule, "h": admission.hour + 1, "d": admission.day},
             )
         else:
             cur.execute("UPDATE alert_budget_days SET deferred = greatest(deferred - 1, 0), updated_at = now() "
@@ -285,13 +337,13 @@ def record_deferral(conn: Any, admission: Admission, *, decision_id: int, transa
             """
             INSERT INTO alert_deferrals
                 (decision_id, transaction_id, subject_token, risk_level, p_fraud, score_0_100,
-                 signals, reason, deferred_at, expires_at, rule_driven)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 signals, reason, deferred_at, expires_at, rule_driven, budget_rule)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (decision_id, transaction_id, subject_token, risk_level, p_fraud, score, signal_codes,
              admission.reason, now, now + timedelta(hours=admission.config.deferral_hours),
-             admission.rule_driven),
+             admission.rule_driven, admission.budget_rule),
         )
         return int(dict(cur.fetchone())["id"])
 
@@ -308,17 +360,22 @@ def headroom(row: dict[str, Any], hour: int, config: BudgetConfig) -> dict[str, 
     }
 
 
-def count_release(conn: Any, day: date, hour: int, *, rule_driven: bool = False) -> None:
+def count_release(conn: Any, day: date, hour: int, *, rule_driven: bool = False,
+                  budget_rule: str | None = None) -> None:
+    rule = budget_rule if rule_driven else None
     with conn.cursor() as cur:
         cur.execute(
             """
             UPDATE alert_budget_days
                SET raised = raised + 1, released = released + 1,
                    rule_raised = rule_raised + %(r)s, model_raised = model_raised + %(o)s,
+                   rule_counts = CASE WHEN %(rule)s::text IS NULL THEN rule_counts
+                        ELSE jsonb_set(rule_counts, ARRAY[%(rule)s::text],
+                             to_jsonb(coalesce((rule_counts->>%(rule)s::text)::int, 0) + 1), true) END,
                    hourly[%(h)s] = hourly[%(h)s] + 1, updated_at = now()
              WHERE day = %(d)s
             """,
-            {"h": hour + 1, "d": day, "r": int(rule_driven), "o": int(not rule_driven)},
+            {"h": hour + 1, "d": day, "r": int(rule_driven), "o": int(not rule_driven), "rule": rule},
         )
 
 
@@ -363,6 +420,10 @@ def pace(row: dict[str, Any] | None, config: BudgetConfig, now: datetime) -> dic
         "model_alerts_today": int(row.get("model_raised") or 0) if row else 0,
         "rule_quota": config.rule_quota,
         "model_quota": config.model_quota,
+        # D92: today's per-rule usage against each rule's cap, so the desk can
+        # see which rule is nearing its share.
+        "rule_caps": dict(config.rule_caps),
+        "rule_counts_today": {k: int(v) for k, v in dict(row.get("rule_counts") or {}).items()} if row else {},
         "day_elapsed": round(elapsed, 4),
         "expected_by_now": round(expected, 1),
         "projected_end_of_day": round(projected, 1) if projected is not None else None,

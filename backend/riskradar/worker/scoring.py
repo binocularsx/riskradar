@@ -369,6 +369,7 @@ def score_transaction(
             mandatory=any(s.power == "OVERRIDE" for s in signals),
             machine=disposition == tiers.MACHINE_ACTION,
             rule_driven=apply_policy(0.0, signals, MODEL_SILENT).actionable,
+            budget_rule=budget.primary_rule(signals),   # D92: the rule that draws its own cap
         )
         result.trace.append(admission.as_trace())
 
@@ -551,7 +552,7 @@ def raise_alert(
 
 _DEFERRAL_SQL = """
     SELECT f.id, f.decision_id, f.transaction_id, f.subject_token, f.risk_level::text AS risk_level,
-           f.score_0_100, f.signals, f.rule_driven, d.disposition, d.rule_only_mode,
+           f.score_0_100, f.signals, f.rule_driven, f.budget_rule, d.disposition, d.rule_only_mode,
            t.transaction_ref, t.occurred_at
       FROM alert_deferrals f
       JOIN decisions d ON d.id = f.decision_id
@@ -575,7 +576,8 @@ def _release(conn: Any, sys_uid: int, item: dict[str, Any], *, released_by: int 
             "WHERE id = %s",
             (now, alert_id, released_by, item["id"]),
         )
-    budget.count_release(conn, day, hour, rule_driven=bool(item.get("rule_driven")))
+    budget.count_release(conn, day, hour, rule_driven=bool(item.get("rule_driven")),
+                         budget_rule=item.get("budget_rule"))
     return {"deferral_id": int(item["id"]), "alert_id": alert_id, "case_id": case_id}
 
 
@@ -600,6 +602,9 @@ def release_deferred(conn: Any, sys_uid: int, *, now: datetime | None = None) ->
         )
     room = budget.headroom(row, hour, config)
     released: list[dict[str, Any]] = []
+    # D92: a running per-rule tally, seeded from what each rule has already spent
+    # today, so a capped rule is not released past its cap even from the queue.
+    rule_counts = {k: int(v) for k, v in dict(row.get("rule_counts") or {}).items()}
     # D92: each envelope releases its own, most serious first, and the hour's
     # own ceiling still caps the two together.
     for envelope, rule_driven in (("rules", True), ("model", False)):
@@ -607,6 +612,8 @@ def release_deferred(conn: Any, sys_uid: int, *, now: datetime | None = None) ->
         if left <= 0:
             continue
         with conn.cursor() as cur:
+            # Over-select for the rules envelope: some candidates may be at their
+            # own rule's cap and skipped, so fetch more than `left` to fill it.
             cur.execute(
                 _DEFERRAL_SQL + """
                  WHERE f.state = 'WAITING' AND f.rule_driven = %s
@@ -614,11 +621,22 @@ def release_deferred(conn: Any, sys_uid: int, *, now: datetime | None = None) ->
                  LIMIT %s
                    FOR UPDATE OF f SKIP LOCKED
                 """,
-                (rule_driven, left),
+                (rule_driven, left if not rule_driven else max(left * 4, left + 20)),
             )
             items = [dict(r) for r in cur.fetchall()]
+        taken = 0
         for item in items:
+            if taken >= left:
+                break
+            if rule_driven:
+                rule = item.get("budget_rule")
+                cap = config.cap_for(rule)
+                if cap is not None and rule_counts.get(rule, 0) >= cap:
+                    continue  # this rule is at its cap; leave it for when it has room
+                if rule:
+                    rule_counts[rule] = rule_counts.get(rule, 0) + 1
             released.append(_release(conn, sys_uid, item, released_by=None, day=day, hour=hour, now=now))
+            taken += 1
     if expired:
         _raise_alarm(conn, sys_uid, "ALERTS_EXPIRED_UNREVIEWED",
                      f"{len(expired)} alert(s) waited {config.deferral_hours}h behind the budget and were never "
