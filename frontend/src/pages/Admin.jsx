@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, when } from '../lib/api'
 import { Banner, Empty } from '../components/ui'
 
-const TABS = ['Rules', 'Thresholds', 'Pending', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Audit']
+const TABS = ['System overview', 'Rules', 'Thresholds', 'Pending', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Access & audit']
 
 /**
  * Administration (FR-040 to FR-042).
@@ -19,9 +19,15 @@ const TABS = ['Rules', 'Thresholds', 'Pending', 'Models', 'Lists', 'Enforcement'
  * what detection misses.
  */
 export default function Admin() {
-  const [tab, setTab] = useState('Rules')
+  const [tab, setTab] = useState('System overview')
   return (
-    <>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Administration</h1>
+          <p className="page-sub">Detection, oversight and access — every change versioned and audited.</p>
+        </div>
+      </div>
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
@@ -29,6 +35,7 @@ export default function Admin() {
           </button>
         ))}
       </div>
+      {tab === 'System overview' && <SystemOverview go={setTab} />}
       {tab === 'Rules' && <Rules />}
       {tab === 'Thresholds' && <Thresholds />}
       {tab === 'Pending' && <PendingChanges />}
@@ -36,7 +43,79 @@ export default function Admin() {
       {tab === 'Lists' && <Lists />}
       {tab === 'Enforcement' && <Enforcement />}
       {tab === 'Integrations' && <Integrations />}
-      {tab === 'Audit' && <Audit />}
+      {tab === 'Access & audit' && <Audit />}
+    </div>
+  )
+}
+
+/* -------------------------------------------------- system overview (Figma) */
+
+/**
+ * The Administration landing (Figma "System Overview"): the state of detection at
+ * a glance — the live model, the active ruleset and thresholds, the alert budget
+ * — and the recent configuration changes, which are the audited, maker-checked
+ * changes to any of it (D96–D99).
+ */
+function SystemOverview({ go }) {
+  const { data, error } = useAsync(() =>
+    Promise.all([api.models(), api.rules(), api.thresholds(), api.audit({ limit: 12 })]))
+  if (error) return <Banner kind="error">{error}</Banner>
+  if (!data) return <p className="muted">Loading…</p>
+  const [models, rules, thresholds, audit] = data
+  const active = models.items.find((m) => m.is_active)
+  const activeThresh = thresholds.versions?.find((v) => v.is_active)
+  const enabledRules = rules.rules.filter((r) => r.enabled).length
+  const overdue = rules.rules.filter((r) => r.review_overdue).length
+
+  return (
+    <>
+      <div className="statrow" style={{ marginTop: 4 }}>
+        <div className="statcard">
+          <div className="statcard-k">Active model</div>
+          <div className="statcard-v" style={{ fontSize: 20 }}>{active?.name ?? 'none'}</div>
+          <div className="dim mono" style={{ fontSize: 11, marginTop: 4 }}>{active?.version ?? '—'}</div>
+        </div>
+        <div className="statcard">
+          <div className="statcard-k">Active rules</div>
+          <div className="statcard-v">{enabledRules}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>ruleset v{rules.ruleset.version}</div>
+        </div>
+        <div className="statcard">
+          <div className="statcard-k">Thresholds</div>
+          <div className="statcard-v" style={{ fontSize: 20 }}>v{activeThresh?.version ?? '—'}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>alert ≥ {activeThresh?.alert_min_level ?? '—'}</div>
+        </div>
+        <div className="statcard">
+          <div className="statcard-k">Reviews overdue</div>
+          <div className={`statcard-v ${overdue ? 'warn' : ''}`}>{overdue}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>of {rules.rules.length} rules</div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 0 }}>
+        <div className="toolbar">
+          <strong style={{ fontSize: 14 }}>Recent configuration changes</strong>
+          <button onClick={() => go('Pending')}>Pending approvals</button>
+        </div>
+        <div className="table-scroll">
+          <table className="rowtable">
+            <thead>
+              <tr><th>When</th><th>Actor</th><th>Change</th><th>Object</th></tr>
+            </thead>
+            <tbody>
+              {audit.items.map((a) => (
+                <tr key={a.id}>
+                  <td className="mono dim" style={{ fontSize: 11.5 }}>{when(a.occurred_at)}</td>
+                  <td>{a.actor} <span className="dim">({a.actor_role})</span></td>
+                  <td className="mono">{a.action}</td>
+                  <td className="muted">{a.object_type} {a.object_id}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!audit.items.length && <div className="empty">No changes recorded yet.</div>}
+        </div>
+      </div>
     </>
   )
 }

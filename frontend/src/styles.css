@@ -528,8 +528,8 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .live-dot.warn { background: var(--warn); box-shadow: none; }
 select.mini { width: auto; min-width: 128px; padding: 7px 11px; font-size: 12.5px; border-radius: var(--r-sm); }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg-2);
-        border: 1px solid var(--line); border-radius: 999px; padding: 4px; width: fit-content; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 18px; background: var(--bg-2);
+        border: 1px solid var(--line); border-radius: 12px; padding: 4px; width: fit-content; max-width: 100%; }
 .tab { padding: 8px 18px; border-radius: 999px; border: none;
        color: var(--text-2); background: none; box-shadow: none; }
 .tab.active { background: var(--surface-3); color: var(--text); font-weight: 600; }
