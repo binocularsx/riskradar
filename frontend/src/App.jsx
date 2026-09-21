@@ -3,7 +3,8 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { api } from './lib/api'
 import Login from './pages/Login'
-import Triage from './pages/Triage'
+import CaseQueue from './pages/CaseQueue'
+import CaseDetail from './pages/CaseDetail'
 import Operations from './pages/Operations'
 import Metrics from './pages/Metrics'
 import Transactions from './pages/Transactions'
@@ -77,8 +78,6 @@ export default function App() {
 
   const links = nav(user.permissions)
   const landing = links.find((l) => l.to === '/triage')?.to ?? links[0]?.to ?? '/triage'
-  // Triage manages its own scrolling columns; every other page scrolls normally.
-  const flush = location.pathname.startsWith('/triage')
 
   // Nav grouped under its section headers, order preserved.
   const sections = []
@@ -141,14 +140,14 @@ export default function App() {
           </div>
         </header>
 
-        <div className={`content ${flush ? 'flush' : ''}`}
-             style={flush ? { flexDirection: 'column' } : undefined}>
+        <div className="content">
           <Routes>
             <Route path="/" element={<Navigate to={landing} replace />} />
             <Route path="/live" element={<Intake />} />
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/approvals" element={<Approvals />} />
-            <Route path="/triage" element={<Triage user={user} />} />
+            <Route path="/triage" element={<CaseQueue user={user} />} />
+            <Route path="/cases/:id" element={<CaseDetail user={user} />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/analytics" element={<Metrics />} />

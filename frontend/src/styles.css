@@ -493,6 +493,36 @@ tbody tr.clickable:hover { background: var(--surface-2); }
   .auth-signin { padding: 32px 28px; }
 }
 
+/* ============================ screens (Figma content frames) =============== */
+.page { max-width: 1300px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.page-head h1 { font-size: 22px; font-weight: 680; letter-spacing: -.02em; }
+.page-sub { color: var(--text-2); font-size: 13px; margin: 5px 0 0; }
+.backlink { padding: 6px 10px; margin-bottom: 12px; color: var(--text-2); }
+
+.statrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.statcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 15px 17px; }
+.statcard-k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-3); font-weight: 650; }
+.statcard-v { font-size: 27px; font-weight: 700; letter-spacing: -.03em; margin-top: 6px; line-height: 1.05;
+              font-variant-numeric: tabular-nums; }
+.statcard-v.accent  { color: var(--accent); }
+.statcard-v.danger  { color: var(--danger); }
+.statcard-v.warn    { color: var(--warn); }
+
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+           padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.searchbar.sm { width: 260px; padding: 0 12px; }
+.searchbar.sm input { padding: 7px 0; font-size: 12.5px; }
+
+/* dense case/transaction tables — rows with a bottom hairline, hover fill */
+.rowtable tbody tr { transition: background .1s; }
+.rowtable tbody td { border-bottom: 1px solid var(--line); }
+.rowtable .cellflags { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+.reco-cell { max-width: 280px; color: var(--text-2); font-size: 12.5px; overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+.link { color: var(--accent); font-weight: 600; font-size: 12.5px; }
+.table-foot { padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; }
+
 .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg-2);
         border: 1px solid var(--line); border-radius: 999px; padding: 4px; width: fit-content; }
 .tab { padding: 8px 18px; border-radius: 999px; border: none;
