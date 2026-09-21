@@ -114,3 +114,23 @@ def login(client, email: str, password: str) -> None:
     )
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "ok", response.text
+
+
+def score_exclusively(conn, tx_id: int, **kwargs):
+    """Score this transaction here, whatever the running workers are doing.
+
+    The suite runs against the same database as the demo, so a worker may score
+    a freshly ingested transaction before a test that wants to score it itself
+    with different rules. Taking the queue row away first stops a worker
+    claiming it; deleting any decision already written lets this call be the one
+    that counts. Retried, because a worker may hold a lease at that instant.
+    """
+    from riskradar.worker import scoring
+
+    for _ in range(5):
+        conn.execute("DELETE FROM scoring_queue WHERE transaction_id = %s", (tx_id,))
+        conn.execute("DELETE FROM decisions WHERE transaction_id = %s", (tx_id,))
+        out = scoring.score_transaction(conn, tx_id, **kwargs)
+        if "skipped" not in out:
+            return out
+    raise AssertionError(f"could not score transaction {tx_id} exclusively")

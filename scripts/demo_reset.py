@@ -373,7 +373,8 @@ def seed_worked_cases(seed: int) -> None:
             # Closed inside its target time: between 30% and 90% of the clock.
             took = target(case) * rng.uniform(0.3, 0.9)
             conn.execute(
-                "UPDATE cases SET state='UNDER_REVIEW', assignee_id=%s WHERE id=%s",
+                "UPDATE cases SET state='UNDER_REVIEW', assignee_id=%s, assigned_at=now(), "
+                "assignment_reason='automatic: least open work' WHERE id=%s",
                 (analyst, case["id"]),
             )
             chain.append(conn, actor_user_id=analyst, action="CASE_REVIEW_STARTED",
@@ -395,15 +396,22 @@ def seed_worked_cases(seed: int) -> None:
 
         for case in in_review:
             conn.execute(
-                "UPDATE cases SET state='UNDER_REVIEW', assignee_id=%s WHERE id=%s",
+                "UPDATE cases SET state='UNDER_REVIEW', assignee_id=%s, assigned_at=now(), "
+                "assignment_reason='automatic: least open work' WHERE id=%s",
                 (analyst, case["id"]),
             )
             chain.append(conn, actor_user_id=analyst, action="CASE_REVIEW_STARTED",
                          object_type="case", object_id=case["id"],
                          from_state="OPEN", to_state="UNDER_REVIEW")
 
+        # D94: whatever is left waiting is routed to an analyst, as it would be live.
+        from riskradar.cases import assignment as routing
+        from riskradar.worker.scoring import system_user_id
+
+        routed = routing.sweep(conn, sys_uid=system_user_id(conn), limit=1000)
         conn.commit()
         decided = sum(tally.values())
+        print(f"    routed {routed['assigned']} waiting case(s) to analysts")
         print(f"    {decided} overdue cases worked and closed, {len(in_review)} in progress, "
               f"{len(waiting) - len(in_review)} waiting")
         print(f"    outcomes from truth: {tally['CONFIRMED_FRAUD']} fraud, "

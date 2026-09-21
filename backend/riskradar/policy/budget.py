@@ -169,12 +169,21 @@ def lock_day(conn: Any, day: date, config: BudgetConfig) -> dict[str, Any]:
     correlation and audit locks on every path, so the order never inverts.
     """
     with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO alert_budget_days (day, budget) VALUES (%s, %s) ON CONFLICT (day) DO NOTHING",
-            (day, config.per_day),
-        )
+        # Lock first, insert only if the day is genuinely new. The previous
+        # order — insert, then lock — made every alert of the day wait on the
+        # index entry of any concurrent writer, and that produced a real
+        # deadlock between a worker and a long-running transaction. Once a day
+        # has started, this is a single row lock and nothing else.
         cur.execute("SELECT * FROM alert_budget_days WHERE day = %s FOR UPDATE", (day,))
-        row = dict(cur.fetchone())
+        found = cur.fetchone()
+        if found is None:
+            cur.execute(
+                "INSERT INTO alert_budget_days (day, budget) VALUES (%s, %s) ON CONFLICT (day) DO NOTHING",
+                (day, config.per_day),
+            )
+            cur.execute("SELECT * FROM alert_budget_days WHERE day = %s FOR UPDATE", (day,))
+            found = cur.fetchone()
+        row = dict(found)
         if row["budget"] != config.per_day:
             # The budget was changed today: the new figure applies from now on.
             cur.execute("UPDATE alert_budget_days SET budget = %s WHERE day = %s", (config.per_day, day))
@@ -217,6 +226,39 @@ def admit(conn: Any, *, mandatory: bool, machine: bool, rule_driven: bool = Fals
             cur.execute("UPDATE alert_budget_days SET deferred = deferred + 1, updated_at = now() WHERE day = %s",
                         (day,))
     return Admission(verdict, reason, day, hour, raised_today, hour_count, config, rule_driven=rule_driven)
+
+
+def undo(conn: Any, admission: Admission) -> None:
+    """Give back what an admission spent, when the alert never happened.
+
+    One case needs this: two workers race on the same transaction, the budget
+    is admitted, and the decision insert then finds the other worker already
+    wrote it (D7a). The alert is not raised, so the day must not be charged for
+    it — a budget that counts alerts nobody received would quietly starve the
+    desk.
+    """
+    with conn.cursor() as cur:
+        if admission.verdict == RAISE:
+            cur.execute(
+                """
+                UPDATE alert_budget_days
+                   SET raised = greatest(raised - 1, 0),
+                       mandatory = greatest(mandatory - %(m)s, 0),
+                       machine = greatest(machine - %(x)s, 0),
+                       rule_raised = greatest(rule_raised - %(r)s, 0),
+                       model_raised = greatest(model_raised - %(o)s, 0),
+                       hourly[%(h)s] = greatest(hourly[%(h)s] - 1, 0),
+                       updated_at = now()
+                 WHERE day = %(d)s
+                """,
+                {"m": int(admission.reason == MANDATORY), "x": int(admission.reason == MACHINE),
+                 "r": int(admission.rule_driven and admission.reason not in (MANDATORY, MACHINE)),
+                 "o": int(not admission.rule_driven and admission.reason not in (MANDATORY, MACHINE)),
+                 "h": admission.hour + 1, "d": admission.day},
+            )
+        else:
+            cur.execute("UPDATE alert_budget_days SET deferred = greatest(deferred - 1, 0), updated_at = now() "
+                        "WHERE day = %s", (admission.day,))
 
 
 def overrun_needs_alarm(conn: Any, admission: Admission) -> bool:

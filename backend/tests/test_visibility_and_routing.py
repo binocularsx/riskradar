@@ -185,3 +185,31 @@ def test_next_case_hands_back_your_own_work_not_someone_elses(somebody_elses_cas
         assert "queue is clear" in body["note"]
     # It never hands out the other analyst's case.
     assert body["case"] is None or body["case"]["id"] != somebody_elses_case["case_id"]
+
+
+def test_the_live_stream_only_carries_events_a_subscriber_may_see(somebody_elses_case):
+    """D94: an event about a case reaches only people who may see that case."""
+    from riskradar.api.routers.stream import _visible
+
+    other_case = somebody_elses_case["case_id"]
+    with _db() as c:
+        analyst = {"id": c.execute("SELECT id FROM users WHERE email = 'analyst@riskradar.local'").fetchone()["id"],
+                   "role": "ANALYST"}
+        lead = {"id": c.execute("SELECT id FROM users WHERE email = 'lead@riskradar.local'").fetchone()["id"],
+                "role": "FRAUD_OPS_LEAD"}
+        mine = c.execute("SELECT id FROM cases WHERE assignee_id = %s LIMIT 1", (analyst["id"],)).fetchone()
+        rows = [
+            {"id": 1, "event_type": "alert", "payload": {"case_id": other_case}},
+            {"id": 2, "event_type": "alarm", "payload": {"code": "MODEL_UNAVAILABLE"}},
+            {"id": 3, "event_type": "fraud_submitted", "payload": {"case_id": other_case}},
+        ]
+        if mine:
+            rows.append({"id": 4, "event_type": "alert", "payload": {"case_id": mine["id"]}})
+
+        seen = {r["id"] for r in _visible(c, analyst, rows)}
+        assert other_case not in [r["payload"].get("case_id") for r in _visible(c, analyst, rows)]
+        assert 2 in seen, "an alarm is the desk's weather and reaches everyone"
+        if mine:
+            assert 4 in seen, "their own case's alerts still arrive"
+        # A lead sees all of it.
+        assert {r["id"] for r in _visible(c, lead, rows)} == {r["id"] for r in rows}

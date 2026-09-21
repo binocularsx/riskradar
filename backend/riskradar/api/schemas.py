@@ -379,7 +379,11 @@ class ReturnIn(Strict):
 
 
 class AssignIn(Strict):
+    """D94: routing is automatic, so moving a case by hand is an exception and says why."""
+
     assignee_id: int | None
+    reason: Annotated[str, Field(min_length=5, max_length=500)]
+    expected_case_version: int | None = None
 
 
 def _aware(v: datetime | None) -> datetime | None:

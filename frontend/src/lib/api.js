@@ -53,6 +53,12 @@ export const api = {
   worklist: (params) => get(`/v1/worklist?${new URLSearchParams(params)}`),
   nextCase: () => post('/v1/worklist/next'),
   disposition: (id, data) => post(`/v1/cases/${id}/disposition`, data),
+  // D93: an analyst proposes; a different lead decides.
+  submitFraud: (id, data) => post(`/v1/cases/${id}/submissions`, data),
+  caseSubmissions: (id) => get(`/v1/cases/${id}/submissions`),
+  approvals: () => get('/v1/approvals'),
+  decideSubmission: (id, data) => post(`/v1/submissions/${id}/decision`, data),
+  submissionCatalog: () => get('/v1/submissions/catalog'),
   operations: () => get('/v1/metrics/operations'),
   // D83: the live desk, the case tracker and the workflow of one case
   intake: (minutes = 60) => get(`/v1/metrics/intake?minutes=${minutes}`),

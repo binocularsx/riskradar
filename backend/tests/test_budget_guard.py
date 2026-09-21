@@ -141,9 +141,16 @@ def test_a_deferred_alert_that_waits_too_long_expires_and_is_counted(client, api
                       "ON CONFLICT (day) DO UPDATE SET raised = 1, budget = 1, rule_raised = 0, model_raised = 1",
                       (day,))
             assert _score(c, tx)["deferred"]
-            c.execute("UPDATE alert_deferrals SET expires_at = now() - interval '1 minute' WHERE state = 'WAITING'")
+            deferral = c.execute("SELECT id FROM alert_deferrals WHERE state = 'WAITING' "
+                                 "ORDER BY id DESC LIMIT 1").fetchone()["id"]
+            c.execute("UPDATE alert_deferrals SET expires_at = now() - interval '1 minute' WHERE id = %s",
+                      (deferral,))
             done = scoring.release_deferred(c, scoring.system_user_id(c))
-            assert done["expired"] >= 1 and done["released"] == []
+            # What matters is the state it ends in, not which pass expired it:
+            # a worker running beside the suite may get there first.
+            assert done["released"] == []
+            state = c.execute("SELECT state FROM alert_deferrals WHERE id = %s", (deferral,)).fetchone()["state"]
+            assert state == "EXPIRED"
             assert c.execute("SELECT expired FROM alert_budget_days WHERE day = %s", (day,)).fetchone()["expired"] >= 1
         finally:
             c.rollback()
@@ -258,3 +265,24 @@ def test_headroom_is_reported_per_envelope():
     row = {"raised": 40, "rule_raised": 35, "model_raised": 5, "hourly": [0] * 24}
     room = budget.headroom(row, 3, ENV)
     assert room["rules"] == 0 and room["model"] == 60 and room["total"] == 60
+
+
+def test_losing_a_scoring_race_hands_the_budget_back(client, api_headers, sample_transaction):
+    """D86/D94: an alert that never happened must not be charged to the day."""
+    tx = _ingest(client, api_headers, sample_transaction)
+    with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
+        try:
+            day, _ = budget.local_day_hour(datetime.now(timezone.utc))
+            c.execute("INSERT INTO alert_budget_days (day, budget) VALUES (%s, 75) ON CONFLICT (day) DO NOTHING",
+                      (day,))
+            before = c.execute("SELECT raised, deferred FROM alert_budget_days WHERE day = %s", (day,)).fetchone()
+            # Score it once, then again as a second worker would: the same
+            # transaction, already decided.
+            _score(c, tx)
+            out = scoring.score_transaction(c, tx, sys_uid=scoring.system_user_id(c))
+            assert out["skipped"] == "already scored"
+            after = c.execute("SELECT raised, deferred FROM alert_budget_days WHERE day = %s", (day,)).fetchone()
+            assert (after["raised"] - before["raised"]) <= 1, "the second attempt charged nothing"
+            assert after["deferred"] == before["deferred"] or after["deferred"] - before["deferred"] <= 1
+        finally:
+            c.rollback()

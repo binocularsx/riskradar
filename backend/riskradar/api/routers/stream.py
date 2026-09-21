@@ -51,6 +51,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from ...config import settings
+from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import requires_streaming
 
@@ -84,6 +85,30 @@ def _connect() -> psycopg.Connection:
     return psycopg.connect(
         settings().app_dsn, autocommit=True, row_factory=psycopg.rows.dict_row
     )
+
+
+# D94: an event about a case reaches only the people who may see that case.
+# Events that name no case — an alarm, a budget deferral — are the desk's
+# weather and go to everyone who may read cases at all.
+CASE_EVENTS = {"alert", "case_reported", "clock_breached", "fraud_submitted", "fraud_decided", "case_assigned"}
+
+
+def _visible(conn: psycopg.Connection, user: dict[str, Any], rows: list[dict]) -> list[dict]:
+    """Drop the events this subscriber may not see, before they are framed."""
+    if visibility.sees_everything(user):
+        return rows
+    wanted = {int(r["payload"]["case_id"]) for r in rows
+              if r["event_type"] in CASE_EVENTS and (r["payload"] or {}).get("case_id")}
+    allowed = visibility.visible_case_ids(conn, user, sorted(wanted)) if wanted else set()
+    out = []
+    for r in rows:
+        case_id = (r["payload"] or {}).get("case_id")
+        if r["event_type"] in CASE_EVENTS and case_id is not None:
+            if int(case_id) in allowed:
+                out.append(r)
+        else:
+            out.append(r)
+    return out
 
 
 def _fetch_since(conn: psycopg.Connection, since_id: int, limit: int) -> list[dict]:
@@ -121,7 +146,7 @@ def _wait_for_notify(conn: psycopg.Connection, timeout: float) -> bool:
     return False
 
 
-async def _event_source(request: Request, last_event_id: int) -> AsyncIterator[str]:
+async def _event_source(request: Request, last_event_id: int, user: dict[str, Any]) -> AsyncIterator[str]:
     conn = await asyncio.to_thread(_connect)
     try:
         cursor_id = last_event_id
@@ -130,8 +155,12 @@ async def _event_source(request: Request, last_event_id: int) -> AsyncIterator[s
         # arrived during the disconnect is lost between the catch-up query and
         # the LISTEN taking effect.
         if cursor_id:
-            for row in await asyncio.to_thread(_fetch_since, conn, cursor_id, MAX_REPLAY):
-                cursor_id = row["id"]
+            rows = await asyncio.to_thread(_fetch_since, conn, cursor_id, MAX_REPLAY)
+            visible = await asyncio.to_thread(_visible, conn, user, rows)
+            # The cursor moves past everything read, seen or not: a skipped
+            # event must not be replayed on the next reconnect.
+            cursor_id = max([r["id"] for r in rows], default=cursor_id)
+            for row in visible:
                 yield _format(row["id"], row["event_type"], row["payload"])
         else:
             cursor_id = await asyncio.to_thread(_latest_id, conn)
@@ -148,8 +177,9 @@ async def _event_source(request: Request, last_event_id: int) -> AsyncIterator[s
                 break
 
             rows = await asyncio.to_thread(_fetch_since, conn, cursor_id, MAX_REPLAY)
-            for row in rows:
-                cursor_id = row["id"]
+            visible = await asyncio.to_thread(_visible, conn, user, rows)
+            cursor_id = max([r["id"] for r in rows], default=cursor_id)
+            for row in visible:
                 yield _format(row["id"], row["event_type"], row["payload"])
 
             if not woken and not rows:
@@ -172,7 +202,7 @@ async def stream(
         last_event_id = 0
 
     return StreamingResponse(
-        _event_source(request, last_event_id),
+        _event_source(request, last_event_id, user),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -384,6 +384,7 @@ def score_transaction(
                  features, signals, attributions, policy_trace, rule_only_mode, latency_ms,
                  disposition, disposition_policy_version)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (transaction_id) DO NOTHING
             RETURNING id
             """,
             (
@@ -407,6 +408,16 @@ def score_transaction(
             ),
         )
         dec_row = cur.fetchone()
+    if dec_row is None:
+        # Another worker scored this transaction between the guard at the top of
+        # this function and the insert — a lease that expired under a slow score,
+        # or a restarted worker. A decision is written exactly once (D7a), so the
+        # loser of the race stops here rather than failing and retrying forever,
+        # and hands back the budget it had already been admitted for.
+        if admission is not None:
+            budget.undo(conn, admission)
+        return {"skipped": "already scored", "transaction_id": transaction_id}
+    with conn.cursor() as cur:
         decision_id = int(dec_row["id"] if isinstance(dec_row, dict) else dec_row[0])
 
     # --- directive (WP-07, D74): the decision in a form a switch can act on --

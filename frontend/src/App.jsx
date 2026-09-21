@@ -10,6 +10,7 @@ import Transactions from './pages/Transactions'
 import Admin from './pages/Admin'
 import Roles from './pages/Roles'
 import Intake from './pages/Intake'
+import Approvals from './pages/Approvals'
 import Tracker from './pages/Tracker'
 
 /**
@@ -24,6 +25,8 @@ function nav(permissions) {
     can('cases:read') && { to: '/live', label: 'Live desk', hint: 'what is arriving, what is waiting, what to expect' },
     can('cases:read') && { to: '/triage', label: 'Triage', hint: 'work the queue' },
     can('cases:read') && { to: '/tracker', label: 'Case tracker', hint: 'every case, from alert to closed' },
+    // D93: a lead's own queue — other people's fraud findings, waiting on them.
+    can('cases:approve_fraud') && { to: '/approvals', label: 'Approvals', hint: "decide other people's fraud findings" },
     can('metrics:read') && { to: '/operations', label: 'Operations', hint: 'is the desk coping' },
     can('cases:read') && { to: '/transactions', label: 'Search', hint: 'find a transaction' },
     can('metrics:read') && { to: '/analytics', label: 'Analytics', hint: 'volume and model' },
@@ -100,6 +103,7 @@ export default function App() {
             <Route path="/" element={<Navigate to={landing} replace />} />
             <Route path="/live" element={<Intake />} />
             <Route path="/tracker" element={<Tracker />} />
+            <Route path="/approvals" element={<Approvals />} />
             <Route path="/triage" element={<Triage user={user} />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/transactions" element={<Transactions />} />

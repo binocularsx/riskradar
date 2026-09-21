@@ -26,6 +26,8 @@ from riskradar.policy.disposition import (
 from riskradar.rules.engine import Signal
 from riskradar.worker.scoring import active_ruleset, score_transaction, system_user_id
 
+from conftest import score_exclusively
+
 V1 = DispositionPolicy(version=1, machine_action_signals=frozenset({"CARD_TESTING_PROBES", "ACCOUNT_TAKEOVER_SEQUENCE"}))
 
 
@@ -90,7 +92,7 @@ def test_a_takeover_sequence_becomes_a_machine_handled_case_with_the_flag(client
             configs["ACCOUNT_TAKEOVER_SEQUENCE"] = {"enabled": True, "severity": "HIGH",
                                                     "params": {"within_hours": 24, "min_failed_logins": 3,
                                                                "min_precursors": 2}}
-            out = score_transaction(c, tx_id, sys_uid=system_user_id(c), ruleset=(ruleset_id, configs))
+            out = score_exclusively(c, tx_id, sys_uid=system_user_id(c), ruleset=(ruleset_id, configs))
             decision = c.execute("SELECT disposition, signals FROM decisions WHERE transaction_id = %s",
                                  (tx_id,)).fetchone()
             assert "ACCOUNT_TAKEOVER_SEQUENCE" in [s["code"] for s in decision["signals"]]

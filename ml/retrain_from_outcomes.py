@@ -30,6 +30,17 @@ label about a payment this bank actually saw. This command learns from those.
    re-derived afterwards (``POST /v1/admin/thresholds/derive``), because a new
    model scores on a new scale.
 
+Label maturity (plan §7.1). Four different things are kept apart and only one
+of them is used here as truth:
+
+* what the **system** recommended — stored on the decision, never a label;
+* what an **analyst proposed** — a submission, which may be pending or
+  rejected, and is never training data;
+* what a **lead adjudicated** — an approved submission, which is what this
+  command learns from;
+* what the **world** later said — a customer's report (D90), which arrives as
+  an alert and becomes a label the same way, through an approval.
+
 Known bias, stated: only alerted payments get a human label, so the positives
 are the frauds the old system could see. Unalerted fraud that customers later
 report reaches these labels only when the bank records it as a case.
@@ -59,9 +70,15 @@ ARTIFACTS = REPO_ROOT / "ml" / "artifacts"
 
 LABELS_SQL = """
     WITH closed AS (
+        -- D93/D95: a label is a *lead's adjudication*, not one person's opinion.
+        -- The outcome must have an approved submission behind it, so a pending
+        -- or rejected proposal can never become training data (plan §7.1).
         SELECT a.transaction_id, c.outcome, c.subject_token
           FROM alerts a JOIN cases c ON c.id = a.case_id
          WHERE c.outcome IN ('CONFIRMED_FRAUD', 'FALSE_POSITIVE')
+           AND EXISTS (SELECT 1 FROM fraud_submissions s
+                        WHERE s.case_id = c.id AND s.state = 'APPROVED'
+                          AND s.proposed_outcome = c.outcome)
     ),
     fraud_customers AS (
         SELECT c.subject_token, min(t.occurred_at) AS first_fraud, max(t.occurred_at) AS last_fraud

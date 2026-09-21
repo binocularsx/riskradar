@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ...audit import chain
 from ...clocks import sweep as clock_sweep
 from ...clocks import watchlist
+from ...events import publish
 from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
@@ -694,9 +695,28 @@ def assign(
     user: dict = Depends(requires(Permission.CASES_REASSIGN)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
+    """D94: the audited exception to automatic routing.
+
+    A reason is required, the version the caller read is checked, and the
+    case's own age is untouched — moving it between people does not make it
+    younger, and the SLA it is already late against still applies.
+    """
     case = _fetch_case(conn, case_id, user)
+    if body.expected_case_version is not None and int(case["version"]) != body.expected_case_version:
+        raise HTTPException(409, f"the case has moved on: it is at version {case['version']}, "
+                                 f"you read version {body.expected_case_version}")
+    if body.assignee_id is not None:
+        holder = _rows(conn, "SELECT id, role::text AS role, active FROM users WHERE id = %s", (body.assignee_id,))
+        if not holder or not holder[0]["active"]:
+            raise HTTPException(422, "that account cannot hold a case: unknown or deactivated")
+        if holder[0]["role"] not in ("ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST"):
+            raise HTTPException(422, f"a {holder[0]['role']} does not work cases (D12b)")
     with conn.cursor() as cur:
-        cur.execute("UPDATE cases SET assignee_id = %s WHERE id = %s", (body.assignee_id, case_id))
+        cur.execute(
+            "UPDATE cases SET assignee_id = %s, assigned_at = now(), assignment_reason = %s, "
+            "version = version + 1 WHERE id = %s",
+            (body.assignee_id, f"reassigned by hand: {body.reason}", case_id),
+        )
     chain.append(
         conn,
         actor_user_id=user["id"],
@@ -705,7 +725,11 @@ def assign(
         object_id=case_id,
         from_state=str(case["assignee_id"]),
         to_state=str(body.assignee_id),
+        payload={"reason": body.reason, "was_automatic": (case["assignment_reason"] or "").startswith("automatic")},
     )
+    if body.assignee_id:
+        publish(conn, "case_assigned", {"case_id": case_id, "assignee_id": body.assignee_id,
+                                        "reason": "reassigned by a lead"})
     return _fetch_case(conn, case_id, user)
 
 

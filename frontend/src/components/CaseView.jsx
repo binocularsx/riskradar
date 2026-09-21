@@ -23,11 +23,15 @@ import LinkGraph from './LinkGraph'
  * are not clear and I cannot tell why the alert happened.*
  */
 
+// D93: these propose. Nothing here decides anything until a lead approves it,
+// and the wording has to say so — a button that reads "Confirm fraud" while it
+// files a recommendation is the kind of lie a control dies of.
 const OUTCOMES = [
-  { key: 'CONFIRMED_FRAUD', label: 'Confirm fraud', cls: 'confirm', hint: '1' },
-  { key: 'FALSE_POSITIVE', label: 'False positive', cls: 'dismiss', hint: '2' },
-  { key: 'INCONCLUSIVE', label: 'Inconclusive', cls: 'unsure', hint: '3' },
+  { key: 'CONFIRMED_FRAUD', label: 'Submit: fraud', cls: 'confirm', hint: '1' },
+  { key: 'FALSE_POSITIVE', label: 'Submit: false positive', cls: 'dismiss', hint: '2' },
+  { key: 'INCONCLUSIVE', label: 'Submit: inconclusive', cls: 'unsure', hint: '3' },
 ]
+const MIN_RATIONALE = 20
 
 export default function CaseView({ summary, user, onDisposed, onSkip }) {
   const [detail, setDetail] = useState(null)
@@ -52,17 +56,21 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
 
   const dispose = useCallback(async (outcome) => {
     if (!caseId || busy) return
+    if (note.trim().length < MIN_RATIONALE) {
+      setError(`Say why in at least ${MIN_RATIONALE} characters: a lead has to decide on something.`)
+      return
+    }
     setBusy(true); setError(null)
     try {
       const result = await api.disposition(caseId, {
         outcome,
-        note: note.trim() || null,
+        note: note.trim(),
         close: can('cases:close'),
         followed_recommendation: summary.recommendation?.disposition_hint === outcome,
+        expected_case_version: summary.version ?? null,
       })
-      setFlash(result.closed
-        ? `Case #${caseId} closed as ${outcome.replace(/_/g, ' ').toLowerCase()}.`
-        : `Outcome recorded. A Fraud Ops Lead will close it.`)
+      setFlash(`${outcome.replace(/_/g, ' ').toLowerCase()} proposed for case #${caseId}. `
+        + 'A Fraud Ops Lead who did not write it decides; it has left your queue.')
       onDisposed?.({ ...result, outcome })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }, [caseId, busy, note, summary, onDisposed, can])
@@ -80,7 +88,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
       if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const found = OUTCOMES.find((o) => o.hint === e.key)
-      if (found && can('cases:set_outcome')) { e.preventDefault(); dispose(found.key) }
+      if (found && can('cases:submit_outcome')) { e.preventDefault(); dispose(found.key) }
       if (e.key === 'n' || e.key === 'N') { e.preventDefault(); onSkip?.() }
     }
     window.addEventListener('keydown', onKey)
@@ -306,7 +314,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           <RoleCapability user={user} />
           <div className="between wrap" style={{ gap: 14 }}>
             <div className="row wrap">
-              {can('cases:set_outcome') ? OUTCOMES.map((o) => (
+              {can('cases:submit_outcome') ? OUTCOMES.map((o) => (
                 <button key={o.key} className={`big ${o.cls}`} disabled={busy || !mine}
                         title={!mine ? 'Take the case first' : CONSEQUENCES[o.key]}
                         onMouseEnter={() => setHovered(o.key)}
@@ -316,7 +324,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
                 </button>
               )) : (
                 <span className="dim" style={{ fontSize: 12.5 }}>
-                  Your role can investigate and escalate, but not set a fraud outcome.
+                  Your role can investigate and escalate, but not propose a fraud outcome.
                 </span>
               )}
               {can('cases:escalate') && (
@@ -330,12 +338,12 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
             {hovered
               ? CONSEQUENCES[hovered]
               : mine
-                ? 'Hover a button to see exactly what it does. Your answer becomes training data for the next model.'
-                : 'Take the case above before recording an outcome.'}
+                ? 'Hover a button to see exactly what it does. Your answer is a proposal: a lead decides, and their decision becomes training data.'
+                : 'Take the case above before proposing an outcome.'}
           </p>
 
           <textarea style={{ marginTop: 8, minHeight: 52 }}
-                    placeholder="Investigation note (optional — saved with your decision)"
+                    placeholder={`Why? (required, at least ${MIN_RATIONALE} characters — the lead decides on this)`}
                     value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
       )}
