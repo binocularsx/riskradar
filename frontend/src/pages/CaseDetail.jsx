@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { api } from '../lib/api'
-import { Banner } from '../components/ui'
+import { api, nairaShort } from '../lib/api'
+import { Banner, RiskBadge } from '../components/ui'
 import CaseView from '../components/CaseView'
 
 /**
@@ -35,7 +35,25 @@ export default function CaseDetail({ user }) {
 
   return (
     <div className="page">
-      <button className="ghost backlink" onClick={() => navigate('/triage')}>← Back to Case Queue</button>
+      <div className="crumb">
+        <button className="linkbtn" onClick={() => navigate('/triage')}>Case Queue</button>
+        <span className="dim"> / </span><span className="mono">CASE-{caseId}</span>
+      </div>
+      {summary && (
+        <div className="case-topbar">
+          <div className="case-id-row">
+            <h1 className="mono">CASE-{caseId}</h1>
+            <RiskBadge level={summary.risk_level} />
+            <span className="pill">{(summary.state || 'open').replace(/_/g, ' ').toLowerCase()}</span>
+            {summary.handling === 'MACHINE' && <span className="pill suppress">machine action</span>}
+            {summary.watchlisted && <span className="pill escalate">flagged</span>}
+          </div>
+          <div className="case-exposure">
+            <span className="dim">Exposure</span>
+            <strong>{nairaShort(summary.exposure_minor)}</strong>
+          </div>
+        </div>
+      )}
       {error && <Banner kind="error">{error}</Banner>}
       {!error && !summary && <p className="muted">Loading case…</p>}
       {summary && (
