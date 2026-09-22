@@ -116,6 +116,7 @@ export default function Operations() {
   )
   const totalCases = backlog.reduce((a, b) => a + Number(b.cases), 0)
   const totalExposure = backlog.reduce((a, b) => a + Number(b.exposure_minor), 0)
+  const critical = Number(backlog.find((b) => b.risk_level === 'CRITICAL')?.cases || 0)
 
   const ageing = AGE_ORDER.map(
     (b) => data.ageing.find((a) => a.bucket === b) || { bucket: b, cases: 0 }
@@ -125,216 +126,132 @@ export default function Operations() {
   const outcomes = data.outcomes || []
   const decided = data.decided || 1
   const fpRate = data.false_positive_rate
+  const budgetUsed = overview ? Math.round(overview.alert_budget.utilisation * 100) : null
+  const avgWait = totalCases ? Math.round(backlog.reduce((a, b) => a + Number(b.avg_age_minutes) * Number(b.cases), 0) / totalCases) : 0
+  const outColour = (o) => o === 'CONFIRMED_FRAUD' ? 'var(--critical)' : o === 'FALSE_POSITIVE' ? 'var(--low)' : 'var(--medium)'
 
   return (
-    <>
-      <div className="grid cols-4" style={{ marginBottom: 18 }}>
-        <div className="deskstat" style={{ minWidth: 0 }}>
-          <div className="badge">◎</div>
-          <div className="k">Open cases</div>
-          <div className="v">{totalCases}</div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>across all severities</div>
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Overview</h1>
+          <p className="page-sub">Monitor fraud activity, workload and investigation performance.</p>
         </div>
-        <div className="deskstat hero" style={{ minWidth: 0 }}>
-          <div className="badge">₦</div>
-          <div className="k">Money at risk</div>
-          <div className="v">{nairaShort(totalExposure)}</div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>approved value, open cases</div>
+        <span className="live"><span className="live-dot on" /> Today (live)</span>
+      </div>
+
+      <div className="statrow">
+        <div className="statcard">
+          <div className="statcard-k">Open cases</div>
+          <div className="statcard-v">{totalCases}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>{critical} require urgent triage</div>
         </div>
-        <div className={`deskstat ${fpRate > 0.85 ? 'alarm' : ''}`} style={{ minWidth: 0 }}>
-          <div className="badge">%</div>
-          <div className="k">False positive rate</div>
-          <div className="v">{Math.round(fpRate * 100)}%</div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>of {decided} decided cases</div>
+        <div className="statcard">
+          <div className="statcard-k">Alert budget used</div>
+          <div className="statcard-v accent">{budgetUsed == null ? '—' : `${budgetUsed}%`}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+            {overview ? `${overview.alert_budget.last_24h} of ${overview.alert_budget.per_day} daily` : ''}</div>
         </div>
-        <div className="deskstat" style={{ minWidth: 0 }}>
-          <div className="badge">⧗</div>
-          <div className="k">Time to resolve</div>
-          <div className="v">
-            {data.resolution?.median_minutes == null ? '—'
-              : data.resolution.median_minutes >= 60
-                ? `${Math.floor(data.resolution.median_minutes / 60)}h ${data.resolution.median_minutes % 60}m`
-                : `${data.resolution.median_minutes}m`}
-          </div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>
-            median, {data.resolution?.closed_7d ?? 0} cases closed in 7 days
-          </div>
+        <div className="statcard">
+          <div className="statcard-k">False positive rate</div>
+          <div className={`statcard-v ${fpRate > 0.85 ? 'danger' : ''}`}>{Math.round(fpRate * 100)}%</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>of {decided} decided cases</div>
         </div>
-        <div className="deskstat" style={{ minWidth: 0 }}>
-          <div className="badge">◷</div>
-          <div className="k">Oldest work</div>
-          <div className="v" style={{ fontSize: 22 }}>
-            {ageing.filter((a) => Number(a.cases) > 0).slice(-1)[0]?.bucket ?? '—'}
-          </div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 6 }}>bucket still holding cases</div>
+        <div className="statcard">
+          <div className="statcard-k">Queue depth</div>
+          <div className="statcard-v">{totalCases}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>avg wait {avgWait >= 60 ? `${Math.round(avgWait / 60)}h` : `${avgWait} min`}</div>
         </div>
       </div>
 
-      {overview && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="between wrap">
-            <h2 style={{ margin: 0 }}>Alerts across the last day</h2>
-            <span className={overview.alert_budget.utilisation > 1 ? 'risk risk-HIGH' : 'muted'}>
-              {overview.alert_budget.last_24h} of {overview.alert_budget.per_day}
-              {overview.alert_budget.utilisation > 1 ? ' · over capacity' : ' · within capacity'}
-            </span>
-          </div>
-          <p className="dim" style={{ fontSize: 12, margin: '4px 0 12px' }}>
-            Alerts raised each hour against the team's capacity of{' '}
-            {Math.round(overview.alert_budget.per_day / 24)} an hour. Hover for the hour.
-          </p>
-          <AlertsVsCapacity overview={overview} />
-          <div className="legend">
-            <span><i style={{ background: 'var(--accent)' }} />Alerts raised</span>
-            <span><i style={{ background: 'var(--high)' }} />Hour over capacity</span>
-            <span><i style={{ borderTop: '2px dashed var(--text-2)', background: 'transparent',
-                              height: 0, width: 14, borderRadius: 0 }} />Capacity</span>
-          </div>
-        </div>
-      )}
-
-      {/* D80: how the day's alerts were spent, tier by tier. */}
-      {data.disposition_policy && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="between">
-            <h2 style={{ margin: 0 }}>Who acted on today's alerts</h2>
-            <span className="dim" style={{ fontSize: 12 }}>
-              policy v{data.disposition_policy.version} · review capacity {data.disposition_policy.review_capacity_per_day}/day
-            </span>
-          </div>
-          <div className="grid cols-3" style={{ marginTop: 10 }}>
-            {[
-              ['HUMAN_REVIEW', 'Analyst review', 'Investigated by a person'],
-              ['MACHINE_ACTION', 'Machine action', `Hold or 24-hour flag, then a customer call · ${(data.disposition_policy.machine_action_signals || []).map((c) => c.replace(/_/g, ' ').toLowerCase()).join(', ')}`],
-              ['AUTO_CLOSE', 'Auto-closed', data.disposition_policy.auto_close_enabled ? 'Recorded, no case' : 'Off: it would cost fraud value (D80)'],
-            ].map(([key, label, note]) => (
-              <div key={key}>
-                <div className="stat-label">{label}</div>
-                <div className="stat-value">{(data.tiers_24h || []).find((t) => t.disposition === key)?.n ?? 0}</div>
-                <div className="stat-note">{note}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid cols-2">
+      <div className="grid cols-2" style={{ marginBottom: 16 }}>
         <div className="card">
-          <h2>Backlog by severity</h2>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr><th>Severity</th><th className="num">Cases</th><th className="num">At risk</th>
-                    <th className="num">Avg age</th><th className="num">Target</th></tr>
-              </thead>
-              <tbody>
-                {backlog.map((b) => {
-                  const target = data.sla_minutes[b.risk_level]
-                  const over = Number(b.avg_age_minutes) > target
-                  return (
-                    <tr key={b.risk_level}>
-                      <td><RiskBadge level={b.risk_level} /></td>
-                      <td className="num">{b.cases}</td>
-                      <td className="num">{nairaShort(b.exposure_minor)}</td>
-                      <td className="num" style={{ color: over ? 'var(--danger)' : 'inherit' }}>
-                        {Number(b.avg_age_minutes) >= 60
-                          ? `${Math.round(Number(b.avg_age_minutes) / 60)}h`
-                          : `${Number(b.avg_age_minutes) || 0}m`}
-                      </td>
-                      <td className="num dim">
-                        {target >= 60 ? `${target / 60}h` : `${target}m`}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="dim" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
-            Average age above target means that severity is not being reached in
-            time. Critical work ageing past fifteen minutes is the number that
-            should start a conversation.
-          </p>
+          <h2>Alert volume vs capacity</h2>
+          <p className="dim" style={{ fontSize: 12, margin: '2px 0 12px' }}>
+            Hourly ingested alerts vs analyst team review throughput
+            {overview ? ` (${Math.round(overview.alert_budget.per_day / 24)}/h)` : ''}.</p>
+          {overview ? <AlertsVsCapacity overview={overview} /> : <p className="dim">Loading…</p>}
         </div>
 
         <div className="card">
-          <h2>How long cases have been waiting</h2>
-          {ageing.map((a) => (
-            <div key={a.bucket} style={{ marginBottom: 12 }}>
-              <div className="between" style={{ fontSize: 12.5, marginBottom: 4 }}>
-                <span className="muted">{a.bucket}</span>
-                <span className="mono">{a.cases}</span>
-              </div>
-              <div className="bar-track">
-                <div className="bar-fill"
-                     style={{
-                       width: `${(Number(a.cases) / maxAge) * 100}%`,
-                       background: a.bucket === 'over 24h' || a.bucket === '8h - 24h'
-                         ? 'var(--danger)' : 'var(--accent)',
-                     }} />
-              </div>
-            </div>
-          ))}
-          <p className="dim" style={{ fontSize: 11.5, marginBottom: 0 }}>
-            A healthy desk is heavily weighted to the left. Weight on the right
-            means work is being started and abandoned, or the queue is bigger
-            than the team.
-          </p>
+          <div className="between"><h2 style={{ margin: 0 }}>Backlog by risk</h2>
+            <span className="dim" style={{ fontSize: 12 }}>Total {totalCases} cases</span></div>
+          <div style={{ marginTop: 12 }}>
+            {backlog.map((b) => {
+              const target = data.sla_minutes[b.risk_level]
+              const over = Number(b.avg_age_minutes) > target
+              const pct = totalCases ? Math.round((Number(b.cases) / totalCases) * 100) : 0
+              return (
+                <div key={b.risk_level} style={{ marginBottom: 14 }}>
+                  <div className="between" style={{ fontSize: 12.5, marginBottom: 5 }}>
+                    <span><RiskBadge level={b.risk_level} /> <strong style={{ marginLeft: 6 }}>{b.cases} cases</strong> <span className="dim">({pct}%)</span></span>
+                    <span className={over ? 'risk risk-HIGH' : 'dim'} style={{ fontSize: 11.5 }}>
+                      {over ? 'over SLA' : 'compliant'}</span>
+                  </div>
+                  <div className="bar-track">
+                    <div className="bar-fill" style={{ width: `${pct}%`,
+                      background: b.risk_level === 'CRITICAL' ? 'var(--critical)' : b.risk_level === 'HIGH' ? 'var(--high)' : b.risk_level === 'MEDIUM' ? 'var(--medium)' : 'var(--low)' }} />
+                  </div>
+                  <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>
+                    Target SLA: {target >= 60 ? `${target / 60}h` : `${target} min`}</div>
+                </div>
+              )
+            })}
+          </div>
         </div>
+      </div>
 
-        <div className="card">
-          <h2>Who is carrying what</h2>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr><th>Analyst</th><th>Role</th><th className="num">Open</th><th className="num">Closed 24h</th></tr>
-              </thead>
-              <tbody>
-                {data.analysts.map((a) => (
+      <div className="card" style={{ padding: 0, marginBottom: 16 }}>
+        <div className="toolbar">
+          <div><strong style={{ fontSize: 14 }}>Analyst workload</strong>
+            <div className="dim" style={{ fontSize: 12 }}>Real-time queue load and 24-hour closure velocity</div></div>
+          <span className="live"><span className="live-dot on" /> {data.analysts.length} active</span>
+        </div>
+        <div className="table-scroll">
+          <table className="rowtable">
+            <thead><tr><th>Analyst</th><th>Role</th><th className="num">Open cases</th><th className="num">Closed 24h</th><th>SLA / status</th></tr></thead>
+            <tbody>
+              {data.analysts.map((a) => {
+                const strained = Number(a.open_cases) > 10
+                return (
                   <tr key={a.display_name}>
-                    <td>{a.display_name}</td>
-                    <td className="muted">{a.role.replace(/_/g, ' ').toLowerCase()}</td>
+                    <td><div className="userpair"><span className="avatar sm">{(a.display_name || '?').split(/\s+/).slice(0, 2).map((s) => s[0]).join('').toUpperCase()}</span>
+                      <span style={{ fontWeight: 560 }}>{a.display_name}</span></div></td>
+                    <td className="muted" style={{ textTransform: 'capitalize' }}>{a.role.replace(/_/g, ' ').toLowerCase()}</td>
                     <td className="num">{a.open_cases}</td>
                     <td className="num">{a.closed_24h}</td>
+                    <td><span className={`authdot`}><span className={`live-dot ${strained ? 'warn' : 'ok'}`} />{strained ? 'At capacity' : 'On track'}</span></td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="dim" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
-            The alert budget assumes three analysts at twenty-five reviewable
-            alerts each, leaving time for customer contact and regulatory clocks. If "open" climbs well past that, the thresholds need
-            re-deriving — not the team working harder.
-          </p>
-        </div>
-
-        <div className="card">
-          <h2>What the alerts turned out to be</h2>
-          {outcomes.map((o) => {
-            const pct = Math.round((Number(o.n) / decided) * 100)
-            const colour = o.outcome === 'CONFIRMED_FRAUD' ? 'var(--critical)'
-              : o.outcome === 'FALSE_POSITIVE' ? 'var(--low)' : 'var(--medium)'
-            return (
-              <div key={o.outcome} style={{ marginBottom: 12 }}>
-                <div className="between" style={{ fontSize: 12.5, marginBottom: 4 }}>
-                  <span>{o.outcome.replace(/_/g, ' ').toLowerCase()}</span>
-                  <span className="mono">{o.n} · {pct}%</span>
-                </div>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width: `${pct}%`, background: colour }} />
-                </div>
-              </div>
-            )
-          })}
-          {!outcomes.length && <p className="dim">No cases decided yet.</p>}
-          <p className="dim" style={{ fontSize: 11.5, marginBottom: 0 }}>
-            These are not a status field. Confirmed fraud and false positive are
-            analyst-labelled ground truth — the only non-circular labels this
-            system will ever produce, and what a future model would be retrained
-            against.
-          </p>
+                )
+              })}
+              {!data.analysts.length && <tr><td colSpan={5} className="dim" style={{ textAlign: 'center', padding: 24 }}>No active analysts.</td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
-    </>
+
+      <div className="card">
+        <div className="between"><h2 style={{ margin: 0 }}>Case outcomes (past period)</h2>
+          <span className="dim" style={{ fontSize: 12 }}>{decided} completed investigations</span></div>
+        <div className="outcome-bar" style={{ marginTop: 12 }}>
+          {outcomes.map((o) => (
+            <span key={o.outcome} className="outcome-seg"
+                  style={{ flex: Number(o.n) || 0.001, background: outColour(o.outcome) }}
+                  title={`${o.outcome.replace(/_/g, ' ').toLowerCase()}: ${o.n}`} />
+          ))}
+        </div>
+        <div className="row wrap" style={{ gap: 18, marginTop: 12 }}>
+          {outcomes.map((o) => (
+            <span key={o.outcome} style={{ fontSize: 12.5 }}>
+              <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: outColour(o.outcome), marginRight: 6, verticalAlign: -1 }} />
+              {o.outcome.replace(/_/g, ' ').toLowerCase()}: <strong>{o.n}</strong>{' '}
+              <span className="dim">({Math.round((Number(o.n) / decided) * 100)}%)</span>
+            </span>
+          ))}
+          {!outcomes.length && <span className="dim">No cases decided yet.</span>}
+        </div>
+      </div>
+    </div>
   )
 }
+
