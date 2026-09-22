@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { api, when } from '../lib/api'
-import { Banner, Empty } from '../components/ui'
+import { Banner, Empty, RiskBadge } from '../components/ui'
 
 const TABS = ['System overview', 'Rules', 'Thresholds', 'Pending', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Access & audit']
 
@@ -282,123 +282,92 @@ function Enforcement() {
 
 /* ------------------------------------------------------------------ rules */
 
+const prettyRule = (code) => code.split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ')
+const paramSummary = (params) => Object.entries(params || {})
+  .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join('/') : v}`).join(' · ') || '—'
+
+/**
+ * Detection Configuration › Rule Engine (Figma): the rules as a table. Every
+ * change is *proposed* and a second administrator approves it (D96); the toggle
+ * asks for the reason it records, since that reason is what the approver reads.
+ */
 function Rules() {
   const { data, error, reload, setError } = useAsync(() => api.rules())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)
-  // D69e/D96: a change carries its reason and becomes a *proposal*. A second
-  // administrator approves it before it takes effect.
-  const [reasons, setReasons] = useState({})
-  const reasonFor = (code) => (reasons[code] || '').trim() || undefined
 
-  async function change(rule, patch) {
-    if (!reasonFor(rule.code)) {
-      setError('A reason is required — the change is proposed to a second administrator, who reads it.')
-      return
-    }
-    setBusy(true)
-    setNotice(null)
+  async function toggle(rule) {
+    const reason = window.prompt(
+      `${rule.enabled ? 'Disable' : 'Enable'} ${rule.code}?\nReason (a second administrator approves it):`)
+    if (!reason || !reason.trim()) return
+    setBusy(true); setNotice(null)
     try {
-      const res = await api.updateRule(rule.code, { ...patch, rationale: reasonFor(rule.code) })
-      setReasons((r) => ({ ...r, [rule.code]: '' }))
+      const res = await api.updateRule(rule.code, { enabled: !rule.enabled, rationale: reason.trim() })
       if (res?.status === 'pending') {
         setNotice(`Proposed change #${res.request.id} to ${rule.code}. It applies once a different administrator approves it (Pending tab).`)
       }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
-  const toggle = (rule) => change(rule, { enabled: !rule.enabled })
-  const retune = (rule, params) => change(rule, { params })
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
+  const enabled = data.rules.filter((r) => r.enabled).length
+  const overdue = data.rules.filter((r) => r.review_overdue).length
 
   return (
     <>
-      <Banner kind="info">
-        Active ruleset <strong>v{data.ruleset.version}</strong>. A change here is
-        <strong> proposed</strong>, not applied: a different administrator approves it
-        (Pending tab), and only then is a new version published (D96). Decisions keep
-        pointing at the version that actually produced them.
-      </Banner>
       {notice && <Banner kind="ok">{notice}</Banner>}
-
-      {['ESCALATE', 'OVERRIDE', 'SUPPRESS'].map((power) => (
-        <div className="card" key={power} style={{ marginBottom: 14 }}>
-          <h2>
-            {power === 'ESCALATE' && 'Escalate — raise the band'}
-            {power === 'OVERRIDE' && 'Override — deterministic veto, the model gets no vote'}
-            {power === 'SUPPRESS' && 'Suppress — the primary false-positive control'}
-          </h2>
-          {data.rules.filter((r) => r.power === power).map((rule) => (
-            <div key={rule.code} style={{ padding: '10px 0', borderBottom: '1px solid var(--bg-inset)' }}>
-              <div className="between">
-                <div>
-                  <span className="mono">{rule.code}</span>{' '}
-                  <span className={`pill ${power.toLowerCase()}`}>{rule.severity}</span>
-                </div>
-                <button disabled={busy} onClick={() => toggle(rule)}>
-                  {rule.enabled ? 'Disable' : 'Enable'}
-                </button>
-              </div>
-              {Object.keys(rule.params || {}).length > 0 && (
-                <div className="row wrap" style={{ marginTop: 8 }}>
-                  {Object.entries(rule.params).map(([key, value]) => (
-                    <div key={key} style={{ width: 210 }}>
-                      <label>{key}</label>
-                      <input
-                        type="number"
-                        step="any"
-                        defaultValue={value}
-                        onBlur={(e) => {
-                          const next = { ...rule.params, [key]: Number(e.target.value) }
-                          if (Number(e.target.value) !== Number(value)) retune(rule, next)
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {!rule.enabled && <p className="dim" style={{ fontSize: 12 }}>Disabled — this rule emits no signal.</p>}
-              <RuleGovernance rule={rule} />
-              <input
-                style={{ marginTop: 8 }}
-                placeholder="Reason for your next change (recorded, and restarts the review clock)"
-                value={reasons[rule.code] || ''}
-                onChange={(e) => setReasons((r) => ({ ...r, [rule.code]: e.target.value }))}
-              />
-            </div>
-          ))}
-        </div>
-      ))}
-    </>
-  )
-}
-
-/**
- * Who owns the rule, why it exists, and whether it needs attention (D69e,
- * base PRD FR-504 and FR-507). Every warning is written out in words.
- */
-function RuleGovernance({ rule }) {
-  const warnings = [
-    rule.orphaned && 'No owner',
-    rule.review_overdue && 'Review overdue',
-    rule.dormant && 'Has not fired in 30 days',
-  ].filter(Boolean)
-  return (
-    <div style={{ marginTop: 8, fontSize: 12.5 }}>
-      <div className="row wrap" style={{ gap: 8 }}>
-        <span className="muted">Owner <strong style={{ color: 'var(--text)' }}>{rule.owner || '—'}</strong></span>
-        <span className="dim">·</span>
-        <span className="muted">Approved {rule.approved_at ? when(rule.approved_at) : '—'} by {rule.approved_by || '—'}</span>
-        <span className="dim">·</span>
-        <span className="muted">Next review {rule.next_review_at ? when(rule.next_review_at) : '—'}</span>
-        <span className="dim">·</span>
-        <span className="muted">Fired {rule.fired_30d} times in 30 days</span>
-        {warnings.map((w) => <span key={w} className="risk risk-HIGH">{w}</span>)}
+      <div className="statrow" style={{ marginTop: 4 }}>
+        <div className="statcard"><div className="statcard-k">Active rules</div><div className="statcard-v" style={{ color: 'var(--ok)' }}>{enabled}</div><div className="dim" style={{ fontSize: 11, marginTop: 4 }}>ruleset v{data.ruleset.version}</div></div>
+        <div className="statcard"><div className="statcard-k">Disabled</div><div className="statcard-v">{data.rules.length - enabled}</div></div>
+        <div className="statcard"><div className="statcard-k">Reviews overdue</div><div className={`statcard-v ${overdue ? 'warn' : ''}`}>{overdue}</div></div>
+        <div className="statcard"><div className="statcard-k">Total rules</div><div className="statcard-v">{data.rules.length}</div></div>
       </div>
-      {rule.rationale && <div className="dim" style={{ marginTop: 4 }}>{rule.rationale}</div>}
-    </div>
+
+      <div className="card" style={{ padding: 0 }}>
+        <div className="toolbar">
+          <strong style={{ fontSize: 14 }}>Rule engine</strong>
+          <span className="dim" style={{ fontSize: 12 }}>A change is proposed; a second administrator approves it (D96).</span>
+        </div>
+        <div className="table-scroll">
+          <table className="rowtable">
+            <thead>
+              <tr><th>Rule</th><th>Type</th><th>Severity</th><th>Parameters</th><th>Status</th><th>Last modified</th><th></th></tr>
+            </thead>
+            <tbody>
+              {data.rules.map((rule) => (
+                <tr key={rule.code}>
+                  <td>
+                    <div style={{ fontWeight: 560 }}>{prettyRule(rule.code)}</div>
+                    <div className="mono dim" style={{ fontSize: 11 }}>{rule.code}</div>
+                  </td>
+                  <td><span className={`pill ${rule.power.toLowerCase()}`}>{rule.power.toLowerCase()}</span></td>
+                  <td><RiskBadge level={rule.severity} /></td>
+                  <td className="reco-cell mono" style={{ fontSize: 11 }}>{paramSummary(rule.params)}</td>
+                  <td>
+                    <span className="authdot"><span className={`live-dot ${rule.enabled ? 'ok' : ''}`} style={!rule.enabled ? { background: 'var(--text-3)', boxShadow: 'none' } : {}} />{rule.enabled ? 'Active' : 'Disabled'}</span>
+                    {(rule.review_overdue || rule.orphaned || rule.dormant) && (
+                      <div className="cellflags">
+                        {rule.orphaned && <span className="risk risk-HIGH">no owner</span>}
+                        {rule.review_overdue && <span className="risk risk-HIGH">review overdue</span>}
+                        {rule.dormant && <span className="risk risk-MEDIUM">dormant</span>}
+                      </div>
+                    )}
+                  </td>
+                  <td className="dim" style={{ fontSize: 11.5 }}>
+                    {rule.approved_at ? when(rule.approved_at) : '—'}
+                    {rule.approved_by && <div className="mono" style={{ fontSize: 10.5 }}>{rule.approved_by}</div>}
+                  </td>
+                  <td className="num"><button disabled={busy} onClick={() => toggle(rule)}>{rule.enabled ? 'Disable' : 'Enable'}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-foot dim">{data.rules.length} rules in ruleset v{data.ruleset.version}. Threshold and list changes are the other tabs.</div>
+      </div>
+    </>
   )
 }
 
@@ -757,7 +726,58 @@ function Lists() {
 
 /* ------------------------------------------------------------------ audit */
 
+const roleLabel = (r) => ({ ANALYST: 'Fraud Analyst', FRAUD_OPS_LEAD: 'Fraud Ops Lead',
+  INFOSEC_ANALYST: 'InfoSec Analyst', ADMIN: 'Administrator' }[r] || r)
+const roleInitials = (name) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0].toUpperCase()).join('')
+
 function Audit() {
+  const [sub, setSub] = useState('Users')
+  return (
+    <>
+      <div className="tabs" style={{ marginBottom: 14 }}>
+        {['Users', 'Audit log'].map((t) => (
+          <button key={t} className={`tab ${sub === t ? 'active' : ''}`} onClick={() => setSub(t)}>{t}</button>
+        ))}
+      </div>
+      {sub === 'Users' ? <Users /> : <AuditLog />}
+    </>
+  )
+}
+
+function Users() {
+  const { data, error } = useAsync(() => api.users())
+  if (error) return <Banner kind="error">{error}</Banner>
+  if (!data) return <p className="muted">Loading…</p>
+  return (
+    <div className="card" style={{ padding: 0 }}>
+      <div className="toolbar">
+        <strong style={{ fontSize: 14 }}>Users &amp; access</strong>
+        <span className="dim" style={{ fontSize: 12 }}>Roles enforce separation of duties on every request (D12b).</span>
+      </div>
+      <div className="table-scroll">
+        <table className="rowtable">
+          <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>MFA</th><th>Created</th></tr></thead>
+          <tbody>
+            {data.items.map((u) => (
+              <tr key={u.id}>
+                <td><div className="userpair"><span className="avatar sm">{roleInitials(u.display_name)}</span>
+                  <div><div style={{ fontWeight: 560 }}>{u.display_name}</div><div className="mono dim" style={{ fontSize: 10.5 }}>USR-{u.id}</div></div></div></td>
+                <td className="dim">{u.email}</td>
+                <td><span className="pill">{roleLabel(u.role)}</span></td>
+                <td><span className="authdot"><span className={`live-dot ${u.active ? 'ok' : ''}`} style={!u.active ? { background: 'var(--text-3)', boxShadow: 'none' } : {}} />{u.active ? 'Active' : 'Inactive'}</span></td>
+                <td className={u.totp_enabled ? '' : 'dim'}>{u.totp_enabled ? 'Enabled' : 'Off'}</td>
+                <td className="dim" style={{ fontSize: 11.5 }}>{when(u.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-foot dim">Showing {data.items.length} user{data.items.length === 1 ? '' : 's'}. New users are created maker-checker (D99).</div>
+    </div>
+  )
+}
+
+function AuditLog() {
   const { data, error } = useAsync(() => api.audit({ limit: 200 }))
   const [verification, setVerification] = useState(null)
 

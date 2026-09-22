@@ -138,6 +138,7 @@ export const api = {
   directiveMetrics: (days = 7) => get(`/v1/metrics/directives?days=${days}`),
   audit: (params) => get(`/v1/admin/audit?${new URLSearchParams(params || {})}`),
   verifyAudit: () => get('/v1/admin/audit/verify'),
+  users: () => get('/v1/admin/users'),
 }
 
 /** Kobo to a readable naira string. Integers in, formatting out (D9a). */
