@@ -564,6 +564,19 @@ class RestrictionAckIn(Strict):
     taken_at: datetime | None = None
 
 
+class ReleaseRequestIn(Strict):
+    """D103: ask for an applied restriction to be lifted. A second person decides."""
+
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class DeliveryPauseIn(Strict):
+    """D103: the audited emergency switch on outbound restriction delivery."""
+
+    paused: bool
+    reason: Annotated[str, Field(min_length=10, max_length=500)]
+
+
 class ListEntryIn(Strict):
     kind: Literal["SANCTIONED", "KNOWN_MULE", "ALLOWLIST"]
     beneficiary_account_id: str

@@ -1491,6 +1491,7 @@
           "cases"
         ],
         "summary": "Assign",
+        "description": "D94: the audited exception to automatic routing.\n\nA reason is required, the version the caller read is checked, and the\ncase's own age is untouched \u2014 moving it between people does not make it\nyounger, and the SLA it is already late against still applies.",
         "operationId": "assign_v1_cases__case_id__assign_post",
         "parameters": [
           {
@@ -2459,7 +2460,7 @@
           "admin"
         ],
         "summary": "Update Rule",
-        "description": "Enable, disable or retune a rule without a code change.\n\nThe change is versioned by creating a new ruleset rather than editing the\nactive one in place: decisions record the ruleset version that applied\n(FR-042), and mutating a version that decisions already point at would make\nthose decisions unreproducible \u2014 quietly, and only discoverably months later.",
+        "description": "Propose a rule change (D96). A *different* administrator approves it, and\nonly then is a new ruleset version published.\n\nUntil D96 this applied the change directly, and `approved_by` recorded the\none person who made it (D69e). Enabling, disabling or retuning a rule changes\nhow sensitive detection is, so it now takes two administrators \u2014 the same\nmaker-checker as a fraud finding (D93). The change is still versioned rather\nthan edited in place (FR-042); that just happens on approval.",
         "operationId": "update_rule_v1_admin_rules__code__patch",
         "parameters": [
           {
@@ -2535,7 +2536,7 @@
           "admin"
         ],
         "summary": "Create Thresholds",
-        "description": "New version, activated. Never an in-place edit, for the same reason as rules.",
+        "description": "Propose a new threshold version (D96). A different administrator approves\nit, and only then is it published and activated.\n\nThresholds set how much fraud the desk sees against its alert budget (D11d);\nmoving them alone is exactly the single-hand tuning D69e closed for rules,\nso it now takes a second signature too. Still versioned, never edited in\nplace \u2014 that happens on approval.",
         "operationId": "create_thresholds_v1_admin_thresholds_post",
         "requestBody": {
           "content": {
@@ -2556,6 +2557,115 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Create Thresholds V1 Admin Thresholds Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/change-requests": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Change Requests",
+        "description": "The detection-tuning changes awaiting or having had a second signature.\n\nReadable by anyone who can already read admin metrics; deciding one still\nneeds the change's own permission (and not being its proposer).",
+        "operationId": "list_change_requests_v1_admin_change_requests_get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "PENDING (default view), or a specific state",
+              "title": "State"
+            },
+            "description": "PENDING (default view), or a specific state"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Change Requests V1 Admin Change Requests Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/change-requests/{request_id}/decision": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Decide Change Request",
+        "description": "Approve, reject or return a proposed change (D96).\n\nNo fixed permission on the route: `governance.decide` checks that the actor\nholds the *change's own* permission (ADMIN_RULES or ADMIN_THRESHOLDS) and is\nnot the proposer, so one guard cannot be right for both change types.",
+        "operationId": "decide_change_request_v1_admin_change_requests__request_id__decision_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigDecisionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Change Request V1 Admin Change Requests  Request Id  Decision Post"
                 }
               }
             }
@@ -2672,6 +2782,7 @@
           "admin"
         ],
         "summary": "Remove List Entry",
+        "description": "Propose removing a list entry (D98). Removing a sanctions or known-mule\nentry unprotects, so a second administrator approves it.",
         "operationId": "remove_list_entry_v1_admin_lists__entry_id__delete",
         "parameters": [
           {
@@ -2682,6 +2793,18 @@
               "type": "integer",
               "title": "Entry Id"
             }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "why the entry is being removed",
+              "title": "Reason"
+            },
+            "description": "why the entry is being removed"
           }
         ],
         "responses": {
@@ -2739,7 +2862,7 @@
           "admin"
         ],
         "summary": "Promote Model",
-        "description": "Promotion is repointing a pointer, audited, with the comparison attached.\n\nRollback is repointing it back \u2014 not a redeploy. ADMIN executes; the metrics\nare the authority (D15b).",
+        "description": "Propose promoting a model (D98). Promotion repoints the active-model\npointer and changes the live scoring engine, so a *different* administrator\napproves it; the metrics are still the authority (D15b). Rollback is\nproposing the previous version back \u2014 not a redeploy.",
         "operationId": "promote_model_v1_admin_models_promote_post",
         "requestBody": {
           "content": {
@@ -2804,6 +2927,7 @@
           "admin"
         ],
         "summary": "Create User",
+        "description": "Propose a new user (D99). A *different* administrator approves it, and only\nthen does the account exist \u2014 creating an ADMIN is privilege escalation and\nshould never be one person's act.\n\nThe password is hashed here, at proposal time, so no plaintext is ever\nstored; the TOTP secret is generated at approval, so no authenticator secret\nwaits in the change-request payload. The provisioning URI comes back to the\napprover.",
         "operationId": "create_user_v1_admin_users_post",
         "parameters": [
           {
@@ -2840,6 +2964,15 @@
             "schema": {
               "type": "string",
               "title": "Password"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Reason"
             }
           }
         ],
@@ -3479,6 +3612,460 @@
         }
       }
     },
+    "/v1/cases/{case_id}/restrictions": {
+      "get": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Case Restrictions",
+        "operationId": "case_restrictions_v1_cases__case_id__restrictions_get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Case Restrictions V1 Cases  Case Id  Restrictions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions/{restriction_ref}/release-request": {
+      "post": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Request Release",
+        "description": "Ask for a restriction to be lifted (D103).\n\nAnyone who may work a case may ask; a Fraud Ops lead who did not ask\ndecides. Unblocking a customer is as consequential as blocking one, so it\ntakes the same two signatures \u2014 and the original order is never rewritten,\nthe lift is its own order beside it.",
+        "operationId": "request_release_v1_restrictions__restriction_ref__release_request_post",
+        "parameters": [
+          {
+            "name": "restriction_ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Restriction Ref"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseRequestIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Request Release V1 Restrictions  Restriction Ref  Release Request Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions/release-requests": {
+      "get": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "List Release Requests",
+        "description": "Lifts waiting for a decision, and what happened to the ones decided (D103).\n\nScoped like every other case read: a request names a case, and a person who\nmay not see the case does not see the request to unblock its customer.",
+        "operationId": "list_release_requests_v1_restrictions_release_requests_get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(PENDING|APPROVED|REJECTED|RETURNED|SUPERSEDED)$",
+              "default": "PENDING",
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Release Requests V1 Restrictions Release Requests Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions/release-requests/{request_id}/decision": {
+      "post": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Decide Release Request",
+        "description": "A lead decides somebody else's request to lift a restriction (D103).\n\nThe desk's own door to the same mechanism the administrators use, because a\nlead should not have to walk through /v1/admin to answer for a case they\nown. `governance.decide` still checks the authority and the separation.",
+        "operationId": "decide_release_request_v1_restrictions_release_requests__request_id__decision_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigDecisionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Release Request V1 Restrictions Release Requests  Request Id  Decision Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics/restrictions/reconciliation": {
+      "get": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Reconciliation",
+        "description": "What the bank owes an answer on, and what has outlived its reason (D103).",
+        "operationId": "reconciliation_v1_metrics_restrictions_reconciliation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Reconciliation V1 Metrics Restrictions Reconciliation Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions/delivery/pause": {
+      "post": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Pause Delivery",
+        "description": "Stop or resume sending restrictions to the bank (D103, plan \u00a75.3).\n\nThe desk's own stop button, held by the Fraud Ops lead who carries the\noperational risk rather than by an administrator who cannot see a case\n(D12b). Detection, investigation and approval carry on; only the outbound\nmessages wait, and they wait in a durable outbox rather than being lost.",
+        "operationId": "pause_delivery_v1_restrictions_delivery_pause_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryPauseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Pause Delivery V1 Restrictions Delivery Pause Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics/restrictions": {
+      "get": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Restriction Status",
+        "description": "Delivery health and what the bank has said (FR-305 for restrictions).",
+        "operationId": "restriction_status_v1_metrics_restrictions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Restriction Status V1 Metrics Restrictions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions": {
+      "get": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Restriction Feed",
+        "description": "Restrictions issued after ``after_id``, oldest first. Fetching records\nthat the bank was told. Poll with the last ``id``.",
+        "operationId": "restriction_feed_v1_restrictions_get",
+        "parameters": [
+          {
+            "name": "after_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Restriction Feed V1 Restrictions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions/{restriction_ref}": {
+      "get": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Get Restriction",
+        "operationId": "get_restriction_v1_restrictions__restriction_ref__get",
+        "parameters": [
+          {
+            "name": "restriction_ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Restriction Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Restriction V1 Restrictions  Restriction Ref  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/restrictions/{restriction_ref}/ack": {
+      "post": {
+        "tags": [
+          "restrictions"
+        ],
+        "summary": "Acknowledge Restriction",
+        "description": "The bank reports the outcome. Once; a repeat with the same answer is a\nno-op, a different answer is a 409.",
+        "operationId": "acknowledge_restriction_v1_restrictions__restriction_ref__ack_post",
+        "parameters": [
+          {
+            "name": "restriction_ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Restriction Ref"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestrictionAckIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Acknowledge Restriction V1 Restrictions  Restriction Ref  Ack Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/submissions/catalog": {
       "get": {
         "tags": [
@@ -3803,14 +4390,33 @@
               }
             ],
             "title": "Assignee Id"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Reason"
+          },
+          "expected_case_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Case Version"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "assignee_id"
+          "assignee_id",
+          "reason"
         ],
-        "title": "AssignIn"
+        "title": "AssignIn",
+        "description": "D94: routing is automatic, so moving a case by hand is an exception and says why."
       },
       "BatchAccepted": {
         "properties": {
@@ -3967,6 +4573,38 @@
         ],
         "title": "CaseActionIn",
         "description": "D83: a recommended step done in the bank's systems, recorded with its result."
+      },
+      "ConfigDecisionIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "APPROVE",
+              "REJECT",
+              "RETURN"
+            ],
+            "title": "Action"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ConfigDecisionIn",
+        "description": "D96: a second administrator's verdict on a proposed detection-tuning change."
       },
       "CredentialChangedDetail": {
         "properties": {
@@ -4184,6 +4822,28 @@
         ],
         "title": "CustomerReportIn",
         "description": "D90: a customer reports payments as fraud, whether or not Risk Radar alerted on them."
+      },
+      "DeliveryPauseIn": {
+        "properties": {
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 10,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "paused",
+          "reason"
+        ],
+        "title": "DeliveryPauseIn",
+        "description": "D103: the audited emergency switch on outbound restriction delivery."
       },
       "DeriveThresholdsIn": {
         "properties": {
@@ -5620,6 +6280,18 @@
               }
             ],
             "title": "Comparison"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "additionalProperties": false,
@@ -5628,6 +6300,23 @@
           "model_version_id"
         ],
         "title": "PromoteModelIn"
+      },
+      "ReleaseRequestIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 20,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ReleaseRequestIn",
+        "description": "D103: ask for an applied restriction to be lifted. A second person decides."
       },
       "ReportIn": {
         "properties": {
@@ -5682,6 +6371,50 @@
         ],
         "title": "ReportIn",
         "description": "The customer's report that starts the CBN clocks (WP-05, D71)."
+      },
+      "RestrictionAckIn": {
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "APPLIED",
+              "NOT_APPLIED",
+              "REJECTED"
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "taken_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taken At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "outcome"
+        ],
+        "title": "RestrictionAckIn",
+        "description": "D97: what the bank did about a recommended restriction \u2014 reconciliation."
       },
       "RestrictionIn": {
         "properties": {

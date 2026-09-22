@@ -35,6 +35,10 @@ PERMISSION_FOR: dict[str, Permission] = {
     "LIST_ADD": Permission.ADMIN_LISTS,                # D98
     "LIST_REMOVE": Permission.ADMIN_LISTS,             # D98
     "USER_CREATE": Permission.ADMIN_USERS,             # D99
+    # D103: lifting a restriction is a customer-impacting action, so it takes a
+    # second signature like the one that imposed it — from the desk that owns
+    # the case, not from an administrator who cannot see it (D12b).
+    "RESTRICTION_RELEASE": Permission.CASES_APPROVE_FRAUD,
 }
 
 # An applier returns ``(applied_version, extra)``: the version/id the change
@@ -245,6 +249,36 @@ def _apply_user_create(
     return uid, {"user_id": uid, "totp_uri": totp_uri(secret, payload["email"])}
 
 
+
+
+
+def _apply_restriction_release(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """D103: issue the lift the proposer asked for, against the order as it is now.
+
+    Checked again here, not trusted from the proposal: the bank may have
+    answered, or somebody may have lifted it already, between proposing and
+    approving.
+    """
+    from . import restrictions
+
+    order = restrictions.order_by_ref(conn, payload["restriction_ref"])
+    if order is None:
+        raise _Conflict("that restriction no longer exists")
+    blockers = restrictions.release_blockers(conn, order)
+    if blockers:
+        raise _Conflict("; ".join(blockers))
+    try:
+        release = restrictions.create_release(
+            conn, order=order, approver_id=approver["id"],
+            reason=payload.get("reason") or rationale, proposed_by=proposer_id,
+        )
+    except restrictions.RestrictionError as exc:
+        raise _Conflict(exc.detail) from exc
+    return int(release["id"]), {"restriction_ref": str(release["restriction_ref"])}
+
+
 _APPLIERS = {
     "RULE_UPDATE": _apply_rule_update,
     "THRESHOLD_PUBLISH": _apply_threshold_publish,
@@ -252,6 +286,7 @@ _APPLIERS = {
     "LIST_ADD": _apply_list_add,
     "LIST_REMOVE": _apply_list_remove,
     "USER_CREATE": _apply_user_create,
+    "RESTRICTION_RELEASE": _apply_restriction_release,   # D103
 }
 
 

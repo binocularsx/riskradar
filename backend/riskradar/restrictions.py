@@ -127,11 +127,52 @@ def create_orders(conn: Any, submission: dict[str, Any], approver_id: int) -> li
 # ---------------------------------------------------------------------------
 
 
+def paused(conn: Any) -> dict[str, Any]:
+    """The emergency switch (D103, plan §5.3).
+
+    Outbound delivery can be stopped while detection, investigation and
+    approval carry on. Paused means messages **queue**: the outbox is durable,
+    so nothing is lost and everything goes out in order when it is lifted.
+    """
+    rows = _rows(conn, "SELECT key, value FROM app_config WHERE key IN "
+                       "('restriction_delivery_paused', 'restriction_pause_reason')")
+    values = {r["key"]: r["value"] for r in rows}
+    return {"paused": bool(values.get("restriction_delivery_paused", False)),
+            "reason": values.get("restriction_pause_reason") or ""}
+
+
+def set_paused(conn: Any, *, on: bool, reason: str, actor: dict[str, Any]) -> dict[str, Any]:
+    before = paused(conn)
+    with conn.cursor() as cur:
+        for key, value in (("restriction_delivery_paused", json.dumps(on)),
+                           ("restriction_pause_reason", json.dumps(reason if on else ""))):
+            cur.execute(
+                "INSERT INTO app_config (key, value, updated_at, updated_by) VALUES (%s, %s, now(), %s) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), "
+                "updated_by = EXCLUDED.updated_by",
+                (key, value, actor["id"]),
+            )
+    waiting = _rows(conn, "SELECT count(*) AS n FROM restriction_outbox WHERE status = 'PENDING'")[0]["n"]
+    chain.append(
+        conn, actor_user_id=actor["id"],
+        action="RESTRICTION_DELIVERY_PAUSED" if on else "RESTRICTION_DELIVERY_RESUMED",
+        object_type="app_config", object_id="restriction_delivery",
+        from_state=str(before["paused"]), to_state=str(on),
+        payload={"reason": reason, "queued_messages": int(waiting)},
+    )
+    publish(conn, "restriction_delivery", {"paused": on, "reason": reason, "queued": int(waiting)})
+    return {"paused": on, "reason": reason, "queued_messages": int(waiting)}
+
+
 def dispatch(conn: Any, *, connector: adapters.RestrictionConnector | None = None,
              now: datetime | None = None, limit: int = 100) -> dict[str, int]:
     """Send due outbox messages. Runs inside the caller's transaction."""
     connector = connector or adapters.restriction_connector()
     now = now or datetime.now(timezone.utc)
+    if paused(conn)["paused"]:
+        # D103: held, not dropped. The queue depth is what the desk sees.
+        waiting = _rows(conn, "SELECT count(*) AS n FROM restriction_outbox WHERE status = 'PENDING'")[0]["n"]
+        return {"sent": 0, "waiting": int(waiting), "failed": 0, "paused": 1}
     due = _rows(
         conn,
         "SELECT id, order_id, payload, attempts FROM restriction_outbox "
@@ -257,6 +298,135 @@ def acknowledge(conn: Any, *, restriction_ref: str, outcome: str, reason: str | 
     publish(conn, "restriction_acknowledged",
             {"case_id": order["case_id"], "outcome": outcome})
     return {"status": "acknowledged", "restriction_ref": restriction_ref, "outcome": outcome}
+
+
+def order_by_ref(conn: Any, restriction_ref: str) -> dict[str, Any] | None:
+    rows = _rows(conn, "SELECT * FROM restriction_orders WHERE restriction_ref = %s", (restriction_ref,))
+    return rows[0] if rows else None
+
+
+def release_blockers(conn: Any, order: dict[str, Any]) -> list[str]:
+    """Why this restriction cannot be lifted right now. Empty means it can."""
+    blockers = []
+    if order["kind"] != "RESTRICT":
+        blockers.append("this is already a release, not a restriction")
+    if order["acknowledged_at"] is None:
+        blockers.append("the bank has not said what it did yet; a lift of an unapplied restriction is noise")
+    elif order["ack_outcome"] != "APPLIED":
+        blockers.append(f"the bank did not apply it ({order['ack_outcome']}), so there is nothing to lift")
+    existing = _rows(conn, "SELECT id, restriction_ref FROM restriction_orders WHERE releases_order_id = %s",
+                     (order["id"],))
+    if existing:
+        blockers.append(f"a lift already exists ({existing[0]['restriction_ref']})")
+    return blockers
+
+
+def create_release(conn: Any, *, order: dict[str, Any], approver_id: int, reason: str,
+                   proposed_by: int | None = None) -> dict[str, Any]:
+    """Issue the lift of an applied restriction, with its own outbox message.
+
+    Never an edit of the original: the pair — what was asked, and what lifted
+    it — is the record. Runs in the approval's transaction (D103).
+    """
+    blockers = release_blockers(conn, order)
+    if blockers:
+        raise RestrictionError(409, "; ".join(blockers))
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO restriction_orders
+                (submission_id, case_id, action, account_token, beneficiary_token, channel, reason,
+                 approved_by, kind, releases_order_id)
+            VALUES (%(submission)s, %(case)s, %(action)s, %(account)s, %(beneficiary)s, %(channel)s,
+                    %(reason)s, %(approver)s, 'RELEASE', %(original)s)
+            RETURNING id, restriction_ref, action, account_token, beneficiary_token, channel, case_id
+            """,
+            {"submission": order["submission_id"], "case": order["case_id"], "action": order["action"],
+             "account": order["account_token"], "beneficiary": order["beneficiary_token"],
+             "channel": order["channel"], "reason": reason, "approver": approver_id, "original": order["id"]},
+        )
+        release = dict(cur.fetchone())
+    payload = {
+        "restriction_ref": str(release["restriction_ref"]),
+        "kind": "RELEASE",
+        "lifts": str(order["restriction_ref"]),
+        "action": release["action"],
+        "account_token": release["account_token"],
+        "beneficiary_token": release["beneficiary_token"],
+        "channel": release["channel"],
+        "reason": reason,
+        "case_id": release["case_id"],
+    }
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO restriction_outbox (order_id, payload) VALUES (%s, %s)",
+                    (release["id"], json.dumps(payload)))
+    chain.append(
+        conn, actor_user_id=approver_id, action="RESTRICTION_RELEASED",
+        object_type="restriction_order", object_id=release["id"], to_state="RELEASE",
+        payload={"lifts": str(order["restriction_ref"]), "case_id": release["case_id"],
+                 "reason": reason, "proposed_by": proposed_by},
+    )
+    publish(conn, "restriction_released", {"case_id": release["case_id"],
+                                           "restriction_ref": str(release["restriction_ref"]),
+                                           "lifts": str(order["restriction_ref"])})
+    return release
+
+
+def reconcile(conn: Any, *, now: datetime | None = None) -> dict[str, Any]:
+    """What the bank owes us an answer on, and what has outlived its reason.
+
+    Two mismatches the plan asks to own rather than discover (§5.3):
+
+    * **delivered, never acknowledged** past the configured window. The bank was
+      told and has not said what it did, so nobody knows whether the customer is
+      restricted. It becomes a named exception, not a silence.
+    * **expired but still standing**: a temporary restriction whose time has
+      passed and which the bank applied. The lift is proposed automatically, and
+      still takes a second person to approve — an automatic release would be a
+      customer-impacting action nobody authorised.
+    """
+    now = now or datetime.now(timezone.utc)
+    hours = _rows(conn, "SELECT value FROM app_config WHERE key = 'restriction_ack_overdue_hours'")
+    overdue_hours = float(hours[0]["value"]) if hours else 24.0
+    stale = _rows(
+        conn,
+        """
+        SELECT o.id, o.restriction_ref, o.case_id, o.action, o.kind, o.first_delivered_at,
+               extract(epoch FROM now() - o.first_delivered_at)::int AS waiting_seconds
+          FROM restriction_orders o
+         WHERE o.first_delivered_at IS NOT NULL AND o.acknowledged_at IS NULL
+           AND o.first_delivered_at < %s - make_interval(hours => %s::int)
+         ORDER BY o.first_delivered_at
+        """,
+        (now, overdue_hours),
+    )
+    undelivered = _rows(
+        conn,
+        """
+        SELECT o.id, o.restriction_ref, o.case_id, o.action, b.attempts, b.last_error, b.status
+          FROM restriction_orders o JOIN restriction_outbox b ON b.order_id = o.id
+         WHERE o.first_delivered_at IS NULL AND b.status <> 'SENT'
+         ORDER BY b.created_at
+        """,
+    )
+    expired = _rows(
+        conn,
+        """
+        SELECT o.* FROM restriction_orders o
+         WHERE o.kind = 'RESTRICT' AND o.expires_at IS NOT NULL AND o.expires_at <= %s
+           AND o.ack_outcome = 'APPLIED'
+           AND NOT EXISTS (SELECT 1 FROM restriction_orders r WHERE r.releases_order_id = o.id)
+        """,
+        (now,),
+    )
+    return {
+        "checked_at": now,
+        "ack_overdue_hours": overdue_hours,
+        "delivered_not_acknowledged": stale,
+        "not_delivered": undelivered,
+        "expired_still_standing": expired,
+        "clean": not (stale or undelivered or expired),
+    }
 
 
 def _system_user(conn: Any) -> int:
