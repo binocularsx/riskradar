@@ -120,45 +120,41 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         <OwnershipBanner summary={summary} user={user} onTake={take} busy={busy} />
       )}
 
-      {/* ------------------------------- 2. whose case, and how much money */}
-      <div className="casehead">
-        <div>
-          <div className="who">{summary.customer_name || 'Unknown customer'}</div>
-          <div className="sub">
-            Case #{summary.id} · opened {ago(summary.opened_at)} ·{' '}
-            {summary.alert_count} flagged transaction
-            {summary.alert_count === 1 ? '' : 's'} ·{' '}
-            {summary.distinct_beneficiaries} destination
-            {summary.distinct_beneficiaries === 1 ? '' : 's'}
-          </div>
-          <div className="row wrap" style={{ marginTop: 10 }}>
-            <RiskBadge level={summary.risk_level} />
-            <span className={`sla sla-${summary.sla_state}`}>
-              {clock(summary.sla_remaining_minutes)}
-            </span>
-            <span className="pill">{summary.state.replace(/_/g, ' ').toLowerCase()}</span>
-            {summary.new_device && <span className="pill escalate">new device</span>}
-            {summary.declined_count > 0 && (
-              <span className="pill">{summary.declined_count} declined</span>
+      {/* Figma case detail: Case Summary (left) + Why This Alert Fired (right) */}
+      <div className="grid cols-2" style={{ marginBottom: 14 }}>
+        <div className="card">
+          <h3>Case summary</h3>
+          <div className="kv">
+            <div className="kv-row"><span className="kv-k">Customer</span><span className="kv-v">{summary.customer_name || 'Unknown customer'}</span></div>
+            <div className="kv-row"><span className="kv-k">Opened</span><span className="kv-v">{ago(summary.opened_at)}</span></div>
+            <div className="kv-row"><span className="kv-k">Flagged transactions</span><span className="kv-v">{summary.alert_count}</span></div>
+            <div className="kv-row"><span className="kv-k">Destinations</span><span className="kv-v">{summary.distinct_beneficiaries}</span></div>
+            <div className="kv-row"><span className="kv-k">State</span><span className="kv-v" style={{ textTransform: 'capitalize' }}>{summary.state.replace(/_/g, ' ').toLowerCase()}</span></div>
+            <div className="kv-row"><span className="kv-k">SLA</span><span className="kv-v"><span className={`sla sla-${summary.sla_state}`}>{clock(summary.sla_remaining_minutes)}</span></span></div>
+            <div className="kv-row"><span className="kv-k">Exposure</span><span className="kv-v" style={{ color: 'var(--critical)', fontWeight: 700 }}>{naira(summary.exposure_minor)}</span></div>
+            {summary.attempted_minor > summary.exposure_minor && (
+              <div className="kv-row"><span className="kv-k">Attempted</span><span className="kv-v">{nairaShort(summary.attempted_minor)} <span className="dim">(rest declined)</span></span></div>
             )}
+          </div>
+          <div className="row wrap" style={{ marginTop: 12, gap: 6 }}>
+            {summary.new_device && <span className="pill escalate">new device</span>}
+            {summary.declined_count > 0 && <span className="pill">{summary.declined_count} declined</span>}
             {(summary.channels || []).map((c) => (
               <span className="tag" key={c}>{c.replace(/_/g, ' ').toLowerCase()}</span>
             ))}
           </div>
         </div>
 
-        <div className="exposure">
-          <div className="k">Money at risk</div>
-          <div className="v">{naira(summary.exposure_minor)}</div>
-          <div className="n">
-            {summary.attempted_minor > summary.exposure_minor
-              ? `${nairaShort(summary.attempted_minor)} attempted — the rest was declined`
-              : 'all of this went through'}
-          </div>
-        </div>
+        <Why
+          alerts={detail?.alerts}
+          features={first?.features}
+          signals={first?.signals}
+          amountMinor={first?.amount_minor}
+          authResult={detail?.alerts?.length === 1 ? first?.auth_result : null}
+        />
       </div>
 
-      {/* --------------------------------------- 3. what should I do now */}
+      {/* what should I do now */}
       <div className={`recommend ${rec.urgency || ''}`}>
         <div className="k">
           Recommended
@@ -172,16 +168,6 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
       {/* D83: where the case is, the steps as a checklist, escalation and closing. */}
       <div style={{ marginBottom: 14 }}>
         <CaseFlow caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
-      </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <Why
-          alerts={detail?.alerts}
-          features={first?.features}
-          signals={first?.signals}
-          amountMinor={first?.amount_minor}
-          authResult={detail?.alerts?.length === 1 ? first?.auth_result : null}
-        />
       </div>
 
       {/* ------------------------- what the bank owes, once the customer reports */}

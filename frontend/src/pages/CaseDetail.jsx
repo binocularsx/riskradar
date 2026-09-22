@@ -22,7 +22,7 @@ export default function CaseDetail({ user }) {
     let cancelled = false
     // The worklist item carries the header fields CaseView needs (exposure, SLA,
     // recommendation). Fetch across all scopes so a direct link resolves.
-    api.worklist({ scope: 'all', limit: 300 })
+    api.worklist({ scope: 'all', limit: 200 })
       .then((d) => {
         if (cancelled) return
         const found = d.items.find((c) => c.id === caseId)
