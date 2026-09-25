@@ -97,11 +97,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
 }
 
 # D12a made MFA mandatory for FRAUD_OPS_LEAD and ADMIN and default-on for
-# ANALYST. D95 (implementation plan §3) closes the gap: MFA is mandatory for
-# *every* human role that can log in. An analyst and an infosec analyst both
-# read customer financial data and act on cases, so "default-on" — which a
-# future user row could quietly turn off — becomes "required", enforced on every
-# request. SYSTEM never logs in and holds no factor.
+# ANALYST. D95 made it mandatory for *every* human role, enforced on every
+# request, so that no user row could quietly turn it off.
+#
+# D105 moves the switch back to the user row — at the owner's direction, so an
+# administrator can decide whether a given person is asked for a code — and this
+# set is now the **default applied when an account is created**, not a runtime
+# gate. `auth.login` and `api.deps` read `users.totp_enabled`; changing it is a
+# maker-checker change like any other, and it is audited. The protection D95
+# wanted is kept where it counts: the column can no longer be changed quietly,
+# because changing it takes two administrators and leaves a record.
+# SYSTEM never logs in and holds no factor.
 MFA_REQUIRED_ROLES = frozenset({"ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"})
 
 

@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from ..config import settings
 from ..db import pool
 from ..security import cookies, sessions
-from ..security.rbac import Permission, mfa_required, permissions_for
+from ..security.rbac import Permission, permissions_for
 from ..security.tokens import hash_api_key
 
 # Requests that change state carry a CSRF token (D95). The safe methods do not.
@@ -88,11 +88,12 @@ def current_user(
         raise HTTPException(status_code=401, detail="session expired or revoked")
 
     role = session["role"]
-    # D12a/D95: a session that has not satisfied MFA is not a session for a role
-    # that requires it — now every human role. Checked on every request, not only
-    # at login, so enabling the requirement takes effect immediately for everyone
-    # already signed in.
-    if mfa_required(role) and not session["mfa_satisfied"]:
+    # D12a/D95/D105: a session that has not satisfied MFA is not a session for a
+    # user who is required to hold one. The switch is now the user's own
+    # `totp_enabled`, which an administrator can change under maker-checker, and
+    # it is checked on every request rather than only at login — so turning the
+    # requirement *on* takes effect immediately for anyone already signed in.
+    if session["totp_enabled"] and not session["mfa_satisfied"]:
         raise HTTPException(status_code=401, detail="multi-factor authentication required")
 
     # D95: CSRF on unsafe methods, and re-set the cookie if the identifier just
@@ -137,7 +138,7 @@ def current_user_short(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="session expired or revoked")
 
     role = session["role"]
-    if mfa_required(role) and not session["mfa_satisfied"]:
+    if session["totp_enabled"] and not session["mfa_satisfied"]:
         raise HTTPException(status_code=401, detail="multi-factor authentication required")
 
     _enforce_csrf(request, session)

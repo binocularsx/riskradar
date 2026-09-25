@@ -154,18 +154,21 @@ FALLBACK_STEPS = [
     {"text": "Record the outcome.", "action": "OUTCOME"},
 ]
 
-ESCALATION = {
+# D108: InfoSec is out of scope at the owner's direction — there is no such
+# specialist on this desk — so it is no longer offered as a destination. The
+# entry stays defined, unlisted, because cases escalated to it before the change
+# still name it and their history has to keep rendering.
+RETIRED_ESCALATION = {
     "INFOSEC": {
-        "label": "InfoSec",
-        "when": ["The customer's login, SIM, device or contact details were changed by someone else.",
-                 "A change looks like it came from inside the bank.",
-                 "A sanctions match.",
-                 "The customer is unreachable while money is still leaving."],
-        "what_happens": ["The case leaves your queue and waits in InfoSec's escalated queue.",
-                         "Your name stays on it as the person who escalated, with your reason.",
-                         "InfoSec investigates and hands it back to you with findings; you record the outcome.",
-                         "The response clock keeps running while it is with them."],
+        "label": "InfoSec (retired)",
+        "when": [],
+        "what_happens": ["This destination is no longer in use. Account takeover, login abuse "
+                         "and MFA problems are actioned on this desk: propose the containment "
+                         "the bank should apply, and a lead approves it."],
     },
+}
+
+ESCALATION = {
     "FRAUD_OPS": {
         "label": "Fraud Ops lead",
         "when": ["Several customers paid the same new accounts: a network, not one case.",
@@ -211,4 +214,6 @@ def steps_for(action: str | None) -> list[dict[str, str]]:
 
 
 def catalog() -> dict[str, Any]:
-    return {"actions": ACTIONS, "escalation": ESCALATION, "stages": [{"key": s, "label": STAGE_LABEL[s]} for s in STAGES]}
+    # `escalation` is what may be chosen now; `retired` only labels what a
+    # past case already carries, so old history still reads correctly.
+    return {"actions": ACTIONS, "escalation": ESCALATION, "retired_escalation": RETIRED_ESCALATION, "stages": [{"key": s, "label": STAGE_LABEL[s]} for s in STAGES]}

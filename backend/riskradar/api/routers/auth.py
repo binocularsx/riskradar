@@ -15,7 +15,7 @@ from ...audit import chain
 from ...config import settings
 from ...security import cookies, sessions
 from ...security.passwords import verify_password, verify_totp
-from ...security.rbac import mfa_required, permissions_for
+from ...security.rbac import permissions_for
 from ..deps import current_user, get_conn
 from ..schemas import LoginIn, LoginOut, MeOut
 
@@ -52,7 +52,10 @@ def login(
         raise invalid
 
     role = user["role"]
-    needs_mfa = user["totp_enabled"] or mfa_required(role)
+    # D105: the user's own switch decides, and an administrator can change it
+    # under maker-checker. Before this the role forced it (D95) and the column
+    # was inert, so an administrator could appear to turn MFA off and not.
+    needs_mfa = bool(user["totp_enabled"])
 
     if needs_mfa:
         if not body.totp_code:

@@ -468,13 +468,31 @@ class ReportIn(Strict):
 
 
 class RestrictionIn(Strict):
-    """D93: one action a submission asks the bank to take, from a fixed list."""
+    """D93: one action a finding asks the bank to take, from a fixed list.
 
-    action: Literal["DEBIT_RESTRICTION", "CHANNEL_RESTRICTION", "CARD_FREEZE", "BENEFICIARY_RESTRICTION"]
+    D107 adds TRANSACTION_REVERSAL, which is the only one of them about money
+    that has already moved. It must name the payment it reverses; the database
+    refuses one that does not, because an order the bank cannot execute is worse
+    than none — the desk believes they were asked.
+    """
+
+    action: Literal["DEBIT_RESTRICTION", "CHANNEL_RESTRICTION", "CARD_FREEZE",
+                    "BENEFICIARY_RESTRICTION", "TRANSACTION_REVERSAL",
+                    # D108: containment for a compromised login, so account
+                    # takeover has an action on this desk rather than an
+                    # escalation to a specialist who is out of scope.
+                    "SESSION_TERMINATION", "CREDENTIAL_RESET", "MFA_REENROLMENT"]
     account_token: Annotated[str | None, Field(max_length=128)] = None
     beneficiary_token: Annotated[str | None, Field(max_length=128)] = None
     channel: Channel | None = None
+    transaction_ref: Annotated[str | None, Field(max_length=128)] = None
     reason: Annotated[str | None, Field(max_length=500)] = None
+
+    @model_validator(mode="after")
+    def _reversal_names_a_transaction(self):
+        if self.action == "TRANSACTION_REVERSAL" and not self.transaction_ref:
+            raise ValueError("a TRANSACTION_REVERSAL must name the transaction_ref it reverses")
+        return self
 
 
 class FraudSubmissionIn(Strict):
@@ -487,10 +505,18 @@ class FraudSubmissionIn(Strict):
 
 
 class FraudDecisionIn(Strict):
-    """D93: a lead's decision on somebody else's proposal."""
+    """D93: a lead's decision on somebody else's proposal.
+
+    D107: the lead may also set the restrictions the approval issues. An analyst
+    works transactions and never takes an action the customer feels; what the
+    bank is asked to do to an account is the lead's call, at the moment they
+    approve. Omitted, the submission's own list stands, so an approval that says
+    nothing about restrictions behaves exactly as it did before.
+    """
 
     decision: Literal["APPROVE", "REJECT", "RETURN"]
     reason: Annotated[str, Field(min_length=10, max_length=4000)]
+    restrictions: Annotated[list[RestrictionIn], Field(max_length=20)] | None = None
 
 
 class CustomerReportIn(Strict):
@@ -554,6 +580,77 @@ class ConfigDecisionIn(Strict):
 
     action: Literal["APPROVE", "REJECT", "RETURN"]
     reason: Annotated[str | None, Field(max_length=2000)] = None
+
+
+ROLES = Literal["ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"]
+
+
+class UserCreateIn(Strict):
+    """D99: propose a new account. A *body*, not query parameters — the password
+    used to travel in the URL, where it reaches browser history, the Referer
+    header and every proxy log between here and the server."""
+
+    email: Annotated[str, Field(min_length=3, max_length=254)]
+    display_name: Annotated[str, Field(min_length=1, max_length=120)]
+    role: ROLES
+    password: Annotated[str, Field(min_length=12, max_length=200)]
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class UserRoleIn(Strict):
+    """D104: propose moving a user to another role. The role is the permission
+    set (D12b), so this is the privilege-escalation path."""
+
+    role: ROLES
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class UserActiveIn(Strict):
+    """D104: propose disabling or restoring an account."""
+
+    active: bool
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class UserMfaResetIn(Strict):
+    """D104: propose re-issuing a user's authenticator secret — the lost-phone
+    path, and the one an attacker holding one admin account would most want."""
+
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class UserMfaIn(Strict):
+    """D105: whether this person is asked for a code at all.
+
+    `users.totp_enabled` is read by the login and by every request, so this
+    genuinely turns the prompt on or off — it was inert while the role decided.
+    """
+
+    enabled: bool
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class UserPasswordIn(Strict):
+    """D105: set a new password for somebody who cannot sign in. Hashed at
+    proposal, so the plaintext never reaches storage or a pending request."""
+
+    password: Annotated[str, Field(min_length=12, max_length=200)]
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class UserProfileIn(Strict):
+    """D105: correct the email and name. The email is the login identifier, so
+    this changes who can sign in to the account."""
+
+    email: Annotated[str, Field(min_length=3, max_length=254)]
+    display_name: Annotated[str, Field(min_length=1, max_length=120)]
+    reason: Annotated[str, Field(min_length=20, max_length=2000)]
+
+
+class ApiKeyCreateIn(Strict):
+    """D87: name a new ingestion key. A body for the same reason as UserCreateIn."""
+
+    name: Annotated[str, Field(min_length=1, max_length=120)]
 
 
 class RestrictionAckIn(Strict):

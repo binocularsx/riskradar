@@ -96,7 +96,8 @@ def resolve(conn: Any, raw_token: str, *, rotate: bool = True) -> dict[str, Any]
             SELECT s.id, s.user_id, s.mfa_satisfied, s.idle_expires_at,
                    s.absolute_expires_at, s.csrf_token, s.rotated_at,
                    (s.id = %(sid)s) AS matched_current,
-                   u.email, u.display_name, u.role, u.active, u.is_system
+                   u.email, u.display_name, u.role, u.active, u.is_system,
+                   u.totp_enabled
               FROM sessions s
               JOIN users u ON u.id = s.user_id
              WHERE s.id = %(sid)s

@@ -23,7 +23,21 @@ from ...security.passwords import hash_password, new_api_key
 from ...security.rbac import Permission, mfa_required
 from ...security.tokens import account_token, hash_api_key
 from ..deps import current_user, get_conn, requires
-from ..schemas import ConfigDecisionIn, ListEntryIn, PromoteModelIn, RuleUpdateIn, ThresholdsIn
+from ..schemas import (
+    ApiKeyCreateIn,
+    ConfigDecisionIn,
+    ListEntryIn,
+    PromoteModelIn,
+    RuleUpdateIn,
+    ThresholdsIn,
+    UserActiveIn,
+    UserCreateIn,
+    UserMfaIn,
+    UserMfaResetIn,
+    UserPasswordIn,
+    UserProfileIn,
+    UserRoleIn,
+)
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -415,11 +429,7 @@ def list_users(
 
 @router.post("/users")
 def create_user(
-    email: str,
-    display_name: str,
-    role: str,
-    password: str,
-    reason: str,
+    body: UserCreateIn,
     user: dict = Depends(requires(Permission.ADMIN_USERS)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
@@ -431,28 +441,225 @@ def create_user(
     stored; the TOTP secret is generated at approval, so no authenticator secret
     waits in the change-request payload. The provisioning URI comes back to the
     approver.
+
+    D104: the fields arrive in a request body. They were query parameters, which
+    put the new account's password in the URL — and therefore in browser
+    history, the Referer header and any proxy or dev-server log on the way.
     """
-    if role not in ("ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"):
-        raise HTTPException(400, "invalid role")
-    if _rows(conn, "SELECT 1 FROM users WHERE lower(email) = lower(%s)", (email,)):
+    if _rows(conn, "SELECT 1 FROM users WHERE lower(email) = lower(%s)", (body.email,)):
         raise HTTPException(409, "a user with that email already exists")
     try:
         return governance.propose(
             conn, user,
-            change_type="USER_CREATE", target=email.lower(),
-            summary=f"create {role} {email}",
-            payload={"email": email, "display_name": display_name, "role": role,
-                     "password_hash": hash_password(password)},
-            before_snapshot={"role": role, "mfa_required": mfa_required(role)},
-            rationale=reason,
+            change_type="USER_CREATE", target=body.email.lower(),
+            summary=f"create {body.role} {body.email}",
+            payload={"email": body.email, "display_name": body.display_name,
+                     "role": body.role, "password_hash": hash_password(body.password)},
+            before_snapshot={"role": body.role, "mfa_required": mfa_required(body.role)},
+            rationale=body.reason,
         )
     except governance.MakerCheckerError as exc:
         raise HTTPException(exc.status_code, exc.detail)
 
 
+def _managed_target(conn: Any, user_id: int, actor: dict[str, Any]) -> dict[str, Any]:
+    """The user a lifecycle change is about, or the reason it cannot be (D104).
+
+    The proposer may not be the subject. Without this an administrator could
+    proposed their own promotion and merely need somebody to rubber-stamp it;
+    with it, changing your own access needs two other people to want it.
+    """
+    rows = _rows(
+        conn,
+        "SELECT id, email, display_name, role, active, is_system FROM users WHERE id = %s",
+        (user_id,),
+    )
+    if not rows:
+        raise HTTPException(404, "no such user")
+    target = rows[0]
+    if target["is_system"]:
+        raise HTTPException(400, "the system account is not a person and cannot be managed")
+    if int(target["id"]) == int(actor["id"]):
+        raise HTTPException(403, "an administrator cannot propose a change to their own access")
+    return target
+
+
+@router.post("/users/{user_id}/role")
+def change_user_role(
+    user_id: int,
+    body: UserRoleIn,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Propose moving a user to another role (D104). A second administrator decides."""
+    target = _managed_target(conn, user_id, user)
+    if target["role"] == body.role:
+        raise HTTPException(409, f"{target['email']} is already {body.role}")
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_ROLE_CHANGE", target=str(user_id),
+            summary=f"{target['email']}: {target['role']} to {body.role}",
+            payload={"user_id": user_id, "email": target["email"], "role": body.role},
+            before_snapshot={"role": target["role"],
+                             "mfa_required": mfa_required(target["role"])},
+            rationale=body.reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+@router.post("/users/{user_id}/active")
+def set_user_active(
+    user_id: int,
+    body: UserActiveIn,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Propose disabling or restoring an account (D104).
+
+    Disabling is the leaver and the compromise path. It still takes a second
+    signature, because disabling the other administrator is precisely how one
+    person would take sole control of the system.
+    """
+    target = _managed_target(conn, user_id, user)
+    if bool(target["active"]) == body.active:
+        state = "active" if body.active else "disabled"
+        raise HTTPException(409, f"{target['email']} is already {state}")
+    verb = "restore" if body.active else "disable"
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_SET_ACTIVE", target=str(user_id),
+            summary=f"{verb} {target['email']} ({target['role']})",
+            payload={"user_id": user_id, "email": target["email"], "active": body.active},
+            before_snapshot={"active": bool(target["active"]), "role": target["role"]},
+            rationale=body.reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+@router.post("/users/{user_id}/mfa-reset")
+def reset_user_mfa(
+    user_id: int,
+    body: UserMfaResetIn,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Propose re-issuing a user's authenticator secret (D104).
+
+    The new secret is minted at approval, never at proposal, so it does not sit
+    in a pending change request waiting to be read — the same handling as a new
+    user's secret in D99.
+    """
+    target = _managed_target(conn, user_id, user)
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_MFA_RESET", target=str(user_id),
+            summary=f"re-issue authenticator for {target['email']}",
+            payload={"user_id": user_id, "email": target["email"]},
+            before_snapshot={"email": target["email"], "role": target["role"]},
+            rationale=body.reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+@router.post("/users/{user_id}/mfa")
+def set_user_mfa(
+    user_id: int,
+    body: UserMfaIn,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Propose turning the code prompt on or off for a user (D105).
+
+    Distinct from /mfa-reset, which keeps the requirement and issues a new
+    secret. This one decides whether they are asked at all.
+    """
+    _managed_target(conn, user_id, user)
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_SET_MFA", target=str(user_id),
+            summary=("require a code from" if body.enabled else "stop asking for a code from")
+                    + f" {_email_of(conn, user_id)}",
+            payload={"user_id": user_id, "enabled": body.enabled},
+            before_snapshot=_mfa_snapshot(conn, user_id),
+            rationale=body.reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+@router.post("/users/{user_id}/password")
+def reset_user_password(
+    user_id: int,
+    body: UserPasswordIn,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Propose a new password for a user (D105). Hashed here, at proposal, so no
+    plaintext is stored and none waits in the pending request."""
+    target = _managed_target(conn, user_id, user)
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_PASSWORD_RESET", target=str(user_id),
+            summary=f"reset the password for {target['email']}",
+            payload={"user_id": user_id, "password_hash": hash_password(body.password)},
+            before_snapshot={"email": target["email"], "role": target["role"]},
+            rationale=body.reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+@router.post("/users/{user_id}/profile")
+def update_user_profile(
+    user_id: int,
+    body: UserProfileIn,
+    user: dict = Depends(requires(Permission.ADMIN_USERS)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Propose correcting a user's email and display name (D105)."""
+    target = _managed_target(conn, user_id, user)
+    if _rows(conn, "SELECT 1 FROM users WHERE lower(email) = lower(%s) AND id <> %s",
+             (body.email, user_id)):
+        raise HTTPException(409, "another user already has that email")
+    if (target["email"] == body.email.strip()
+            and target["display_name"] == body.display_name.strip()):
+        raise HTTPException(409, "that is already the email and name on the account")
+    try:
+        return governance.propose(
+            conn, user,
+            change_type="USER_PROFILE_UPDATE", target=str(user_id),
+            summary=f"{target['email']} to {body.email.strip()} ({body.display_name.strip()})",
+            payload={"user_id": user_id, "email": body.email,
+                     "display_name": body.display_name},
+            before_snapshot={"email": target["email"],
+                             "display_name": target["display_name"]},
+            rationale=body.reason,
+        )
+    except governance.MakerCheckerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+
+def _email_of(conn: Any, user_id: int) -> str:
+    return _rows(conn, "SELECT email FROM users WHERE id = %s", (user_id,))[0]["email"]
+
+
+def _mfa_snapshot(conn: Any, user_id: int) -> dict[str, Any]:
+    row = _rows(conn, "SELECT totp_enabled, role::text AS role FROM users WHERE id = %s",
+                (user_id,))[0]
+    return {"totp_enabled": bool(row["totp_enabled"]), "role": row["role"]}
+
+
 @router.post("/api-keys")
 def create_api_key(
-    name: str,
+    body: ApiKeyCreateIn,
     user: dict = Depends(requires(Permission.ADMIN_USERS)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
@@ -460,7 +667,7 @@ def create_api_key(
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO api_keys (name, key_hash) VALUES (%s, %s) RETURNING id",
-            (name, hash_api_key(raw)),
+            (body.name, hash_api_key(raw)),
         )
         row = cur.fetchone()
     chain.append(
@@ -469,7 +676,7 @@ def create_api_key(
         action="API_KEY_CREATED",
         object_type="api_key",
         object_id=row["id"] if isinstance(row, dict) else row[0],
-        payload={"name": name},
+        payload={"name": body.name},
     )
     return {"api_key": raw, "note": "shown once; only its hash is stored"}
 

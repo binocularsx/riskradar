@@ -70,18 +70,15 @@ def run(cmd: list[str], cwd: Path | None = None, quiet: bool = False) -> str:
 
 
 def stage_schema() -> None:
-    print("[1/4] dropping and rebuilding the database")
+    print("[1/3] dropping and rebuilding the database")
     run([str(PYTHON), "scripts/migrate.py", "--reset"])
     run([str(PYTHON), "scripts/migrate.py"])
 
-    print("[2/4] seeding users, API key, rules and placeholder thresholds")
+    print("[2/3] seeding users, API key, rules and placeholder thresholds")
     run([str(PYTHON), "scripts/seed.py"])
 
-    print("[3/4] registering the trained model")
+    print("[3/3] registering the trained model")
     register_trained_model()
-
-    print("[4/4] disabling MFA on the analyst account for demo convenience")
-    disable_analyst_mfa()
 
     print("\nschema stage done. Start the API, then run --stage data.")
 
@@ -142,31 +139,6 @@ def register_trained_model() -> None:
         )
         conn.commit()
     print(f"    active model: riskradar-gbm:{version}")
-
-
-def disable_analyst_mfa() -> None:
-    """D12a makes MFA *default-on* for ANALYST, mandatory only for lead and admin.
-
-    Turning it off for the demo analyst is inside the decision, not a bypass of
-    it — and the change is audited like any other.
-    """
-    import psycopg
-
-    from riskradar.audit import chain
-    from riskradar.config import settings
-
-    with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
-        sys_uid = conn.execute("SELECT id FROM users WHERE is_system LIMIT 1").fetchone()["id"]
-        conn.execute(
-            "UPDATE users SET totp_enabled = false WHERE email = 'analyst@riskradar.local'"
-        )
-        chain.append(
-            conn, actor_user_id=sys_uid, action="USER_MFA_DISABLED",
-            object_type="user", object_id="analyst@riskradar.local",
-            from_state="true", to_state="false",
-            payload={"reason": "demo convenience; D12a permits default-on for ANALYST"},
-        )
-        conn.commit()
 
 
 # ---------------------------------------------------------------------------

@@ -273,6 +273,143 @@ class CoreRestrictionConnector:
 
 _RESOLVERS = {"none": NoCoreResolver, "fixture": FixtureCoreResolver, "finacle": FinacleCoreResolver}
 _REGISTRIES = {"format": FormatRegistry, "nibss": NibssRegistry}
+class AccountManagerConnector(Protocol):
+    """D106: the customer's account manager, reached like any other external
+    party - a message their system accepts, and a reference back."""
+
+    name: str
+
+    def publish(self, message: dict[str, Any]) -> str: ...
+
+
+class NoAccountManagerConnector:
+    name = "none"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        raise NotConnected(
+            "no account manager connector configured (RISKRADAR_ACCOUNT_MANAGER_CONNECTOR)")
+
+
+class LoopbackAccountManagerConnector:
+    """Accepts every report as a relationship-management system would, and
+    returns a reference. For demonstrating the outbox end to end; it notifies
+    nobody, and its reference says so."""
+
+    name = "loopback"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        return f"loopback-am-{message.get('report_ref', 'unknown')}"
+
+
+class EmailAccountManagerConnector:
+    """D107: deliver the confirmed-fraud report to an account manager's inbox.
+
+    Configuration, all from the environment and none of it defaulted to
+    anything that could send:
+
+        RISKRADAR_ACCOUNT_MANAGER_EMAIL   where the report goes (required)
+        RISKRADAR_SMTP_HOST               the relay (required)
+        RISKRADAR_SMTP_PORT               defaults to 587
+        RISKRADAR_SMTP_FROM               defaults to the account it signs in as
+        RISKRADAR_SMTP_USER / _PASSWORD   omitted for an open internal relay
+        RISKRADAR_SMTP_STARTTLS           "0" to disable; on by default
+
+    A missing host or recipient raises ``NotConnected`` rather than failing, so
+    the report waits in the outbox instead of burning its attempts against a
+    relay nobody has configured — and so selecting this connector without
+    finishing the configuration cannot send anything anywhere.
+
+    One inbox, not one per customer. Risk Radar holds no directory of which
+    manager owns which account, and inventing one here would be a customer data
+    store that nothing else in the system needs (D9c keeps identifiers one-way).
+    The report names the subject token; the recipient's own systems resolve it.
+    """
+
+    name = "email"
+
+    def publish(self, message: dict[str, Any]) -> str:
+        import smtplib
+        from email.message import EmailMessage
+        from email.utils import make_msgid
+
+        host = os.environ.get("RISKRADAR_SMTP_HOST", "").strip()
+        to = os.environ.get("RISKRADAR_ACCOUNT_MANAGER_EMAIL", "").strip()
+        if not host or not to:
+            raise NotConnected(
+                "account manager email is selected but not configured "
+                "(RISKRADAR_SMTP_HOST, RISKRADAR_ACCOUNT_MANAGER_EMAIL)")
+
+        port = int(os.environ.get("RISKRADAR_SMTP_PORT", "587"))
+        user = os.environ.get("RISKRADAR_SMTP_USER", "")
+        password = os.environ.get("RISKRADAR_SMTP_PASSWORD", "")
+        sender = os.environ.get("RISKRADAR_SMTP_FROM", "") or user or f"riskradar@{host}"
+
+        mail = EmailMessage()
+        message_id = make_msgid(domain="riskradar")
+        mail["Message-ID"] = message_id
+        mail["From"] = sender
+        mail["To"] = to
+        mail["Subject"] = (f"Confirmed fraud - case {message.get('case_id')} "
+                           f"- report {str(message.get('report_ref', ''))[:8]}")
+        mail.set_content(_report_text(message))
+
+        with smtplib.SMTP(host, port, timeout=20) as smtp:
+            if os.environ.get("RISKRADAR_SMTP_STARTTLS", "1") != "0":
+                smtp.starttls()
+            if user:
+                smtp.login(user, password)
+            smtp.send_message(mail)
+        return message_id
+
+
+def _report_text(m: dict[str, Any]) -> str:
+    """The report as an account manager reads it.
+
+    Plain text on purpose: it has to survive every mail client, and the person
+    reading it needs the facts and the next step, not formatting. Amounts are
+    minor units in the payload and naira here, because nobody acts on kobo.
+    """
+    naira = (m.get("exposure_minor") or 0) / 100
+    lines = [
+        f"Case {m.get('case_id')} has been confirmed as fraud by the fraud operations desk.",
+        "",
+        f"  Customer reference   {m.get('subject_token')}",
+        f"  Exposure             NGN {naira:,.2f} across {m.get('transactions')} transaction(s)",
+        f"  First seen           {m.get('first_seen') or 'unknown'}",
+        f"  Last seen            {m.get('last_seen') or 'unknown'}",
+        f"  Confirmed at         {m.get('confirmed_at')}",
+        f"  Report reference     {m.get('report_ref')}",
+        "",
+        "Why the desk concluded fraud:",
+        f"  {m.get('rationale') or 'no rationale recorded'}",
+        "",
+    ]
+    asked = m.get("restrictions_recommended") or []
+    if asked:
+        lines.append("The bank has been asked to:")
+        for r in asked:
+            target = (r.get("transaction_ref") or r.get("account_token")
+                      or r.get("beneficiary_token") or "")
+            lines.append(f"  - {r.get('action', '').replace('_', ' ').lower()}  {target}")
+    else:
+        lines.append("No restriction was requested on this case.")
+    lines += [
+        "",
+        "Over to you: contact and follow-up with the customer are yours. This desk",
+        "works transactions and does not contact customers.",
+        "",
+        m.get("advisory", ""),
+    ]
+    return "\n".join(lines)
+
+
+_ACCOUNT_MANAGER_CONNECTORS = {
+    "none": NoAccountManagerConnector,
+    "loopback": LoopbackAccountManagerConnector,
+    "email": EmailAccountManagerConnector,
+}
+
+
 _CONNECTORS = {"none": NoIndustryConnector, "loopback": LoopbackIndustryConnector, "nibss": NibssIndustryConnector}
 _RESTRICTION_CONNECTORS = {
     "none": NoRestrictionConnector,
@@ -306,6 +443,11 @@ def industry_connector() -> IndustryConnector:
 
 def restriction_connector() -> RestrictionConnector:
     return _choose("restriction", "RISKRADAR_RESTRICTION_CONNECTOR", "none", _RESTRICTION_CONNECTORS)
+
+
+def account_manager_connector() -> AccountManagerConnector:
+    return _choose("account_manager", "RISKRADAR_ACCOUNT_MANAGER_CONNECTOR", "none",
+                   _ACCOUNT_MANAGER_CONNECTORS)
 
 
 def institution_code() -> str:

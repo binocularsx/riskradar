@@ -161,6 +161,7 @@ def sweep(conn: Any, *, system_user_id: int, now: datetime | None = None) -> lis
 def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - process loop
     import psycopg
 
+    from .. import reporting as account_manager_reporting
     from .. import restrictions as restriction_delivery
     from ..config import settings
     from ..identity import industry_sync
@@ -187,10 +188,17 @@ def run_forever(interval_seconds: int = 60) -> None:  # pragma: no cover - proce
                 # commit for the same reason — a bank outage undoes nothing here.
                 restr = restriction_delivery.dispatch(conn)
                 conn.commit()
+                # D106: and the account manager reports, on their own commit for
+                # the same reason - a relationship system being down must not
+                # undo a dispatched restriction or a recorded breach.
+                reports = account_manager_reporting.dispatch(conn)
+                conn.commit()
             if sync["sent"] or sync["failed"] or received["stored"]:
                 log.info("industry watch-list: %s, received %s", sync, received)
             if restr["sent"] or restr["failed"]:
                 log.info("restrictions dispatched: %s", restr)
+            if reports["sent"] or reports["failed"]:
+                log.info("account manager reports dispatched: %s", reports)
             for e in expired:
                 log.warning("watch-list flag %s expired%s", e["flag_id"],
                             " without customer contact" if e["contact_missed"] else "")

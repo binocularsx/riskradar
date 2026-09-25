@@ -77,7 +77,14 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
 
     # A step, recorded with its result, marks the recommended step done.
     catalog = analyst.get("/v1/workflow/catalog").json()
-    assert "CUSTOMER_CONTACTED" in catalog["actions"] and "INFOSEC" in catalog["escalation"]
+    assert "CUSTOMER_CONTACTED" in catalog["actions"]
+    # D108: InfoSec is retired at the owner's direction. It is no longer offered
+    # as a destination, but it is still labelled, because cases escalated there
+    # before the change still name it and their history has to keep rendering —
+    # which the rest of this test goes on to exercise.
+    assert "FRAUD_OPS" in catalog["escalation"]
+    assert "INFOSEC" not in catalog["escalation"]
+    assert "INFOSEC" in catalog["retired_escalation"]
     bad = analyst.post(f"/v1/cases/{case_id}/actions", json={"action_code": "CUSTOMER_CONTACTED", "result": "MAYBE"})
     assert bad.status_code == 422
     ok = analyst.post(f"/v1/cases/{case_id}/actions", json={"action_code": "CUSTOMER_CONTACTED", "result": "NOT_REACHED"})
@@ -88,29 +95,40 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
                         json={"action_code": "TIMELINE_REVIEWED", "result": "UNUSUAL"}).status_code == 404,
             "D94: outside their scope InfoSec is not told the case exists")
 
-    # Escalation needs a reason, then leaves the analyst's queue for InfoSec's.
-    assert analyst.post(f"/v1/cases/{case_id}/escalate", json={"target": "INFOSEC"}).status_code == 400
+    # D108: InfoSec is retired, so it can no longer be escalated to at all.
+    refused = analyst.post(f"/v1/cases/{case_id}/escalate",
+                           json={"target": "INFOSEC", "note": "a SIM change is recent"})
+    assert refused.status_code == 400
+    assert "retired" in refused.json()["detail"]
+
+    # Escalation needs a reason, then leaves the analyst's queue for the lead's.
+    assert analyst.post(f"/v1/cases/{case_id}/escalate", json={"target": "FRAUD_OPS"}).status_code == 400
     r = analyst.post(f"/v1/cases/{case_id}/escalate",
-                     json={"target": "INFOSEC", "note": "Customer unreachable while a SIM change is recent"})
+                     json={"target": "FRAUD_OPS", "note": "Customer unreachable while a SIM change is recent"})
     assert r.status_code == 200, r.text
     assert stage(analyst, case_id) == "ESCALATED"
     mine = analyst.get("/v1/worklist", params={"scope": "mine", "limit": 200}).json()["items"]
     assert case_id not in [c["id"] for c in mine]
     sent = analyst.get("/v1/worklist", params={"scope": "escalated", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in sent]
-    theirs = infosec.get("/v1/worklist", params={"scope": "escalated", "limit": 200}).json()["items"]
+    theirs = lead.get("/v1/worklist", params={"scope": "escalated", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in theirs]
+    # D94 still holds for the retired role: it was never escalated to InfoSec,
+    # so InfoSec is not told the case exists.
+    assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
     wf = analyst.get(f"/v1/cases/{case_id}/workflow").json()
     assert wf["escalation"]["by_id"] == me and "unreachable" in wf["escalation"]["reason"]
 
-    # InfoSec takes it, and it becomes theirs; the analyst cannot hand back their own escalation.
-    assert infosec.post(f"/v1/cases/{case_id}/review").status_code == 200
+    # The lead takes it, and it becomes theirs; the analyst cannot hand back their own escalation.
+    assert lead.post(f"/v1/cases/{case_id}/review").status_code == 200
     assert analyst.post(f"/v1/cases/{case_id}/return", json={"findings": "nothing"}).status_code == 400
-    back = infosec.post(f"/v1/cases/{case_id}/return", json={"findings": "SIM swap confirmed with the carrier"})
+    back = lead.post(f"/v1/cases/{case_id}/return", json={"findings": "SIM swap confirmed with the carrier"})
     assert back.status_code == 200, back.text
-    assert back.json()["assignee"] and back.json()["returned"] is True
+    # A lead still sees the case after handing it back, so they get the workflow
+    # itself rather than the confirmation stub a role that loses sight gets (D94).
+    assert back.json()["assignee_id"] == me
     assert stage(analyst, case_id) == "IN_REVIEW"
-    # D94: it has left InfoSec's queue entirely.
+    # D94: InfoSec never saw it and still does not.
     assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
     mine = analyst.get("/v1/worklist", params={"scope": "mine", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in mine], "handed back to the analyst who escalated"

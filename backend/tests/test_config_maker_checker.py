@@ -378,7 +378,7 @@ def test_creating_a_user_takes_two_administrators(conn):
 
 def test_a_non_admin_cannot_propose_a_user(client):
     login(client, "lead@riskradar.local", "OpsLead#2026")
-    r = client.post("/v1/admin/users", params={
+    r = client.post("/v1/admin/users", json={
         "email": f"x_{uuid.uuid4().hex[:8]}@riskradar.local", "display_name": "X",
         "role": "ANALYST", "password": "Passw0rd#2026", "reason": "a sufficiently long reason",
     })
@@ -388,7 +388,7 @@ def test_a_non_admin_cannot_propose_a_user(client):
 def test_proposing_a_user_over_http_is_pending(client):
     login(client, "admin@riskradar.local", "Admin#2026")
     email = f"proposed_{uuid.uuid4().hex[:8]}@riskradar.local"
-    proposed = client.post("/v1/admin/users", params={
+    proposed = client.post("/v1/admin/users", json={
         "email": email, "display_name": "Proposed User", "role": "ANALYST",
         "password": "Passw0rd#2026", "reason": "onboarding a proposed analyst for the test",
     })
@@ -404,3 +404,289 @@ def test_proposing_a_user_over_http_is_pending(client):
         json={"action": "REJECT", "reason": "test cleanup — not a real user"},
     )
     assert rejected.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# D104 — the rest of an account's life
+# ---------------------------------------------------------------------------
+
+
+def _user_id(conn, email: str) -> int:
+    return conn.execute("SELECT id FROM users WHERE email = %s", (email,)).fetchone()["id"]
+
+
+def test_a_role_change_takes_two_administrators(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "infosec@riskradar.local")
+
+    res = governance.propose(
+        conn, maker, change_type="USER_ROLE_CHANGE", target=str(uid),
+        summary="infosec to analyst",
+        payload={"user_id": uid, "email": "infosec@riskradar.local", "role": "ANALYST"},
+        before_snapshot={"role": "INFOSEC_ANALYST"},
+        rationale="moving them onto the fraud desk for the test",
+    )
+    request_id = res["request"]["id"]
+    # Nothing moves on proposal.
+    assert conn.execute("SELECT role::text AS r FROM users WHERE id = %s",
+                        (uid,)).fetchone()["r"] == "INFOSEC_ANALYST"
+
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, maker, request_id=request_id, action="APPROVE")
+    assert exc.value.status_code == 403
+
+    out = governance.decide(conn, checker, request_id=request_id, action="APPROVE")
+    assert out["status"] == "approved"
+    assert conn.execute("SELECT role::text AS r FROM users WHERE id = %s",
+                        (uid,)).fetchone()["r"] == "ANALYST"
+
+
+def test_an_admin_cannot_propose_a_change_to_their_own_access(client):
+    login(client, "admin@riskradar.local", "Admin#2026")
+    me = client.get("/v1/auth/me").json()
+    r = client.post(f"/v1/admin/users/{me['id']}/role",
+                    json={"role": "ANALYST", "reason": "trying to demote myself for the test"})
+    assert r.status_code == 403
+    r = client.post(f"/v1/admin/users/{me['id']}/active",
+                    json={"active": False, "reason": "trying to disable myself for the test"})
+    assert r.status_code == 403
+
+
+def test_an_administrator_cannot_be_disabled_while_only_two_exist(conn):
+    """Two admins are seeded (D96), and that pair cannot shrink itself.
+
+    Not because of an arithmetic guard, but because of who is allowed to sign:
+    the approver may be neither the proposer nor the subject, so with exactly
+    two administrators every proposal to disable one leaves nobody eligible to
+    approve it. Removing an administrator means adding a third one first.
+    """
+    maker = _actor(conn, "admin@riskradar.local")
+    subject = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "admin2@riskradar.local")
+
+    res = governance.propose(
+        conn, maker, change_type="USER_SET_ACTIVE", target=str(uid),
+        summary="disable admin2",
+        payload={"user_id": uid, "email": "admin2@riskradar.local", "active": False},
+        before_snapshot={"active": True, "role": "ADMIN"},
+        rationale="attempting to disable the second administrator for the test",
+    )
+    request_id = res["request"]["id"]
+
+    # The proposer cannot approve their own proposal (D93).
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, maker, request_id=request_id, action="APPROVE")
+    assert exc.value.status_code == 403
+
+    # And the only other administrator is the subject, who cannot sign off a
+    # change to their own access.
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, subject, request_id=request_id, action="APPROVE")
+    assert exc.value.status_code == 409
+    assert "their own account" in str(exc.value.detail)
+
+    assert conn.execute("SELECT active FROM users WHERE id = %s", (uid,)).fetchone()["active"]
+
+
+def test_an_mfa_reset_mints_a_new_secret_only_on_approval(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "analyst@riskradar.local")
+    before = conn.execute("SELECT totp_secret FROM users WHERE id = %s",
+                          (uid,)).fetchone()["totp_secret"]
+
+    res = governance.propose(
+        conn, maker, change_type="USER_MFA_RESET", target=str(uid),
+        summary="re-issue authenticator for the analyst",
+        payload={"user_id": uid, "email": "analyst@riskradar.local"},
+        before_snapshot={"email": "analyst@riskradar.local", "role": "ANALYST"},
+        rationale="the analyst lost their phone, for the test",
+    )
+    request_id = res["request"]["id"]
+    # The secret is not minted at proposal, so it cannot sit in the payload.
+    payload = conn.execute("SELECT payload FROM config_change_requests WHERE id = %s",
+                           (request_id,)).fetchone()["payload"]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    assert "totp_secret" not in payload
+    assert conn.execute("SELECT totp_secret FROM users WHERE id = %s",
+                        (uid,)).fetchone()["totp_secret"] == before
+
+    out = governance.decide(conn, checker, request_id=request_id, action="APPROVE")
+    assert out["totp_uri"].startswith("otpauth://")
+    after = conn.execute("SELECT totp_secret, totp_enabled FROM users WHERE id = %s",
+                         (uid,)).fetchone()
+    assert after["totp_secret"] != before      # every old code stops working
+    assert after["totp_enabled"]
+
+
+def test_the_new_user_password_never_travels_in_the_url(client):
+    """D104: the fields moved to a request body. A password in a query string
+    reaches browser history, the Referer header and every proxy log en route."""
+    login(client, "admin@riskradar.local", "Admin#2026")
+    r = client.post("/v1/admin/users", params={
+        "email": f"q_{uuid.uuid4().hex[:8]}@riskradar.local", "display_name": "Q",
+        "role": "ANALYST", "password": "Passw0rd#2026", "reason": "a sufficiently long reason",
+    })
+    assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# D105 — the code prompt, the password, and the email that identifies an account
+# ---------------------------------------------------------------------------
+
+
+def test_turning_the_code_prompt_off_takes_two_administrators(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "analyst@riskradar.local")
+    conn.execute("UPDATE users SET totp_enabled = true WHERE id = %s", (uid,))
+
+    res = governance.propose(
+        conn, maker, change_type="USER_SET_MFA", target=str(uid),
+        summary="stop asking for a code from analyst@riskradar.local",
+        payload={"user_id": uid, "enabled": False},
+        before_snapshot={"totp_enabled": True, "role": "ANALYST"},
+        rationale="turning the code prompt off for the test",
+    )
+    request_id = res["request"]["id"]
+    assert conn.execute("SELECT totp_enabled FROM users WHERE id = %s",
+                        (uid,)).fetchone()["totp_enabled"]
+
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, maker, request_id=request_id, action="APPROVE")
+    assert exc.value.status_code == 403
+
+    governance.decide(conn, checker, request_id=request_id, action="APPROVE")
+    assert not conn.execute("SELECT totp_enabled FROM users WHERE id = %s",
+                            (uid,)).fetchone()["totp_enabled"]
+
+
+def test_the_prompt_cannot_be_turned_on_for_an_account_with_no_secret(conn):
+    """Requiring a code from somebody who holds none would lock them out."""
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "analyst@riskradar.local")
+    conn.execute("UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE id = %s", (uid,))
+
+    res = governance.propose(
+        conn, maker, change_type="USER_SET_MFA", target=str(uid),
+        summary="require a code", payload={"user_id": uid, "enabled": True},
+        before_snapshot={"totp_enabled": False, "role": "ANALYST"},
+        rationale="requiring a code from an account with no secret, for the test",
+    )
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, checker, request_id=res["request"]["id"], action="APPROVE")
+    assert exc.value.status_code == 409
+    assert "reset their MFA first" in str(exc.value.detail)
+
+
+def test_the_code_prompt_switch_is_the_one_login_reads(client):
+    """The point of D105: the column is no longer inert.
+
+    Under D95 the role forced the prompt and this column was ignored, so an
+    administrator could turn MFA "off" and the user would still be asked. The
+    change is made and undone here through the database directly, because the
+    assertion is about the login path, not about maker-checker.
+    """
+    import psycopg
+
+    from riskradar.config import settings
+
+    def set_prompt(on: bool) -> None:
+        with psycopg.connect(settings().app_dsn) as c:
+            c.execute("UPDATE users SET totp_enabled = %s WHERE email = %s",
+                      (on, "analyst@riskradar.local"))
+            c.commit()
+
+    set_prompt(True)   # the seed has shipped this account both ways
+    # With the prompt on, a password alone is not a session.
+    r = client.post("/v1/auth/login",
+                    json={"email": "analyst@riskradar.local", "password": "Analyst#2026"})
+    assert r.status_code == 200 and r.json()["status"] == "mfa_required"
+
+    set_prompt(False)
+    try:
+        r = client.post("/v1/auth/login",
+                        json={"email": "analyst@riskradar.local", "password": "Analyst#2026"})
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "ok", "turning the prompt off must actually stop it"
+        # And the session works on every subsequent request, which is the gate
+        # in api.deps that used to reject a session with no factor.
+        me = client.get("/v1/auth/me")
+        assert me.status_code == 200 and me.json()["email"] == "analyst@riskradar.local"
+    finally:
+        set_prompt(True)
+        client.post("/v1/auth/logout")
+
+
+def test_a_password_reset_takes_two_and_replaces_the_hash(conn):
+    from riskradar.security.passwords import hash_password, verify_password
+
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "analyst@riskradar.local")
+
+    res = governance.propose(
+        conn, maker, change_type="USER_PASSWORD_RESET", target=str(uid),
+        summary="reset the password for analyst@riskradar.local",
+        payload={"user_id": uid, "password_hash": hash_password("Replaced#2026x")},
+        before_snapshot={"email": "analyst@riskradar.local", "role": "ANALYST"},
+        rationale="the analyst forgot their password, for the test",
+    )
+    request_id = res["request"]["id"]
+    # The plaintext is nowhere in the request.
+    payload = conn.execute("SELECT payload FROM config_change_requests WHERE id = %s",
+                           (request_id,)).fetchone()["payload"]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    assert "Replaced#2026x" not in json.dumps(payload)
+    assert payload["password_hash"].startswith("$argon2")
+
+    # Unchanged until a second administrator approves.
+    assert verify_password(
+        conn.execute("SELECT password_hash FROM users WHERE id = %s", (uid,)).fetchone()["password_hash"],
+        "Analyst#2026")
+
+    governance.decide(conn, checker, request_id=request_id, action="APPROVE")
+    now = conn.execute("SELECT password_hash FROM users WHERE id = %s", (uid,)).fetchone()["password_hash"]
+    assert verify_password(now, "Replaced#2026x")
+    assert not verify_password(now, "Analyst#2026")
+
+
+def test_an_email_correction_moves_the_login_identifier(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "infosec@riskradar.local")
+
+    res = governance.propose(
+        conn, maker, change_type="USER_PROFILE_UPDATE", target=str(uid),
+        summary="correct the infosec email",
+        payload={"user_id": uid, "email": "ngozi.infosec@riskradar.local",
+                 "display_name": "Ngozi InfoSec"},
+        before_snapshot={"email": "infosec@riskradar.local", "display_name": "Ngozi InfoSec"},
+        rationale="correcting a mistyped address on the account, for the test",
+    )
+    governance.decide(conn, checker, request_id=res["request"]["id"], action="APPROVE")
+    assert conn.execute("SELECT email FROM users WHERE id = %s",
+                        (uid,)).fetchone()["email"] == "ngozi.infosec@riskradar.local"
+
+
+def test_an_email_cannot_collide_with_another_account(conn):
+    maker = _actor(conn, "admin@riskradar.local")
+    checker = _actor(conn, "admin2@riskradar.local")
+    uid = _user_id(conn, "infosec@riskradar.local")
+
+    res = governance.propose(
+        conn, maker, change_type="USER_PROFILE_UPDATE", target=str(uid),
+        summary="collide the infosec email with the analyst",
+        payload={"user_id": uid, "email": "analyst@riskradar.local",
+                 "display_name": "Ngozi InfoSec"},
+        before_snapshot={"email": "infosec@riskradar.local", "display_name": "Ngozi InfoSec"},
+        rationale="attempting to take an address already in use, for the test",
+    )
+    with pytest.raises(governance.MakerCheckerError) as exc:
+        governance.decide(conn, checker, request_id=res["request"]["id"], action="APPROVE")
+    assert exc.value.status_code == 409
+    assert "already has that email" in str(exc.value.detail)

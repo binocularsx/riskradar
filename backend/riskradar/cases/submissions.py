@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .. import reporting as account_manager_reporting
 from .. import restrictions as restriction_delivery
 from ..audit import chain
 from ..events import publish
@@ -172,8 +173,16 @@ def pending(conn: Any, case_id: int) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str, reason: str) -> dict[str, Any]:
-    """A lead approves, rejects or returns. Only an approval writes the outcome."""
+def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str, reason: str,
+           restrictions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """A lead approves, rejects or returns. Only an approval writes the outcome.
+
+    D107: ``restrictions`` lets the lead set what the bank is asked to do at the
+    moment they approve. An analyst works transactions and never takes an action
+    the customer feels; the account-level call belongs to the lead who carries it.
+    Omitted, the submission's own list stands, so every existing caller behaves
+    exactly as before.
+    """
     if decision not in DECISIONS:
         raise SubmissionError(422, f"decision must be one of {', '.join(sorted(DECISIONS))}")
     rows = _rows(conn, "SELECT * FROM fraud_submissions WHERE id = %s FOR UPDATE", (submission_id,))
@@ -199,6 +208,7 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
 
     promoted: list[str] = []
     restrictions_issued: list[str] = []
+    reported_ref: str | None = None
     if state == APPROVED:
         with conn.cursor() as cur:
             cur.execute("UPDATE cases SET outcome = %s WHERE id = %s",
@@ -222,8 +232,19 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
         # D97: the restrictions the finding asked for become orders and outbox
         # messages, written here in the approval's own transaction. Risk Radar
         # still restricts nothing; it records and dispatches the recommendation.
-        orders = restriction_delivery.create_orders(conn, submission, user["id"])
+        # The lead's list wins when they sent one; theirs is the decision that
+        # reaches a customer's account.
+        effective = dict(submission)
+        if restrictions is not None:
+            effective["restrictions"] = restrictions
+        orders = restriction_delivery.create_orders(conn, effective, user["id"])
         restrictions_issued = [str(o["restriction_ref"]) for o in orders]
+        # D106: and the person who owns the customer relationship is told, in
+        # this same transaction. Confirmed fraud only — reporting false
+        # positives would train the account manager to ignore the channel.
+        report = account_manager_reporting.create_report(conn, submission, case, user["id"], orders)
+        if report:
+            reported_ref = str(report["report_ref"])
     elif state == RETURNED:
         # Back to the analyst who proposed it, with instructions.
         with conn.cursor() as cur:
@@ -237,7 +258,9 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
         payload={"submission_id": submission_id, "submitted_by": submission["submitted_by"],
                  "proposed_outcome": submission["proposed_outcome"], "reason": reason,
                  "known_mule_tokens_added": promoted, "case_version": version,
-                 "restrictions": submission["restrictions"],
+                 "restrictions": effective["restrictions"] if state == APPROVED else submission["restrictions"],
+                 "restrictions_set_by_lead": restrictions is not None,
+                 "account_manager_report": reported_ref,
                  "restrictions_issued": restrictions_issued},
     )
     publish(conn, "fraud_decided", {"case_id": case["id"], "submission_id": submission_id, "decision": state,

@@ -159,6 +159,56 @@ def overview(
     }
 
 
+@router.get("/metrics/geography")
+def geography(
+    hours: int = Query(168, ge=1, le=8760),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Where the traffic and the alerts came from (D109).
+
+    ``transactions.ip_region`` holds ISO 3166-2 state codes for Nigeria. It is
+    the region the **session** appeared to come from, not the customer's
+    registered address, and the difference matters: a cluster here means several
+    sessions resolved to one state, which is how a cash-out ring looks, not
+    where anybody lives. The response says so, so a screen cannot quietly imply
+    otherwise.
+
+    Regions are not personal data under D9c — a state is not an identifier — so
+    this needs no token handling beyond what every other aggregate does.
+    """
+    window = f"{int(hours)} hours"
+    rows = _rows(
+        conn,
+        f"""
+        SELECT t.ip_region,
+               count(*)                                                    AS transactions,
+               count(*) FILTER (WHERE t.auth_result <> 'APPROVED')          AS declined,
+               count(DISTINCT t.subject_token)                              AS customers,
+               coalesce(sum(t.amount_minor) FILTER (WHERE t.auth_result = 'APPROVED'), 0) AS approved_value_minor,
+               count(a.id)                                                  AS alerts,
+               count(DISTINCT a.case_id) FILTER (WHERE a.case_id IS NOT NULL) AS cases
+          FROM transactions t
+          LEFT JOIN alerts a ON a.transaction_id = t.id
+         WHERE t.occurred_at > now() - interval '{window}'
+         GROUP BY 1 ORDER BY transactions DESC
+        """,
+    )
+    known = [r for r in rows if r["ip_region"]]
+    unknown = sum(int(r["transactions"]) for r in rows if not r["ip_region"])
+    total = sum(int(r["transactions"]) for r in known)
+    for r in known:
+        r["alert_rate"] = round(int(r["alerts"]) / int(r["transactions"]), 5) if r["transactions"] else 0.0
+    return {
+        "window_hours": hours,
+        "items": known,
+        "no_region": unknown,
+        "total": total,
+        "note": ("Region is derived from the session's IP address, not the customer's "
+                 "registered address. It shows where activity appeared to come from."),
+    }
+
+
 @router.get("/metrics/detection")
 def detection(
     days: int = Query(30, ge=1, le=365),

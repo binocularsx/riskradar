@@ -135,7 +135,11 @@ def decide(
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
     try:
-        return submissions.decide(conn, submission_id=submission_id, user=user,
-                                  decision=body.decision, reason=body.reason)
+        return submissions.decide(
+            conn, submission_id=submission_id, user=user,
+            decision=body.decision, reason=body.reason,
+            restrictions=([r.model_dump() for r in body.restrictions]
+                          if body.restrictions is not None else None),
+        )
     except submissions.SubmissionError as exc:
         raise HTTPException(exc.status, exc.detail) from exc

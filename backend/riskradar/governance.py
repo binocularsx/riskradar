@@ -35,6 +35,19 @@ PERMISSION_FOR: dict[str, Permission] = {
     "LIST_ADD": Permission.ADMIN_LISTS,                # D98
     "LIST_REMOVE": Permission.ADMIN_LISTS,             # D98
     "USER_CREATE": Permission.ADMIN_USERS,             # D99
+    # D104: the rest of an account's life. Granting a role, taking one away,
+    # disabling somebody and re-issuing their second factor are all changes to
+    # who can do what, so they take the same second signature as creating the
+    # account did. A single administrator who could promote themselves to
+    # nothing-is-off-limits would make every other control decorative.
+    "USER_ROLE_CHANGE": Permission.ADMIN_USERS,        # D104
+    "USER_SET_ACTIVE": Permission.ADMIN_USERS,         # D104
+    "USER_MFA_RESET": Permission.ADMIN_USERS,          # D104
+    # D105: whether a person is asked for a code, their password, and the email
+    # that identifies them. All three decide who can get into an account.
+    "USER_SET_MFA": Permission.ADMIN_USERS,            # D105
+    "USER_PASSWORD_RESET": Permission.ADMIN_USERS,     # D105
+    "USER_PROFILE_UPDATE": Permission.ADMIN_USERS,     # D105
     # D103: lifting a restriction is a customer-impacting action, so it takes a
     # second signature like the one that imposed it — from the desk that owns
     # the case, not from an administrator who cannot see it (D12b).
@@ -252,6 +265,207 @@ def _apply_user_create(
 
 
 
+MIN_ACTIVE_ADMINS = 2
+"""D96 seeds two administrators because "one administrator is not enough" for
+maker-checker. Dropping to one would not merely be risky: with a single
+administrator no admin change can ever be approved again, because the approver
+may not be the proposer. The system would be wedged with no way out."""
+
+
+def _managed_user(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    rows = _rows(
+        conn,
+        "SELECT id, email, display_name, role, active, is_system FROM users WHERE id = %s",
+        (payload["user_id"],),
+    )
+    if not rows:
+        raise _Conflict("that user no longer exists")
+    target = rows[0]
+    if target["is_system"]:
+        raise _Conflict("the system account is not a person and cannot be managed")
+    return target
+
+
+def _keep_enough_admins(conn: Any, losing_id: int) -> None:
+    """Refuse a change that would leave too few administrators to govern.
+
+    A backstop rather than the main protection. The approver rules already make
+    the desert case unreachable: an approver may be neither the proposer nor the
+    subject, so two administrators besides the subject must exist for any
+    decision to happen at all. This stays as a cheap invariant in case those
+    rules are ever loosened, and because losing the last approver would wedge
+    the system with no way back.
+    """
+    remaining = _rows(
+        conn,
+        """SELECT count(*) AS n FROM users
+            WHERE role = 'ADMIN' AND active AND NOT is_system AND id <> %s""",
+        (losing_id,),
+    )[0]["n"]
+    if int(remaining) < MIN_ACTIVE_ADMINS:
+        raise _Conflict(
+            "that would leave fewer than two active administrators, and "
+            "maker-checker needs a second one to approve anything afterwards"
+        )
+
+
+def _not_themselves(target: dict[str, Any], approver: dict[str, Any], what: str) -> None:
+    """Separation of duties reaches the approver too (D93, D99).
+
+    The router refuses a *proposer* who is the subject; this closes the other
+    half at the moment it actually matters, because an administrator must not
+    sign off a change to their own access. Checked here rather than only in the
+    router because apply time is when the state is real: the approver could have
+    become the subject between proposal and decision.
+    """
+    if int(target["id"]) == int(approver["id"]):
+        raise _Conflict(f"an administrator cannot approve {what} to their own account")
+
+
+def _apply_user_role_change(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Move a user to a different role, on a second administrator's approval (D104).
+
+    The role *is* the permission set (D12b), so this is the privilege-escalation
+    path in the system: promoting somebody to ADMIN hands them detection tuning,
+    and demoting the wrong person can empty the approver pool.
+    """
+    target = _managed_user(conn, payload)
+    _not_themselves(target, approver, "a role change")
+    if target["role"] == payload["role"]:
+        raise _Conflict(f"{target['email']} is already {payload['role']}")
+    if target["role"] == "ADMIN" and payload["role"] != "ADMIN":
+        _keep_enough_admins(conn, int(target["id"]))
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET role = %s WHERE id = %s", (payload["role"], target["id"]))
+    return int(target["id"]), {"user_id": int(target["id"]), "email": target["email"],
+                               "from_role": target["role"], "to_role": payload["role"]}
+
+
+def _apply_user_set_active(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Disable or restore an account (D104).
+
+    Disabling is the leaver path and the compromise path, so it must be quick —
+    but not unilateral, because disabling the other administrator is how one
+    person would take sole control. ``sessions.resolve`` refuses an inactive
+    user, so a disabled account loses its live session on its next request; the
+    row is kept rather than deleted so the audit trail still names a real actor.
+    """
+    target = _managed_user(conn, payload)
+    active = bool(payload["active"])
+    _not_themselves(target, approver, "enabling or disabling")
+    if bool(target["active"]) == active:
+        raise _Conflict(f"{target['email']} is already {'active' if active else 'disabled'}")
+    if not active and target["role"] == "ADMIN":
+        _keep_enough_admins(conn, int(target["id"]))
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET active = %s WHERE id = %s", (active, target["id"]))
+    return int(target["id"]), {"user_id": int(target["id"]), "email": target["email"],
+                               "active": active}
+
+
+def _apply_user_mfa_reset(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Issue a fresh authenticator secret (D104).
+
+    The lost-phone path. It is deliberately maker-checker rather than a button,
+    because re-issuing somebody's second factor is exactly what an attacker who
+    already holds one administrator account would want to do to another. The new
+    secret is generated here, at approval, and its provisioning URI is returned
+    once to the approver to hand over — mirroring USER_CREATE (D99). Every code
+    the old authenticator still shows stops working the moment this lands.
+    """
+    target = _managed_user(conn, payload)
+    _not_themselves(target, approver, "an MFA reset")
+    secret = new_totp_secret()
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET totp_secret = %s, totp_enabled = true WHERE id = %s",
+            (secret, target["id"]),
+        )
+    return int(target["id"]), {"user_id": int(target["id"]), "email": target["email"],
+                               "totp_uri": totp_uri(secret, target["email"])}
+
+
+def _apply_user_set_mfa(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Decide whether this person is asked for a code (D105).
+
+    `users.totp_enabled` is the switch that `auth.login` and `api.deps` read, so
+    turning it off genuinely stops the prompt — it used to be inert, overridden
+    by the role (D95), which made an administrator's "MFA off" a lie.
+
+    Turning it off removes a control from an account that reads customer
+    financial data, so it is not a button: it takes a second administrator and
+    it leaves an audit row naming both of them and the reason. Turning it back
+    on bites immediately, including on sessions already open, because the check
+    runs per request and those sessions never satisfied a factor.
+    """
+    target = _managed_user(conn, payload)
+    enabled = bool(payload["enabled"])
+    _not_themselves(target, approver, "their own multi-factor requirement")
+    current = _rows(conn, "SELECT totp_enabled, totp_secret FROM users WHERE id = %s",
+                    (target["id"],))[0]
+    if bool(current["totp_enabled"]) == enabled:
+        raise _Conflict(
+            f"{target['email']} is already {'asked' if enabled else 'not asked'} for a code")
+    if enabled and not current["totp_secret"]:
+        raise _Conflict(
+            f"{target['email']} has no authenticator secret — reset their MFA first, "
+            "which issues one, otherwise they could never sign in")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET totp_enabled = %s WHERE id = %s", (enabled, target["id"]))
+    return int(target["id"]), {"user_id": int(target["id"]), "email": target["email"],
+                               "totp_enabled": enabled}
+
+
+def _apply_user_password_reset(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Set a new password for somebody who cannot sign in (D105).
+
+    Hashed at proposal time exactly as in USER_CREATE (D99), so the plaintext is
+    never stored and never sits in a pending request. Whoever sets a password can
+    sign in as that person if their second factor is off, which is why this is
+    maker-checker and not a button — and why the two changes are separate
+    requests, so turning MFA off and resetting a password is visibly two
+    approvals rather than one convenient action.
+    """
+    target = _managed_user(conn, payload)
+    _not_themselves(target, approver, "a password reset")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s",
+                    (payload["password_hash"], target["id"]))
+    return int(target["id"]), {"user_id": int(target["id"]), "email": target["email"]}
+
+
+def _apply_user_profile_update(
+    conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
+) -> tuple[int, dict[str, Any]]:
+    """Correct the email and display name on an account (D105).
+
+    The email is not decoration: it is the login identifier, so changing it moves
+    who can sign in to this account and its permissions. A mistyped address on
+    creation used to leave an account nobody could reach and nobody could fix.
+    """
+    target = _managed_user(conn, payload)
+    _not_themselves(target, approver, "their own email or name")
+    email = payload["email"].strip()
+    if _rows(conn, "SELECT 1 FROM users WHERE lower(email) = lower(%s) AND id <> %s",
+             (email, target["id"])):
+        raise _Conflict("another user already has that email")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET email = %s, display_name = %s WHERE id = %s",
+                    (email, payload["display_name"].strip(), target["id"]))
+    return int(target["id"]), {"user_id": int(target["id"]), "email": email,
+                               "from_email": target["email"]}
+
+
 def _apply_restriction_release(
     conn: Any, proposer_id: int, approver: dict[str, Any], rationale: str, payload: dict[str, Any]
 ) -> tuple[int, dict[str, Any]]:
@@ -286,6 +500,12 @@ _APPLIERS = {
     "LIST_ADD": _apply_list_add,
     "LIST_REMOVE": _apply_list_remove,
     "USER_CREATE": _apply_user_create,
+    "USER_ROLE_CHANGE": _apply_user_role_change,         # D104
+    "USER_SET_ACTIVE": _apply_user_set_active,           # D104
+    "USER_MFA_RESET": _apply_user_mfa_reset,             # D104
+    "USER_SET_MFA": _apply_user_set_mfa,                 # D105
+    "USER_PASSWORD_RESET": _apply_user_password_reset,   # D105
+    "USER_PROFILE_UPDATE": _apply_user_profile_update,   # D105
     "RESTRICTION_RELEASE": _apply_restriction_release,   # D103
 }
 

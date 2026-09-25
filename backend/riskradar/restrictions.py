@@ -81,14 +81,15 @@ def create_orders(conn: Any, submission: dict[str, Any], approver_id: int) -> li
                 """
                 INSERT INTO restriction_orders
                     (submission_id, case_id, action, account_token, beneficiary_token,
-                     channel, reason, approved_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                     channel, transaction_ref, reason, approved_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, restriction_ref, action, account_token, beneficiary_token,
-                          channel, reason, case_id
+                          channel, transaction_ref, reason, case_id
                 """,
                 (submission["id"], submission["case_id"], item["action"],
                  item.get("account_token"), item.get("beneficiary_token"),
-                 item.get("channel"), item.get("reason"), approver_id),
+                 item.get("channel"), item.get("transaction_ref"),
+                 item.get("reason"), approver_id),
             )
             order = dict(cur.fetchone())
         payload = {
@@ -97,6 +98,7 @@ def create_orders(conn: Any, submission: dict[str, Any], approver_id: int) -> li
             "account_token": order["account_token"],
             "beneficiary_token": order["beneficiary_token"],
             "channel": order["channel"],
+            "transaction_ref": order["transaction_ref"],
             "reason": order["reason"],
             "case_id": order["case_id"],
         }
