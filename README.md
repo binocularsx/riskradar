@@ -29,6 +29,31 @@ enforcement belongs to the caller.
 Requires **Python 3.12+**, **Node 20+**, and **PostgreSQL 16**. There is no
 Docker requirement — the demo is local by decision (D26).
 
+### The short way, once it is set up
+
+```bash
+.venv/Scripts/python scripts/up.py      # everything, ~1 minute
+.venv/Scripts/python scripts/down.py    # stop it again
+```
+
+`up.py` starts PostgreSQL on its port, applies any pending migrations, then
+brings up the API, the scoring workers, the clock sweep, the live transaction
+feed and the frontend — checking each one actually came up — and prints
+http://localhost:5173. On Windows, `scripts/up.cmd` does the same on a
+double-click. It reuses the database already on disk: **it rebuilds nothing.**
+
+For a clean desk, restore a snapshot rather than regenerating history:
+
+```bash
+.venv/Scripts/python scripts/snapshot.py --save      # after a good rebuild
+.venv/Scripts/python scripts/snapshot.py --restore   # back to it, ~1 minute
+```
+
+`scripts/demo_reset.py` is the slow path and is rarely what you want: it
+generates a month of new history through the real API and takes about three
+hours (see "Give it something to look at" below). The sections that follow set
+that up from nothing, or explain what each piece does.
+
 ### 1. PostgreSQL
 
 Any PostgreSQL 16 instance will do. If the machine has none installed, the
