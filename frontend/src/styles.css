@@ -56,6 +56,10 @@
   --shadow-lift: 0 2px 6px rgba(17,24,39,.08), 0 16px 40px -18px rgba(17,24,39,.22);
 
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* D84 graph relationships: money out, and devices. Distinct from the orange
+     accent, which means "this customer" and nothing else. */
+  --teal: #0e7490;
+  --violet: #7c5cbf;
   --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -327,6 +331,61 @@ h3 { font-size: 10.5px; margin: 0 0 12px; font-weight: 650; color: var(--text-3)
   border-radius: var(--r); padding: 14px 16px; margin-top: 20px;
   box-shadow: var(--shadow-lift);
 }
+.disposition-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 2px;
+}
+
+/* The analyst's decision. Three equal choices, so they are laid out as equal
+   cards rather than a row of pills of different widths — the width of a button
+   should not imply the weight of the answer. Each one says what it means
+   underneath, because "inconclusive" is not self-evident at 3pm on a Friday. */
+.decisions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0 0; }
+@media (max-width: 720px) { .decisions { grid-template-columns: 1fr; } }
+
+.decision {
+  position: relative; display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 34px 12px 13px; text-align: left; width: 100%;
+  background: var(--surface); border: 1px solid var(--line-2);
+  border-radius: 10px; cursor: pointer;
+  transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, transform .08s ease;
+}
+.decision:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-lift); }
+.decision:disabled { opacity: .5; cursor: not-allowed; }
+.decision-ico { width: 19px; height: 19px; flex: none; margin-top: 1px; }
+.decision-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.decision-label { font-size: 13.5px; font-weight: 640; color: var(--text); line-height: 1.25; }
+.decision-sub { font-size: 11.5px; color: var(--text-2); line-height: 1.3; }
+.decision kbd { position: absolute; top: 10px; right: 10px; }
+
+/* Colour carries the meaning, on the icon and the edge rather than a flat wash
+   across the whole control: a pastel-filled button reads as disabled.
+
+   These three reset the older `button.confirm/.dismiss/.unsure` pill styles,
+   which are still used by the lead's Approvals screen and would otherwise win
+   on specificity here and tint the whole card. */
+.decision.confirm, .decision.dismiss, .decision.unsure {
+  background: var(--surface); border-color: var(--line-2);
+  color: var(--text); font-weight: 400;
+}
+.decision.confirm .decision-ico { color: var(--danger); }
+.decision.confirm:hover:not(:disabled) { border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.decision.dismiss .decision-ico { color: var(--ok); }
+.decision.dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 5%, var(--surface)); }
+.decision.unsure .decision-ico { color: var(--warn); }
+.decision.unsure:hover:not(:disabled) { border-color: color-mix(in srgb, var(--warn) 58%, transparent); background: color-mix(in srgb, var(--warn) 6%, var(--surface)); }
+
+/* Reserved height, so the panel does not jump as the hint changes under the cursor. */
+.decision-hint {
+  font-size: 12px; color: var(--text-2); margin: 10px 0 0;
+  min-height: 30px; line-height: 1.35;
+}
+.decision-note { margin-top: 2px; min-height: 54px; }
+.decision-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 6px; font-size: 11.5px;
+}
+.decision-foot .ok-text { color: var(--ok); font-weight: 600; }
 
 /* ---------------------------------------------------------- indicators */
 
@@ -530,6 +589,18 @@ select.mini { width: auto; min-width: 128px; padding: 7px 11px; font-size: 12.5p
 
 .crumb { font-size: 12px; color: var(--text-3); margin-bottom: 10px; }
 .linkbtn { background: none; border: none; padding: 0; color: var(--text-2); font-size: 12px; }
+/* The way back out of a case. Reads as a control, not as breadcrumb text. */
+.backbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px 5px 9px; font-size: 12.5px; font-weight: 550;
+  color: var(--text-2); background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: 999px;
+}
+.backbtn svg { width: 14px; height: 14px; }
+.backbtn:hover {
+  color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-dim);
+}
 .linkbtn:hover { color: var(--accent); background: none; }
 .case-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
                flex-wrap: wrap; margin-bottom: 16px; }
@@ -625,14 +696,48 @@ tr.flagged td { background: color-mix(in srgb, var(--high) 7%, transparent); }
 
 /* ------------------------------------------------ D84: connections */
 .linkgraph { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; }
-.lg-edge { stroke: var(--line-2); stroke-width: 1.2; }
-.lg-edge.used { stroke-dasharray: 4 3; }
-.lg-edge.hot { stroke: var(--accent); stroke-width: 2; }
+/* Relationship colours. Everything used to be grey and turn orange together on
+   hover, which made the one edge worth looking at — an identifier two customers
+   share — indistinguishable from the customer's own ordinary activity.
+     money out   teal      a payment this customer made
+     device      violet    a device this customer used
+     shared      amber     the same identifier reached from another customer
+   Orange stays reserved for the customer in the middle, so it means one thing. */
+.lg-edge { stroke: color-mix(in srgb, var(--teal, #0e7490) 45%, transparent); stroke-width: 1.3; }
+.lg-edge.used { stroke: color-mix(in srgb, var(--violet, #7c5cbf) 45%, transparent); stroke-dasharray: 4 3; }
+.lg-edge.shared { stroke: color-mix(in srgb, var(--medium) 70%, transparent); stroke-width: 1.8; }
+.lg-edge.hot { stroke: var(--accent); stroke-width: 2.4; }
+
 .lg-node { fill: var(--surface-3); stroke: var(--line-2); stroke-width: 1.5; }
 .lg-node.customer { fill: var(--accent-dim); stroke: var(--accent); stroke-width: 2; }
-.lg-node.destination { fill: var(--surface-2); }
+.lg-node.destination { fill: color-mix(in srgb, var(--teal, #0e7490) 12%, var(--surface));
+                       stroke: color-mix(in srgb, var(--teal, #0e7490) 55%, transparent); }
+.lg-node.device { fill: color-mix(in srgb, var(--violet, #7c5cbf) 12%, var(--surface));
+                  stroke: color-mix(in srgb, var(--violet, #7c5cbf) 55%, transparent); }
 .lg-node.other_customer { fill: var(--bg-2); }
 .lg-node.risky { stroke: var(--danger); fill: color-mix(in srgb, var(--danger) 18%, var(--surface-2)); }
+.lg-node.picked { stroke-width: 3; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 55%, transparent)); }
+
+/* Draggable: the cursor has to say so before anyone tries. */
+.lg-g { cursor: grab; }
+.lg-canvas svg.dragging .lg-g { cursor: grabbing; }
+.lg-canvas { position: relative; overflow-x: auto; }
+.lg-reset { position: absolute; top: 6px; right: 8px; font-size: 11.5px; padding: 3px 9px; }
+
+.lg-explain { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin: 8px 0 2px; }
+.lg-explain b { color: var(--text); font-weight: 600; }
+
+.lg-detail { border: 1px solid var(--line-2); border-radius: 10px; padding: 11px 13px;
+             margin-top: 10px; background: var(--surface-2); }
+.lg-detail-warn { font-size: 12px; color: var(--danger); margin: 6px 0 0; }
+.lg-kv { display: grid; grid-template-columns: 1fr; gap: 3px; margin: 8px 0 0; }
+.lg-kv > div { display: flex; justify-content: space-between; gap: 14px;
+               padding: 4px 0; border-bottom: 1px solid var(--bg-2); font-size: 12.5px; }
+.lg-kv > div:last-child { border-bottom: none; }
+.lg-kv dt { color: var(--text-2); margin: 0; }
+.lg-kv dd { margin: 0; font-weight: 550; text-align: right; }
+.lg-key.line { width: 14px; height: 0; border-radius: 0; border: none;
+               border-top: 2px solid color-mix(in srgb, var(--medium) 70%, transparent); vertical-align: 3px; }
 .lg-label { fill: var(--text-3); font-size: 10px; font-family: var(--mono); }
 .lg-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--text-3); }
 .lg-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px;
@@ -650,3 +755,39 @@ tr.flagged td { background: color-mix(in srgb, var(--high) 7%, transparent); }
               text-decoration: none; }
 .badge-chip.warn { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); }
 .badge-chip.danger { border-color: color-mix(in srgb, var(--danger) 55%, transparent); color: var(--danger); }
+
+
+/* Activity chart zoom (D84 timeline). A burst inside a minute is invisible on an
+   axis stretched across a month, so the window is adjustable. */
+.tl-controls { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 8px 0 4px; }
+.tl-controls label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 11.5px;
+                     color: var(--text-2); }
+.tl-controls input[type=range] { width: 150px; accent-color: var(--accent); cursor: pointer; }
+.tl-controls .tl-readout { font-size: 11px; color: var(--text-3); min-width: 62px; }
+.tl-controls .tl-off { opacity: .45; }
+.tl-controls button { font-size: 11.5px; padding: 3px 10px; }
+
+
+/* D109: where activity came from. A proportional-symbol map — size is volume,
+   colour is the share that alerted — on a graticule rather than a coastline,
+   because an outline drawn from memory would be worse than none. */
+.geo-wrap { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(280px, 1fr);
+            gap: 18px; align-items: start; }
+@media (max-width: 860px) { .geo-wrap { grid-template-columns: 1fr; } }
+.geo-map { width: 100%; height: auto; background: var(--surface-2);
+           border: 1px solid var(--line); border-radius: 10px; }
+.geo-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
+.geo-g { cursor: pointer; }
+.geo-dot {
+  fill: color-mix(in srgb, var(--critical) calc(var(--heat) * 62%), var(--teal, #0e7490));
+  fill-opacity: .42;
+  stroke: color-mix(in srgb, var(--critical) calc(var(--heat) * 70%), var(--teal, #0e7490));
+  stroke-width: 1.4;
+}
+.geo-g:hover .geo-dot { fill-opacity: .6; }
+.geo-dot.picked { stroke-width: 2.6; fill-opacity: .68; }
+.geo-label { font-size: 9.5px; fill: var(--text-2); font-weight: 600; }
+.geo-table tbody tr { cursor: pointer; }
+.geo-table tbody tr.hot { background: var(--accent-dim); }
+.geo-detail { margin-top: 10px; border: 1px solid var(--line-2); border-radius: 10px;
+              padding: 10px 12px; background: var(--surface-2); font-size: 12.5px; }

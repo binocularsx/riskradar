@@ -494,7 +494,7 @@ function PendingChanges() {
   if (!data) return <p className="muted">Loading…</p>
   const [pending, me] = data
 
-  async function decide(req, action) {
+  async function decide(r, action) {
     let reason = null
     if (action !== 'APPROVE') {
       reason = window.prompt(`Reason to ${action.toLowerCase()} this change:`)
@@ -502,11 +502,12 @@ function PendingChanges() {
     }
     setBusy(true); setNotice(null)
     try {
-      const res = await api.decideConfigChange(req.id, { action, reason })
+      const res = await api.decideConfigChange(r.id, { action, reason })
       // D99: a created user's TOTP provisioning URI is returned once, here, to
       // the approver — it is stored nowhere it can be read again. Hand it over.
       if (res?.totp_uri) {
-        setNotice(`User created. Give them this authenticator setup (shown once): ${res.totp_uri}`)
+        const what = r.change_type === 'USER_MFA_RESET' ? 'Authenticator re-issued' : 'User created'
+        setNotice(`${what}. Give them this setup link, shown once and stored nowhere: ${res.totp_uri}`)
       }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
@@ -744,36 +745,301 @@ function Audit() {
   )
 }
 
+const ROLES = ['ANALYST', 'FRAUD_OPS_LEAD', 'INFOSEC_ANALYST', 'ADMIN']
+
+/**
+ * Users and access (D99, D104, D105).
+ *
+ * Every control here *proposes*. Nothing about an account changes until a second
+ * administrator approves it under Pending. Creating an account, moving somebody
+ * between roles, disabling them, re-issuing or waiving their second factor,
+ * resetting their password and correcting the email that identifies them are all
+ * changes to who can get into what — and the role *is* the permission set
+ * (D12b), so one administrator acting alone could quietly grant themselves the
+ * lot.
+ *
+ * An administrator sees no action on their own row: the server refuses a change
+ * proposed against your own access, and offering the button would only teach
+ * people to expect it to work.
+ */
 function Users() {
-  const { data, error } = useAsync(() => api.users())
-  if (error) return <Banner kind="error">{error}</Banner>
+  const { data, error, reload, setError } = useAsync(() => Promise.all([api.users(), api.me()]))
+  const [notice, setNotice] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const blank = { email: '', display_name: '', role: 'ANALYST', password: '', reason: '' }
+  const [form, setForm] = useState(blank)
+  // Which row has an expanded editor open, and which editor it is.
+  const [panel, setPanel] = useState(null)
+  const [edit, setEdit] = useState({ email: '', display_name: '', password: '', reason: '' })
+
+  if (error && !data) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
+  const [users, me] = data
+
+  function askReason(what) {
+    const reason = window.prompt(`${what} — why? At least 20 characters; it goes in the audit trail.`)
+    if (reason === null) return null
+    if (reason.trim().length < 20) {
+      setError('A rationale of at least 20 characters is required.')
+      return null
+    }
+    return reason.trim()
+  }
+
+  async function propose(label, fn) {
+    setBusy(true); setNotice(null); setError(null)
+    try {
+      await fn()
+      setNotice(`${label} proposed. Nothing changes until a different administrator approves it under Pending.`)
+      reload()
+      return true
+    } catch (e) {
+      setError(e.message)
+      return false
+    } finally { setBusy(false) }
+  }
+
+  function openPanel(u, mode) {
+    setNotice(null); setError(null)
+    setPanel({ id: u.id, mode })
+    setEdit({ email: u.email, display_name: u.display_name, password: '', reason: '' })
+  }
+
+  function changeRole(u, role) {
+    if (!role || role === u.role) return
+    const reason = askReason(`Move ${u.email} to ${roleLabel(role)}`)
+    if (reason) propose(`Role change for ${u.email}`, () => api.changeUserRole(u.id, { role, reason }))
+  }
+
+  function toggleActive(u) {
+    const verb = u.active ? 'Disable' : 'Restore'
+    const reason = askReason(`${verb} ${u.email}`)
+    if (reason) propose(`${verb} ${u.email}`, () => api.setUserActive(u.id, { active: !u.active, reason }))
+  }
+
+  function resetMfa(u) {
+    const reason = askReason(`Re-issue the authenticator for ${u.email}`)
+    if (reason) propose(`Authenticator reset for ${u.email}`, () => api.resetUserMfa(u.id, { reason }))
+  }
+
+  function toggleMfa(u) {
+    const off = u.totp_enabled
+    const what = off ? `Stop asking ${u.email} for a code` : `Require a code from ${u.email}`
+    const reason = askReason(what)
+    if (reason) propose(what, () => api.setUserMfa(u.id, { enabled: !off, reason }))
+  }
+
+  async function saveProfile(u, e) {
+    e.preventDefault()
+    const ok = await propose(`Details for ${u.email}`, () => api.updateUserProfile(u.id, {
+      email: edit.email, display_name: edit.display_name, reason: edit.reason,
+    }))
+    if (ok) setPanel(null)
+  }
+
+  async function savePassword(u, e) {
+    e.preventDefault()
+    const ok = await propose(`Password reset for ${u.email}`, () => api.resetUserPassword(u.id, {
+      password: edit.password, reason: edit.reason,
+    }))
+    if (ok) setPanel(null)
+  }
+
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+  const setEditField = (k) => (e) => setEdit({ ...edit, [k]: e.target.value })
+
+  async function submitNew(e) {
+    e.preventDefault()
+    const ok = await propose(`New ${roleLabel(form.role)} ${form.email}`, () => api.createUser(form))
+    if (ok) { setAdding(false); setForm(blank) }
+  }
+
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <div className="toolbar">
-        <strong style={{ fontSize: 14 }}>Users &amp; access</strong>
-        <span className="dim" style={{ fontSize: 12 }}>Roles enforce separation of duties on every request (D12b).</span>
+    <>
+      {error && <Banner kind="error">{error}</Banner>}
+      {notice && <Banner kind="ok">{notice}</Banner>}
+
+      {adding && (
+        <form className="card" style={{ marginBottom: 14 }} onSubmit={submitNew}>
+          <h2 style={{ fontSize: 14, marginTop: 0 }}>Propose a new account</h2>
+          <div className="grid cols-2" style={{ gap: 12 }}>
+            <label>Email
+              <input type="email" required value={form.email} onChange={set('email')}
+                     placeholder="name@riskradar.local" />
+            </label>
+            <label>Full name
+              <input required value={form.display_name} onChange={set('display_name')} />
+            </label>
+            <label>Role
+              <select value={form.role} onChange={set('role')}>
+                {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+              </select>
+            </label>
+            <label>Initial password
+              <input type="password" required minLength={12} value={form.password}
+                     onChange={set('password')} placeholder="at least 12 characters" />
+            </label>
+          </div>
+          <label>Reason
+            <input required minLength={20} value={form.reason} onChange={set('reason')}
+                   placeholder="why this account is needed — at least 20 characters" />
+          </label>
+          <p className="dim" style={{ fontSize: 12 }}>
+            The password is hashed before it is stored, and the authenticator secret is
+            minted only when the second administrator approves — so neither ever sits in
+            a pending change request waiting to be read (D99). New accounts start with the
+            code prompt on.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="primary" type="submit" disabled={busy}>Propose account</button>
+            <button type="button" className="ghost"
+                    onClick={() => { setAdding(false); setError(null) }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
+      <div className="card" style={{ padding: 0 }}>
+        <div className="toolbar">
+          <strong style={{ fontSize: 14 }}>Users &amp; access</strong>
+          <span className="dim" style={{ fontSize: 12 }}>Roles enforce separation of duties on every request (D12b).</span>
+          {!adding && (
+            <button className="primary" style={{ marginLeft: 'auto' }}
+                    onClick={() => { setAdding(true); setNotice(null); setError(null) }}>
+              ＋ Add user
+            </button>
+          )}
+        </div>
+        <div className="table-scroll">
+          <table className="rowtable">
+            <thead>
+              <tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Code asked</th>
+                  <th>Created</th><th>Access</th></tr>
+            </thead>
+            <tbody>
+              {users.items.map((u) => {
+                const self = u.id === me.id
+                const open = panel && panel.id === u.id
+                return [
+                  <tr key={u.id}>
+                    <td>
+                      <div className="userpair">
+                        <span className="avatar sm">{roleInitials(u.display_name)}</span>
+                        <div>
+                          <div style={{ fontWeight: 560 }}>{u.display_name}</div>
+                          <div className="mono dim" style={{ fontSize: 10.5 }}>USR-{u.id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="dim">{u.email}</td>
+                    <td>
+                      {self ? <span className="pill">{roleLabel(u.role)}</span> : (
+                        <select value={u.role} disabled={busy} aria-label={`Role for ${u.email}`}
+                                style={{ width: 152 }}
+                                onChange={(e) => changeRole(u, e.target.value)}>
+                          {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                        </select>
+                      )}
+                    </td>
+                    <td>
+                      <span className="authdot">
+                        <span className={`live-dot ${u.active ? 'ok' : ''}`}
+                              style={!u.active ? { background: 'var(--text-3)', boxShadow: 'none' } : {}} />
+                        {u.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className={u.totp_enabled ? '' : 'dim'}>
+                      {u.totp_enabled ? 'Yes' : 'No — password only'}
+                    </td>
+                    <td className="dim" style={{ fontSize: 11.5 }}>{when(u.created_at)}</td>
+                    <td>
+                      {self ? <span className="dim" style={{ fontSize: 11.5 }}>your own account</span> : (
+                        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                          <button className="ghost" disabled={busy}
+                                  title="Correct the email and name on this account"
+                                  onClick={() => openPanel(u, 'profile')}>Edit</button>
+                          <button className="ghost" disabled={busy}
+                                  title="Set a new password for this account"
+                                  onClick={() => openPanel(u, 'password')}>Password</button>
+                          <button className="ghost" disabled={busy}
+                                  title={u.totp_enabled
+                                    ? 'Stop asking this user for a code at sign-in'
+                                    : 'Require a code from this user at sign-in'}
+                                  onClick={() => toggleMfa(u)}>
+                            {u.totp_enabled ? 'No code' : 'Require code'}
+                          </button>
+                          <button className="ghost" disabled={busy}
+                                  title="Issue a new authenticator secret, keeping the prompt on"
+                                  onClick={() => resetMfa(u)}>Reset MFA</button>
+                          <button className={u.active ? 'danger' : ''} disabled={busy}
+                                  onClick={() => toggleActive(u)}>
+                            {u.active ? 'Disable' : 'Restore'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>,
+                  open && (
+                    <tr key={`${u.id}-panel`}>
+                      <td colSpan={7} style={{ background: 'var(--accent-dim)' }}>
+                        {panel.mode === 'profile' ? (
+                          <form className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}
+                                onSubmit={(e) => saveProfile(u, e)}>
+                            <label style={{ margin: 0 }}>Email
+                              <input type="email" required value={edit.email}
+                                     onChange={setEditField('email')} style={{ width: 230 }} />
+                            </label>
+                            <label style={{ margin: 0 }}>Full name
+                              <input required value={edit.display_name}
+                                     onChange={setEditField('display_name')} style={{ width: 190 }} />
+                            </label>
+                            <label style={{ margin: 0, flex: 1, minWidth: 240 }}>Reason
+                              <input required minLength={20} value={edit.reason}
+                                     onChange={setEditField('reason')}
+                                     placeholder="at least 20 characters" />
+                            </label>
+                            <button className="primary" type="submit" disabled={busy}>Propose</button>
+                            <button type="button" className="ghost" onClick={() => setPanel(null)}>Cancel</button>
+                            <p className="dim" style={{ fontSize: 11.5, width: '100%', margin: 0 }}>
+                              The email is the login identifier, so changing it changes who can sign
+                              in to this account.
+                            </p>
+                          </form>
+                        ) : (
+                          <form className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}
+                                onSubmit={(e) => savePassword(u, e)}>
+                            <label style={{ margin: 0 }}>New password
+                              <input type="password" required minLength={12} value={edit.password}
+                                     onChange={setEditField('password')}
+                                     placeholder="at least 12 characters" style={{ width: 230 }} />
+                            </label>
+                            <label style={{ margin: 0, flex: 1, minWidth: 240 }}>Reason
+                              <input required minLength={20} value={edit.reason}
+                                     onChange={setEditField('reason')}
+                                     placeholder="at least 20 characters" />
+                            </label>
+                            <button className="primary" type="submit" disabled={busy}>Propose</button>
+                            <button type="button" className="ghost" onClick={() => setPanel(null)}>Cancel</button>
+                            <p className="dim" style={{ fontSize: 11.5, width: '100%', margin: 0 }}>
+                              Hashed before it is stored, so the plaintext never reaches the database
+                              or the pending request (D99).
+                            </p>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  ),
+                ]
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-foot dim">
+          Showing {users.items.length} user{users.items.length === 1 ? '' : 's'}. Every change here
+          is proposed, and takes a second administrator&apos;s approval (D99, D104, D105).
+        </div>
       </div>
-      <div className="table-scroll">
-        <table className="rowtable">
-          <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>MFA</th><th>Created</th></tr></thead>
-          <tbody>
-            {data.items.map((u) => (
-              <tr key={u.id}>
-                <td><div className="userpair"><span className="avatar sm">{roleInitials(u.display_name)}</span>
-                  <div><div style={{ fontWeight: 560 }}>{u.display_name}</div><div className="mono dim" style={{ fontSize: 10.5 }}>USR-{u.id}</div></div></div></td>
-                <td className="dim">{u.email}</td>
-                <td><span className="pill">{roleLabel(u.role)}</span></td>
-                <td><span className="authdot"><span className={`live-dot ${u.active ? 'ok' : ''}`} style={!u.active ? { background: 'var(--text-3)', boxShadow: 'none' } : {}} />{u.active ? 'Active' : 'Inactive'}</span></td>
-                <td className={u.totp_enabled ? '' : 'dim'}>{u.totp_enabled ? 'Enabled' : 'Off'}</td>
-                <td className="dim" style={{ fontSize: 11.5 }}>{when(u.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="table-foot dim">Showing {data.items.length} user{data.items.length === 1 ? '' : 's'}. New users are created maker-checker (D99).</div>
-    </div>
+    </>
   )
 }
 

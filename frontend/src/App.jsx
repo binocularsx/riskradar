@@ -77,7 +77,13 @@ export default function App() {
   if (!user) return <Login onSignedIn={refresh} />
 
   const links = nav(user.permissions)
-  const landing = links.find((l) => l.to === '/triage')?.to ?? links[0]?.to ?? '/triage'
+  // A supervisor's home is oversight, not the analyst work queue. cases:close
+  // is what separates the two jobs: the lead watches the desk, the analyst
+  // works it. Landing a lead on /triage framed the role as a queue worker.
+  const supervises = user.permissions.includes('cases:close')
+  const home = supervises ? '/operations' : '/triage'
+  const landing = links.find((l) => l.to === home)?.to
+    ?? links.find((l) => l.to === '/triage')?.to ?? links[0]?.to ?? '/triage'
 
   // Nav grouped under its section headers, order preserved.
   const sections = []
@@ -150,7 +156,7 @@ export default function App() {
             <Route path="/cases/:id" element={<CaseDetail user={user} />} />
             <Route path="/operations" element={<Operations />} />
             <Route path="/transactions" element={<Transactions />} />
-            <Route path="/analytics" element={<Metrics />} />
+            <Route path="/analytics" element={<Metrics user={user} />} />
             <Route path="/admin" element={<Admin user={user} />} />
             <Route path="/roles" element={<Roles user={user} />} />
             <Route path="*" element={<Navigate to={landing} replace />} />

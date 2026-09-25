@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 
+import GeoMap from '../components/GeoMap'
 import { api, naira } from '../lib/api'
 import { Banner, Empty, RiskBadge, Stat } from '../components/ui'
 
@@ -203,16 +204,29 @@ function Benchmarks({ menu, live }) {
                 <td className="num">{o.false_alerts_per_day}</td>
                 <td className="num">{ratio(o.false_alerts_per_incident)}</td>
                 <td className="num">{pct(o.value_detection_rate)}</td>
-                {TYPES.map((t) => (
-                  <td key={`s${t}`} className="num">{o.seen_fraud[t].caught}/{o.seen_fraud[t].incidents}</td>
-                ))}
-                {TYPES.map((t) => (
-                  <td key={`h${t}`} className="num"
-                      title={`95% range ${o.held_out.per_typology[t].ci95.join('–')}`}>
-                    {o.held_out.per_typology[t].recall.toFixed(3)}
-                  </td>
-                ))}
-                <td className="num">{o.held_out.mean.toFixed(3)}</td>
+                {TYPES.map((t) => {
+                  const seen = o.seen_fraud?.[t]
+                  return (
+                    <td key={`s${t}`} className="num">
+                      {seen ? `${seen.caught}/${seen.incidents}` : '—'}
+                    </td>
+                  )
+                })}
+                {/* Only the budget the desk actually runs was evaluated held-out;
+                    the others carry held_out: null, and an unguarded read here
+                    blanked the whole console. */}
+                {TYPES.map((t) => {
+                  const ho = o.held_out?.per_typology?.[t]
+                  return (
+                    <td key={`h${t}`} className="num"
+                        title={ho?.ci95 ? `95% range ${ho.ci95.join('–')}` : 'not evaluated held-out'}>
+                      {ho?.recall != null ? ho.recall.toFixed(3) : '—'}
+                    </td>
+                  )
+                })}
+                <td className="num">
+                  {o.held_out?.mean != null ? o.held_out.mean.toFixed(3) : '—'}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -236,7 +250,12 @@ function Benchmarks({ menu, live }) {
  * low by construction, so alerts stream; transaction volume is three orders of
  * magnitude larger and belongs here.
  */
-export default function Metrics() {
+export default function Metrics({ user }) {
+  // The budget menu is where a budget is *chosen* from its threshold trade-offs
+  // (D76), which is detection tuning and belongs to the administrator. A lead
+  // needs to know the desk is over budget, not to re-pick the budget, so the
+  // benchmark block is gated on the permission that actually tunes detection.
+  const tunes = !!user?.permissions?.includes('admin:rules')
   const [hours, setHours] = useState(24)
   const [data, setData] = useState(null)
   const [detection, setDetection] = useState(null)
@@ -249,12 +268,12 @@ export default function Metrics() {
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(e.message))
     api.detection(30).then((d) => !cancelled && setDetection(d)).catch(() => {})
-    api.budgetMenu().then((d) => !cancelled && setMenu(d)).catch(() => {})
+    if (tunes) api.budgetMenu().then((d) => !cancelled && setMenu(d)).catch(() => {})
     const timer = setInterval(() => {
       api.overview(hours).then((d) => !cancelled && setData(d)).catch(() => {})
     }, 15000)  // a fixed refresh interval, not a socket (D14b)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [hours])
+  }, [hours, tunes])
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
@@ -340,7 +359,7 @@ export default function Metrics() {
         </p>
       </div>
 
-      {menu?.available && <Benchmarks menu={menu} live={detection?.ratio} />}
+      {tunes && menu?.available && <Benchmarks menu={menu} live={detection?.ratio} />}
 
       <div className="grid cols-2">
         <div className="card">
@@ -421,6 +440,8 @@ export default function Metrics() {
           </p>
         </div>
       </div>
+
+      <div style={{ marginTop: 16 }}><GeoMap /></div>
 
       {detection && <FalseAlarmsByDriver detection={detection} />}
 

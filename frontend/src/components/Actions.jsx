@@ -12,8 +12,8 @@
  */
 
 const STEPS = {
-  'Escalate to InfoSec and hold the beneficiary': [
-    'Escalate to InfoSec now — they own sanctions matches, not you.',
+  'Escalate to the lead and hold the beneficiary': [
+    'Escalate to the Fraud Ops lead now — a sanctions match is their call, not yours.',
     'Do not contact the customer. A sanctions hit has reporting rules attached.',
     'Record the outcome as confirmed fraud so the destination is blocked bank-wide.',
   ],
@@ -30,7 +30,7 @@ const STEPS = {
   'Call the customer before any further transfer clears': [
     'Call the number on file — not any number in the transaction.',
     'Ask whether they made these transfers and whether they still hold their phone.',
-    'If unreachable, escalate to InfoSec: an unreachable customer during an active drain is the worst case.',
+    'If unreachable, escalate to the lead: an unreachable customer during an active drain is the worst case.',
     'Record the outcome either way, so the next model learns from it.',
   ],
   'Review the destination accounts for a mule network': [
@@ -132,10 +132,13 @@ export function RoleCapability({ user }) {
   let text
   if (can('cases:close')) {
     text = 'As Fraud Ops Lead you can record the outcome and close the case in one action.'
-  } else if (can('cases:set_outcome')) {
-    text = 'As an Analyst you record the outcome; a Fraud Ops Lead closes the case afterwards.'
+  } else if (can('cases:submit_outcome')) {
+    // Was `cases:set_outcome`, which is not a permission the server issues, so
+    // this branch never matched and an analyst fell through to the line below —
+    // being told they could not declare fraud, directly above the buttons that do.
+    text = 'As an Analyst you propose the outcome; a Fraud Ops Lead who did not write it decides.'
   } else if (can('cases:escalate')) {
-    text = 'As InfoSec you can investigate and escalate, but not declare something commercial fraud — '
+    text = 'Your role can investigate and escalate, but not declare something commercial fraud — '
          + 'that outcome is a training label and belongs to the fraud team.'
   } else {
     text = 'Your role can view this case but not act on it.'

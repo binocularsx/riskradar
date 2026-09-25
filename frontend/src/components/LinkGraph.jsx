@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { api, nairaShort, ago } from '../lib/api'
+import { api, nairaShort, ago, when } from '../lib/api'
 
 /**
  * Who else is connected to this case (D84).
@@ -33,9 +33,62 @@ export default function LinkGraph({ caseId }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [hover, setHover] = useState(null)
+  const [selected, setSelected] = useState(null)
+  // Positions the analyst has moved. The computed layout stays untouched
+  // underneath, so "Reset layout" is just dropping this map.
+  const [dragged, setDragged] = useState({})
+  const [dragging, setDragging] = useState(false)
+  const svgRef = useRef(null)
+  const drag = useRef(null)
+
+  // Client pixels are not SVG units once the viewBox scales, so every pointer
+  // position goes through the SVG's own transform or the node lands elsewhere.
+  const toSvg = useCallback((ev) => {
+    const svg = svgRef.current
+    if (!svg) return null
+    const pt = svg.createSVGPoint()
+    pt.x = ev.clientX; pt.y = ev.clientY
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return null
+    const p = pt.matrixTransform(ctm.inverse())
+    return [p.x, p.y]
+  }, [])
+
+  const startDrag = useCallback((ev, id) => {
+    const at = toSvg(ev)
+    if (!at) return
+    ev.preventDefault()
+    // Capture is an optimisation, not a requirement: the drag is tracked on
+    // window either way. It throws for an unrecognised pointer id, and a throw
+    // here would abort the drag before it started.
+    try { ev.currentTarget.setPointerCapture?.(ev.pointerId) } catch { /* not fatal */ }
+    drag.current = { id, pointerId: ev.pointerId, moved: false }
+    setDragging(true)
+  }, [toSvg])
 
   useEffect(() => {
-    setData(null); setError(null)
+    if (!dragging) return undefined
+    const move = (ev) => {
+      const d = drag.current
+      if (!d) return
+      const at = toSvg(ev)
+      if (!at) return
+      d.moved = true
+      setDragged((prev) => ({ ...prev, [d.id]: at }))
+    }
+    const up = () => { drag.current = null; setDragging(false) }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [dragging, toSvg])
+
+  useEffect(() => {
+    setData(null); setError(null); setSelected(null); setDragged({})
     api.caseLinks(caseId).then(setData).catch((e) => setError(e.message))
   }, [caseId])
 
@@ -67,6 +120,9 @@ export default function LinkGraph({ caseId }) {
   const destinations = data.nodes.filter((n) => n.kind === 'destination')
   const devices = data.nodes.filter((n) => n.kind === 'device')
   const others = data.nodes.filter((n) => n.kind === 'other_customer')
+  const at = (id) => dragged[id] || layout[id]
+  const selectedNode = data.nodes.find((n) => n.id === selected) || null
+  const focus = selected || hover
 
   return (
     <div className="card">
@@ -78,41 +134,72 @@ export default function LinkGraph({ caseId }) {
           {s.linked_confirmed_fraud ? ` · ${s.linked_confirmed_fraud} with confirmed fraud` : ''}
         </span>
       </div>
+
+      {/* What the picture is for. Without this it is an attractive diagram that
+          nobody can act on: the question it answers is whether this customer is
+          alone, or one of several paying the same new account from the same
+          device — which is the difference between one victim and a network. */}
+      <p className="lg-explain">
+        This customer sits in the middle. Around them are the <b>destinations</b> they paid and
+        the <b>devices</b> they used; further out are <b>other customers</b> who share one of
+        those. A destination several customers paid within a day, or a device used by more than
+        one customer, is what a mule network looks like from the inside.
+        {' '}<span className="dim">Drag any node to untangle it.</span>
+      </p>
+
       <div className="linkgraph">
-        <div className="table-scroll">
-          <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img"
+        <div className="lg-canvas">
+          <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" role="img"
+               className={dragging ? 'dragging' : ''}
                aria-label="Graph of this customer, the destinations they paid, the devices they used, and other customers sharing them">
             {data.edges.map((e, i) => {
-              const a = layout[e.from]; const b = layout[e.to]
+              const a = at(e.from); const b = at(e.to)
               if (!a || !b) return null
-              const hot = hover && (e.from === hover || e.to === hover)
+              const hot = focus && (e.from === focus || e.to === focus)
+              // An edge between two non-central nodes is a *shared* identifier,
+              // which is the finding; an edge from the customer is just their
+              // own activity. Colouring both the same hid the interesting one.
+              const shared = e.from !== 'customer' && e.to !== 'customer'
               return <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]}
-                           className={`lg-edge ${e.kind} ${hot ? 'hot' : ''}`} />
+                           className={`lg-edge ${e.kind} ${shared ? 'shared' : ''} ${hot ? 'hot' : ''}`} />
             })}
             {data.nodes.map((n) => {
-              const [x, y] = layout[n.id] || [CX, CY]
+              const [x, y] = at(n.id) || [CX, CY]
               const r = n.kind === 'customer' ? 18 : n.kind === 'other_customer' ? 9 : 12
               const label = n.kind === 'customer' ? n.label
                 : n.kind === 'other_customer' ? n.label : short(n.token)
+              const cls = `lg-node ${n.kind} ${n.risky ? 'risky' : ''} ${selected === n.id ? 'picked' : ''}`
               return (
-                <g key={n.id} onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)}>
+                <g key={n.id} className="lg-g"
+                   onPointerDown={(ev) => startDrag(ev, n.id)}
+                   onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)}
+                   onClick={() => setSelected((p) => (p === n.id ? null : n.id))}>
                   {n.kind === 'device'
-                    ? <rect x={x - r} y={y - r} width={2 * r} height={2 * r} rx={3} className={`lg-node ${n.kind} ${n.risky ? 'risky' : ''}`} />
-                    : <circle cx={x} cy={y} r={r} className={`lg-node ${n.kind} ${n.risky ? 'risky' : ''}`} />}
+                    ? <rect x={x - r} y={y - r} width={2 * r} height={2 * r} rx={3} className={cls} />
+                    : <circle cx={x} cy={y} r={r} className={cls} />}
                   <text x={x} y={y + r + 12} textAnchor="middle" className="lg-label">{label}</text>
                 </g>
               )
             })}
           </svg>
+          {Object.keys(dragged).length > 0 && (
+            <button className="lg-reset ghost" onClick={() => setDragged({})}>Reset layout</button>
+          )}
         </div>
+
         <div className="lg-legend">
           <span><i className="lg-key customer" /> this customer</span>
           <span><i className="lg-key destination" /> destination paid</span>
           <span><i className="lg-key device square" /> device used</span>
           <span><i className="lg-key other_customer" /> another customer</span>
           <span><i className="lg-key risky" /> something known against it</span>
+          <span><i className="lg-key line shared" /> shared identifier</span>
         </div>
       </div>
+
+      {/* Clicking a node answers "what is this, and why should I care", which
+          the token alone never did. */}
+      {selectedNode && <NodeDetail node={selectedNode} onClose={() => setSelected(null)} />}
 
       {destinations.length > 0 && (
         <>
@@ -183,6 +270,70 @@ export default function LinkGraph({ caseId }) {
         Identifiers are hashed; the same hash means the same account or device. A shared destination is normal for a
         school or a utility; it matters when the destination is new and several customers paid it the same day.
       </p>
+    </div>
+  )
+}
+
+/**
+ * What a node actually is, on click. The graph could only ever say "…a1b2c3",
+ * which tells an analyst nothing they can act on; every field here already came
+ * back from /v1/cases/{id}/links and was simply never shown.
+ */
+function NodeDetail({ node, onClose }) {
+  const rows = []
+  if (node.kind === 'destination') {
+    rows.push(['Payments from this customer', `${node.payments} · ${nairaShort(node.amount_minor)}`])
+    rows.push(['First paid', when(node.first_seen)])
+    rows.push(['Last paid', when(node.last_paid)])
+    rows.push(['Other customers who paid it', node.other_customers ?? 0])
+    if (node.other_customers_24h) {
+      rows.push(['…within 24 hours', `${node.other_customers_24h} — the fan-in pattern`])
+    }
+    rows.push(['Alerts naming it', node.alerts ?? 0])
+    if (node.confirmed_fraud_cases) {
+      rows.push(['Confirmed fraud cases', `${node.confirmed_fraud_cases} — already proven`])
+    }
+    if (node.lists?.length) rows.push(['On a list', node.lists.join(', ')])
+  } else if (node.kind === 'device') {
+    rows.push(['Times used', node.uses])
+    rows.push(['First used by this customer', when(node.first_used_by_customer)])
+    rows.push(['Last used', when(node.last_used)])
+    rows.push(['Other customers on this device', node.other_customers ?? 0])
+  } else if (node.kind === 'other_customer') {
+    rows.push(['Shares', (node.via || []).join(' and ') || 'an identifier'])
+    if (node.case_id) rows.push(['Their case', `#${node.case_id} · ${String(node.case_state || '').toLowerCase()}`])
+    if (node.case_outcome) rows.push(['Outcome', String(node.case_outcome).replace(/_/g, ' ').toLowerCase()])
+  } else if (node.detail) {
+    rows.push(['Activity', node.detail])
+  }
+
+  const title = node.kind === 'customer' ? node.label
+    : node.kind === 'other_customer' ? node.label
+      : node.kind === 'device' ? 'Device' : 'Destination account'
+
+  return (
+    <div className="lg-detail">
+      <div className="between">
+        <div>
+          <strong style={{ fontSize: 13 }}>{title}</strong>
+          {node.token && <span className="mono dim" style={{ fontSize: 11, marginLeft: 8 }}>{node.token}</span>}
+        </div>
+        <button className="ghost" onClick={onClose} aria-label="Close">Close</button>
+      </div>
+      {node.risky && (
+        <p className="lg-detail-warn">
+          {node.kind === 'destination'
+            ? 'Flagged: it is on a list, has confirmed fraud against it, or several customers paid it within a day.'
+            : node.kind === 'device'
+              ? 'Flagged: more than one customer has used this device.'
+              : 'Flagged: this customer has a confirmed fraud case.'}
+        </p>
+      )}
+      <dl className="lg-kv">
+        {rows.map(([k, v]) => (
+          <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>
+        ))}
+      </dl>
     </div>
   )
 }

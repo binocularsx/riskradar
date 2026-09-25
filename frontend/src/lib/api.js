@@ -76,6 +76,10 @@ export const api = {
   disposition: (id, data) => post(`/v1/cases/${id}/disposition`, data),
   // D93: an analyst proposes; a different lead decides.
   submitFraud: (id, data) => post(`/v1/cases/${id}/submissions`, data),
+  // D106: what to block, derived from the case's own alerted transactions, so
+  // confirming fraud proposes the restrictions instead of leaving them empty.
+  restrictionSuggestions: (id) => get(`/v1/cases/${id}/restriction-suggestions`),
+  caseReports: (id) => get(`/v1/cases/${id}/account-manager-reports`),
   caseSubmissions: (id) => get(`/v1/cases/${id}/submissions`),
   approvals: () => get('/v1/approvals'),
   decideSubmission: (id, data) => post(`/v1/submissions/${id}/decision`, data),
@@ -117,6 +121,8 @@ export const api = {
   // aggregates
   overview: (hours) => get(`/v1/metrics/overview?hours=${hours}`),
   detection: (days = 30) => get(`/v1/metrics/detection?days=${days}`),
+  // D109: activity by session region, for the map on Analytics.
+  geography: (hours = 168) => get(`/v1/metrics/geography?hours=${hours}`),
   budgetMenu: () => get('/v1/metrics/budget-menu'),
   searchTransactions: (params) => get(`/v1/transactions/search?${new URLSearchParams(params)}`),
 
@@ -139,6 +145,17 @@ export const api = {
   audit: (params) => get(`/v1/admin/audit?${new URLSearchParams(params || {})}`),
   verifyAudit: () => get('/v1/admin/audit/verify'),
   users: () => get('/v1/admin/users'),
+  // D99/D104: every one of these *proposes*. A second administrator approves it
+  // in Pending before anything about the account actually changes.
+  createUser: (data) => post('/v1/admin/users', data),
+  changeUserRole: (id, data) => post(`/v1/admin/users/${id}/role`, data),
+  setUserActive: (id, data) => post(`/v1/admin/users/${id}/active`, data),
+  resetUserMfa: (id, data) => post(`/v1/admin/users/${id}/mfa-reset`, data),
+  // D105: whether a code is asked for at all, a new password, and the email and
+  // name on the account. All three are access changes, so all three propose.
+  setUserMfa: (id, data) => post(`/v1/admin/users/${id}/mfa`, data),
+  resetUserPassword: (id, data) => post(`/v1/admin/users/${id}/password`, data),
+  updateUserProfile: (id, data) => post(`/v1/admin/users/${id}/profile`, data),
 }
 
 /** Kobo to a readable naira string. Integers in, formatting out (D9a). */

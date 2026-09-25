@@ -11,7 +11,7 @@ import { Banner } from './ui'
  *   steps          the recommendation as a checklist; each step records what was
  *                  done in the bank's systems, with its result
  *   escalate       when to, what happens when you do, and a required reason
- *   hand back      for InfoSec or a lead holding an escalated case
+ *   hand back      for a lead holding an escalated case
  *   close          for a lead, once the outcome is recorded
  *   history        who did what, when
  *
@@ -26,7 +26,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
   const [result, setResult] = useState('')
   const [detail, setDetail] = useState('')
   const [escalating, setEscalating] = useState(false)
-  const [target, setTarget] = useState('INFOSEC')
+  const [target, setTarget] = useState('FRAUD_OPS')
   const [reason, setReason] = useState('')
   const [returning, setReturning] = useState(false)
   const [findings, setFindings] = useState('')
@@ -75,7 +75,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
         {flow.assignee && <span className="dim"> · with {flow.assignee}</span>}</p>
       {flow.escalation && (
         <div className="escalation-note">
-          Escalated to <strong>{flow.escalation.to === 'INFOSEC' ? 'InfoSec' : flow.escalation.to === 'FRAUD_OPS' ? 'Fraud Ops' : 'a team, since handed back'}</strong> by{' '}
+          Escalated to <strong>{flow.escalation.to === 'INFOSEC' ? 'InfoSec (retired)' : flow.escalation.to === 'FRAUD_OPS' ? 'Fraud Ops' : 'a team, since handed back'}</strong> by{' '}
           {flow.escalation.by} · {when(flow.escalation.at)}
           <div className="muted">“{flow.escalation.reason}”</div>
         </div>
@@ -98,7 +98,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
                     <span className="dim" style={{ fontSize: 12 }}>{s.status === 'done' ? 'recorded' : 'use the buttons at the bottom'}</span>
                   ) : s.action === 'ESCALATE' ? (
                     s.status === 'done' ? <span className="dim" style={{ fontSize: 12 }}>escalated</span> :
-                      can('cases:escalate') && <button onClick={() => { setEscalating(true); setTarget('INFOSEC') }} disabled={!mine || busy}
+                      can('cases:escalate') && <button onClick={() => { setEscalating(true); setTarget('FRAUD_OPS') }} disabled={!mine || busy}
                                                        title={mine ? '' : 'Take the case first'}>Escalate…</button>
                   ) : spec && (
                     <button onClick={() => { setOpen(s.action); setResult(''); setDetail('') }}
@@ -138,6 +138,14 @@ export default function CaseFlow({ caseId, user, onChanged }) {
           )
         })}
       </ol>
+
+      {stage === 'AWAITING_APPROVAL' && (
+        <div className="dialog">
+          <strong>Filed. Waiting for a lead.</strong> A lead who did not file this has to
+          approve it (D93). Nothing has been sent to the bank and no account manager has
+          been told until they do.
+        </div>
+      )}
 
       {!closedOrWaiting && stage !== 'ESCALATED' && can('cases:escalate') && !escalating && (
         <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>

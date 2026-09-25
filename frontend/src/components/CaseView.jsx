@@ -27,9 +27,15 @@ import LinkGraph from './LinkGraph'
 // and the wording has to say so — a button that reads "Confirm fraud" while it
 // files a recommendation is the kind of lie a control dies of.
 const OUTCOMES = [
-  { key: 'CONFIRMED_FRAUD', label: 'Submit: fraud', cls: 'confirm', hint: '1' },
-  { key: 'FALSE_POSITIVE', label: 'Submit: false positive', cls: 'dismiss', hint: '2' },
-  { key: 'INCONCLUSIVE', label: 'Submit: inconclusive', cls: 'unsure', hint: '3' },
+  { key: 'CONFIRMED_FRAUD', label: 'Confirmed fraud', sub: 'The customer did not make these',
+    cls: 'confirm', hint: '1',
+    icon: ['M12 9v4', 'M12 17h.01', 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'] },
+  { key: 'FALSE_POSITIVE', label: 'False positive', sub: 'Legitimate, wrongly flagged',
+    cls: 'dismiss', hint: '2',
+    icon: ['M20 6 9 17l-5-5'] },
+  { key: 'INCONCLUSIVE', label: "Can't tell", sub: 'Not enough evidence either way',
+    cls: 'unsure', hint: '3',
+    icon: ['M12 17h.01', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z'] },
 ]
 const MIN_RATIONALE = 20
 
@@ -165,11 +171,6 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         <div className="because">{rec.because}</div>
       </div>
 
-      {/* D83: where the case is, the steps as a checklist, escalation and closing. */}
-      <div style={{ marginBottom: 14 }}>
-        <CaseFlow caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
-      </div>
-
       {/* ------------------------- what the bank owes, once the customer reports */}
       {detail && (
         <RegulatoryClocks
@@ -298,43 +299,76 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         </div>
       )}
 
+      {/* D83: where the case is, the steps as a checklist, escalation and closing.
+
+          Kept second to last, immediately above the decision: an analyst should
+          have read the summary, the clocks, the network, the timeline and every
+          flagged transaction before anything asks them to act. It used to sit
+          fourth, so the case prompted for a decision before it had finished
+          explaining itself. */}
+      <div style={{ marginBottom: 14 }}>
+        <CaseFlow caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
+      </div>
+
       {/* --------------------------------------------- 6. record the answer */}
       {!closed && !summary.outcome && (
         <div className="disposition">
+          <div className="disposition-head">
+            <div>
+              <strong style={{ fontSize: 13.5 }}>Propose an outcome</strong>
+              <span className="dim" style={{ fontSize: 12 }}>
+                {' '}— a lead who did not write it decides (D93).
+              </span>
+            </div>
+            <button className="ghost" onClick={() => onSkip?.()}>Skip <kbd>n</kbd></button>
+          </div>
+
           <RoleCapability user={user} />
-          <div className="between wrap" style={{ gap: 14 }}>
-            <div className="row wrap">
-              {can('cases:submit_outcome') ? OUTCOMES.map((o) => (
-                <button key={o.key} className={`big ${o.cls}`} disabled={busy || !mine}
+
+          {can('cases:submit_outcome') ? (
+            <div className="decisions">
+              {OUTCOMES.map((o) => (
+                <button key={o.key} className={`decision ${o.cls}`} disabled={busy || !mine}
                         title={!mine ? 'Take the case first' : CONSEQUENCES[o.key]}
                         onMouseEnter={() => setHovered(o.key)}
                         onMouseLeave={() => setHovered(null)}
                         onClick={() => dispose(o.key)}>
-                  {o.label} <kbd>{o.hint}</kbd>
+                  <svg className="decision-ico" viewBox="0 0 24 24" fill="none"
+                       stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                       strokeLinejoin="round" aria-hidden="true">
+                    {o.icon.map((d, i) => <path key={i} d={d} />)}
+                  </svg>
+                  <span className="decision-text">
+                    <span className="decision-label">{o.label}</span>
+                    <span className="decision-sub">{o.sub}</span>
+                  </span>
+                  <kbd>{o.hint}</kbd>
                 </button>
-              )) : (
-                <span className="dim" style={{ fontSize: 12.5 }}>
-                  Your role can investigate and escalate, but not propose a fraud outcome.
-                </span>
-              )}
-              {can('cases:escalate') && (
-                <span className="dim" style={{ fontSize: 12 }}>To escalate, use <strong>Escalate…</strong> in the steps above.</span>
-              )}
-              <button className="ghost" onClick={() => onSkip?.()}>Skip <kbd>n</kbd></button>
+              ))}
             </div>
-          </div>
+          ) : (
+            <p className="dim" style={{ fontSize: 12.5, margin: '6px 0 0' }}>
+              Your role can investigate and escalate, but not propose a fraud outcome.
+            </p>
+          )}
 
-          <p className="dim" style={{ fontSize: 12, margin: '10px 0 0', minHeight: 32 }}>
+          <p className="decision-hint">
             {hovered
               ? CONSEQUENCES[hovered]
               : mine
-                ? 'Hover a button to see exactly what it does. Your answer is a proposal: a lead decides, and their decision becomes training data.'
+                ? 'Hover a decision to see exactly what it causes. To escalate instead, use Escalate… in the steps above.'
                 : 'Take the case above before proposing an outcome.'}
           </p>
 
-          <textarea style={{ marginTop: 8, minHeight: 52 }}
-                    placeholder={`Why? (required, at least ${MIN_RATIONALE} characters — the lead decides on this)`}
+          <textarea className="decision-note"
+                    placeholder={`Why? The lead decides on this — at least ${MIN_RATIONALE} characters.`}
                     value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="decision-foot">
+            <span className={note.trim().length >= MIN_RATIONALE ? 'ok-text' : 'dim'}>
+              {note.trim().length}/{MIN_RATIONALE}
+            </span>
+            <span className="dim">Your name and reason are recorded with the proposal.</span>
+          </div>
         </div>
       )}
     </>

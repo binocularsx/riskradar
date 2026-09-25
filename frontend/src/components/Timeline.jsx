@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { naira, when } from '../lib/api'
 
 /**
@@ -26,11 +28,36 @@ export default function Timeline({ items }) {
   const t1 = Math.max(...times)
   const span = Math.max(t1 - t0, 60_000)
 
+  // Zoom is a window over time, not a scale factor on the drawing: a burst of
+  // nine payments inside forty seconds is invisible on an axis stretched across
+  // a month, and stretching the picture would only make fatter dots. Narrowing
+  // the window is what separates them.
+  const [zoom, setZoom] = useState(1)      // 1 = the whole span
+  // Centred on the alerted activity, not on the midpoint of the span. Zooming
+  // into the middle of a quiet month shows an empty chart, which reads as a
+  // broken control rather than as an honest gap.
+  const [centre, setCentre] = useState(() => {
+    const alerted = items.filter((t) => t.alerted).map((t) => new Date(t.occurred_at).getTime())
+    if (!alerted.length) return 0.5
+    const mid = (Math.min(...alerted) + Math.max(...alerted)) / 2
+    return Math.min(Math.max((mid - t0) / Math.max(t1 - t0, 1), 0), 1)
+  })
+
+  const windowMs = span / zoom
+  // Clamped, so panning to either end stops at the data rather than scrolling
+  // into empty time.
+  const start = Math.min(Math.max(t0 + centre * span - windowMs / 2, t0), t1 - windowMs)
+  const end = start + windowMs
+  const visible = items.filter((t) => {
+    const ms = new Date(t.occurred_at).getTime()
+    return ms >= start && ms <= end
+  })
+
   const amounts = items.map((t) => Math.max(Number(t.amount_minor) / 100, 1))
   const maxAmount = Math.max(...amounts)
   const logMax = Math.log10(maxAmount + 1)
 
-  const x = (ms) => PAD.l + ((ms - t0) / span) * (W - PAD.l - PAD.r)
+  const x = (ms) => PAD.l + ((ms - start) / windowMs) * (W - PAD.l - PAD.r)
   const y = (naira_) => {
     const frac = Math.log10(naira_ + 1) / (logMax || 1)
     return H - PAD.b - frac * (H - PAD.t - PAD.b)
@@ -44,14 +71,24 @@ export default function Timeline({ items }) {
     if (value <= maxAmount * 1.4) ticks.push(value)
   }
 
-  const totalMinutes = Math.round(span / 60000)
-  const spanLabel =
-    totalMinutes >= 120 ? `${Math.round(totalMinutes / 60)} hours` : `${totalMinutes} minutes`
+  const label = (ms) => {
+    const mins = Math.round(ms / 60000)
+    if (mins >= 2880) return `${Math.round(mins / 1440)} days`
+    if (mins >= 120) return `${Math.round(mins / 60)} hours`
+    if (mins >= 1) return `${mins} minutes`
+    return `${Math.round(ms / 1000)} seconds`
+  }
+  const spanLabel = label(span)
+  const zoomed = zoom > 1
 
   return (
     <div className="card" style={{ padding: '14px 16px' }}>
       <div className="between" style={{ marginBottom: 4 }}>
-        <h3 style={{ margin: 0 }}>Activity — {items.length} transactions over {spanLabel}</h3>
+        <h3 style={{ margin: 0 }}>
+          Activity — {zoomed
+            ? `${visible.length} of ${items.length} transactions, ${label(windowMs)} shown`
+            : `${items.length} transactions over ${spanLabel}`}
+        </h3>
         <div className="row" style={{ gap: 14, fontSize: 11 }}>
           <span className="dim">
             <svg width="9" height="9" style={{ verticalAlign: -1 }}>
@@ -74,6 +111,28 @@ export default function Timeline({ items }) {
         </div>
       </div>
 
+      {/* Zoom narrows the window; pan moves it. Pan is disabled at 1x because
+          there is nothing either side of the whole span to move to. */}
+      <div className="tl-controls">
+        <label>
+          <span>Zoom</span>
+          <input type="range" min="1" max="40" step="0.5" value={zoom}
+                 onChange={(e) => setZoom(Number(e.target.value))}
+                 aria-label="Zoom the activity window" />
+          <span className="tl-readout mono">{zoom === 1 ? 'all' : `${zoom}×`}</span>
+        </label>
+        <label className={zoomed ? '' : 'tl-off'}>
+          <span>Pan</span>
+          <input type="range" min="0" max="1" step="0.001" value={centre} disabled={!zoomed}
+                 onChange={(e) => setCentre(Number(e.target.value))}
+                 aria-label="Move the activity window through time" />
+          <span className="tl-readout mono">{zoomed ? label(windowMs) : '—'}</span>
+        </label>
+        {zoomed && (
+          <button className="ghost" onClick={() => { setZoom(1); setCentre(0.5) }}>Reset</button>
+        )}
+      </div>
+
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}
            role="img"
            aria-label={`Transaction timeline: ${items.length} transactions over ${spanLabel}, ${items.filter((i) => i.alerted).length} of them alerted.`}>
@@ -90,7 +149,7 @@ export default function Timeline({ items }) {
 
         {/* the envelope of alerted activity */}
         {(() => {
-          const alerted = items.filter((t) => t.alerted)
+          const alerted = visible.filter((t) => t.alerted)
           if (alerted.length < 2) return null
           const pts = alerted.map((t) => [
             x(new Date(t.occurred_at).getTime()),
@@ -122,7 +181,7 @@ export default function Timeline({ items }) {
               stroke="var(--line-2)" strokeWidth="1" />
 
         {/* stems, so a cluster reads as density even where dots overlap */}
-        {items.map((t, i) => {
+        {visible.map((t, i) => {
           const cx = x(new Date(t.occurred_at).getTime())
           const cy = y(Math.max(Number(t.amount_minor) / 100, 1))
           return (
@@ -133,7 +192,7 @@ export default function Timeline({ items }) {
           )
         })}
 
-        {items.map((t, i) => {
+        {visible.map((t, i) => {
           const cx = x(new Date(t.occurred_at).getTime())
           const cy = y(Math.max(Number(t.amount_minor) / 100, 1))
           const declined = t.auth_result !== 'APPROVED'
@@ -160,13 +219,19 @@ export default function Timeline({ items }) {
           )
         })}
 
+        {visible.length === 0 && (
+          <text x={W / 2} y={H / 2} textAnchor="middle" fontSize="11" fill="var(--text-3)">
+            Nothing in this window — pan to find the activity, or reset.
+          </text>
+        )}
+
         {/* time axis: just the ends, which is all anyone reads */}
         <text x={PAD.l} y={H - 10} fontSize="9.5" fill="var(--text-3)" fontFamily="var(--mono)">
-          {when(items[0].occurred_at)}
+          {when(new Date(start).toISOString())}
         </text>
         <text x={W - PAD.r} y={H - 10} textAnchor="end" fontSize="9.5"
               fill="var(--text-3)" fontFamily="var(--mono)">
-          {when(items[items.length - 1].occurred_at)}
+          {when(new Date(end).toISOString())}
         </text>
       </svg>
     </div>

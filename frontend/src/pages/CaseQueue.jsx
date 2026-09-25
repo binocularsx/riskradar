@@ -23,6 +23,9 @@ const SCOPES = [
 
 export default function CaseQueue({ user }) {
   const canReview = user.permissions.includes('cases:review')
+  // A lead holds cases:review too, but taking a case off the queue is the
+  // analyst's job. Offering it here made the supervisor a queue worker.
+  const supervises = user.permissions.includes('cases:close')
   const [scope, setScope] = useState(canReview ? 'mine' : 'all')
   const [q, setQ] = useState('')
   const [data, setData] = useState(null)
@@ -69,7 +72,7 @@ export default function CaseQueue({ user }) {
           <h1>Case Queue</h1>
           <p className="page-sub">Cases ordered by severity, exposure and how late they are.</p>
         </div>
-        {canReview && (
+        {canReview && !supervises && (
           <button className="primary" onClick={takeNext} disabled={busy}>
             {busy ? 'Finding…' : '＋ Take next case'}
           </button>
