@@ -236,7 +236,7 @@ function Enforcement() {
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="between">
           <h2 style={{ margin: 0 }}>Enforcement policy v{active?.version ?? '—'}</h2>
-          <span className={`pill ${active?.mode === 'LIVE' ? 'override' : ''}`}>{active?.mode ?? 'none'}</span>
+          <span className={`pill ${active?.mode === 'LIVE' ? 'suppress' : ''}`}>{active?.mode ?? 'none'}</span>
         </div>
         {active && (
           <>
@@ -414,7 +414,7 @@ function Thresholds() {
   return (
     <>
       <Banner kind="info">
-        Thresholds are derived <strong>backwards from the alert budget</strong> —
+        Risk limits are calculated from the <strong>daily review limit</strong> —
         analysts multiplied by reviewable alerts per day — then checked against
         recall. Never from "80 sounds high". <code>scripts/derive_thresholds.py</code>{' '}
         computes them from a scored sample. Publishing is <strong>proposed</strong> to a
@@ -605,7 +605,7 @@ function Models() {
               <p style={{ fontSize: 13, marginBottom: 0, marginTop: 10 }}>
                 Held-out typology <strong>{m.metrics.held_out_typology}</strong>:{' '}
                 incident recall <strong>{held.incident_recall}</strong>{' '}
-                ({held.incidents_caught}/{held.incidents} incidents) at the alert budget.{' '}
+                ({held.incidents_caught}/{held.incidents} incidents) at the daily review limit.{' '}
                 <span className="dim">
                   In-distribution PR-AUC {m.metrics.in_distribution?.pr_auc} — far higher, and
                   far less meaningful.

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { api, nairaShort } from '../lib/api'
-import { Banner, RiskBadge } from '../components/ui'
+import { Banner, RiskBadge, SegmentedProgress } from '../components/ui'
 
 /**
  * The Fraud Ops Lead's view — and the one to put in front of a stakeholder.
@@ -19,6 +20,11 @@ import { Banner, RiskBadge } from '../components/ui'
  */
 
 const LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+const outcomeLabel = (value) => ({
+  CONFIRMED_FRAUD: 'Fraud confirmed',
+  FALSE_POSITIVE: 'No fraud found',
+  INCONCLUSIVE: 'More review needed',
+}[value] || String(value).replace(/_/g, ' ').toLowerCase())
 
 /**
  * Alerts raised each hour against what the team can review in an hour. The
@@ -131,50 +137,54 @@ export default function Operations() {
   const outColour = (o) => o === 'CONFIRMED_FRAUD' ? 'var(--critical)' : o === 'FALSE_POSITIVE' ? 'var(--low)' : 'var(--medium)'
 
   return (
-    <div className="page">
-      <div className="page-head">
+    <div className="page ops-dashboard">
+      <div className="page-head ops-page-head">
         <div>
-          <h1>Overview</h1>
-          <p className="page-sub">Monitor fraud activity, workload and investigation performance.</p>
+          <h1>Dashboard</h1>
+          <p className="page-sub">Monitor fraud activity, workload and investigation performance in real time.</p>
         </div>
-        <span className="live"><span className="live-dot on" /> Today (live)</span>
+        <div className="ops-head-actions">
+          <span className="live"><span className="live-dot on" /> Today (live)</span>
+          <Link className="ops-action secondary" to="/analytics">View reports</Link>
+          <Link className="ops-action primary" to="/triage"><span>+</span> Review cases</Link>
+        </div>
       </div>
 
       <div className="statrow">
-        <div className="statcard">
-          <div className="statcard-k">Open cases</div>
+        <div className="statcard featured">
+          <div className="statcard-top"><div className="statcard-k">Open cases</div><span className="statcard-arrow">↗</span></div>
           <div className="statcard-v">{totalCases}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>{critical} require urgent triage</div>
+          <div className="statcard-note"><span className="metric-chip">{critical}</span> need urgent review</div>
         </div>
         <div className="statcard">
-          <div className="statcard-k">Alert budget used</div>
+          <div className="statcard-top"><div className="statcard-k">Daily review limit used</div><span className="statcard-arrow">↗</span></div>
           <div className="statcard-v accent">{budgetUsed == null ? '—' : `${budgetUsed}%`}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+          <div className="statcard-note">
             {overview ? `${overview.alert_budget.last_24h} of ${overview.alert_budget.per_day} daily` : ''}</div>
         </div>
         <div className="statcard">
-          <div className="statcard-k">False positive rate</div>
+          <div className="statcard-top"><div className="statcard-k">Cases cleared as safe</div><span className="statcard-arrow">↗</span></div>
           <div className={`statcard-v ${fpRate > 0.85 ? 'danger' : ''}`}>{Math.round(fpRate * 100)}%</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>of {decided} decided cases</div>
+          <div className="statcard-note">of {decided} decided cases</div>
         </div>
         <div className="statcard">
-          <div className="statcard-k">Queue depth</div>
+          <div className="statcard-top"><div className="statcard-k">Cases waiting</div><span className="statcard-arrow">↗</span></div>
           <div className="statcard-v">{totalCases}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>avg wait {avgWait >= 60 ? `${Math.round(avgWait / 60)}h` : `${avgWait} min`}</div>
+          <div className="statcard-note">avg wait {avgWait >= 60 ? `${Math.round(avgWait / 60)}h` : `${avgWait} min`}</div>
         </div>
       </div>
 
-      <div className="grid cols-2" style={{ marginBottom: 16 }}>
+      <div className="grid ops-primary-grid" style={{ marginBottom: 16 }}>
         <div className="card">
-          <h2>Alert volume vs capacity</h2>
+          <h2>New alerts and team capacity</h2>
           <p className="dim" style={{ fontSize: 12, margin: '2px 0 12px' }}>
-            Hourly ingested alerts vs analyst team review throughput
+            Alerts received each hour compared with how many the team can review
             {overview ? ` (${Math.round(overview.alert_budget.per_day / 24)}/h)` : ''}.</p>
           {overview ? <AlertsVsCapacity overview={overview} /> : <p className="dim">Loading…</p>}
         </div>
 
         <div className="card">
-          <div className="between"><h2 style={{ margin: 0 }}>Backlog by risk</h2>
+          <div className="between"><h2 style={{ margin: 0 }}>Waiting cases by risk level</h2>
             <span className="dim" style={{ fontSize: 12 }}>Total {totalCases} cases</span></div>
           <div style={{ marginTop: 12 }}>
             {backlog.map((b) => {
@@ -185,15 +195,13 @@ export default function Operations() {
                 <div key={b.risk_level} style={{ marginBottom: 14 }}>
                   <div className="between" style={{ fontSize: 12.5, marginBottom: 5 }}>
                     <span><RiskBadge level={b.risk_level} /> <strong style={{ marginLeft: 6 }}>{b.cases} cases</strong> <span className="dim">({pct}%)</span></span>
-                    <span className={over ? 'risk risk-HIGH' : 'dim'} style={{ fontSize: 11.5 }}>
-                      {over ? 'over SLA' : 'compliant'}</span>
+                    <span className={over ? 'sla sla-BREACHED' : 'sla sla-OK'}>
+                      {over ? 'overdue' : 'on time'}</span>
                   </div>
-                  <div className="bar-track">
-                    <div className="bar-fill" style={{ width: `${pct}%`,
-                      background: b.risk_level === 'CRITICAL' ? 'var(--critical)' : b.risk_level === 'HIGH' ? 'var(--high)' : b.risk_level === 'MEDIUM' ? 'var(--medium)' : 'var(--low)' }} />
-                  </div>
+                  <SegmentedProgress value={pct} label={`${b.risk_level.toLowerCase()} risk: ${pct}% of waiting cases`}
+                    color={b.risk_level === 'CRITICAL' ? 'var(--critical)' : b.risk_level === 'HIGH' ? 'var(--accent)' : b.risk_level === 'MEDIUM' ? 'var(--medium)' : 'var(--low)'} />
                   <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>
-                    Target SLA: {target >= 60 ? `${target / 60}h` : `${target} min`}</div>
+                    Review target: {target >= 60 ? `${target / 60}h` : `${target} min`}</div>
                 </div>
               )
             })}
@@ -201,15 +209,16 @@ export default function Operations() {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0, marginBottom: 16 }}>
+      <div className="grid ops-bottom-grid">
+      <div className="card" style={{ padding: 0 }}>
         <div className="toolbar">
-          <div><strong style={{ fontSize: 14 }}>Analyst workload</strong>
-            <div className="dim" style={{ fontSize: 12 }}>Real-time queue load and 24-hour closure velocity</div></div>
+          <div><strong style={{ fontSize: 14 }}>Team workload</strong>
+            <div className="dim" style={{ fontSize: 12 }}>Cases being handled now and cases completed in the last 24 hours</div></div>
           <span className="live"><span className="live-dot on" /> {data.analysts.length} active</span>
         </div>
         <div className="table-scroll">
           <table className="rowtable">
-            <thead><tr><th>Analyst</th><th>Role</th><th className="num">Open cases</th><th className="num">Closed 24h</th><th>SLA / status</th></tr></thead>
+            <thead><tr><th>Team member</th><th>Role</th><th className="num">Open cases</th><th className="num">Closed today</th><th>Work status</th></tr></thead>
             <tbody>
               {data.analysts.map((a) => {
                 const strained = Number(a.open_cases) > 10
@@ -230,8 +239,8 @@ export default function Operations() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="between"><h2 style={{ margin: 0 }}>Case outcomes (past period)</h2>
+      <div className="card ops-outcomes-card">
+        <div className="between"><h2 style={{ margin: 0 }}>Investigation results</h2>
           <span className="dim" style={{ fontSize: 12 }}>{decided} completed investigations</span></div>
         <div className="outcome-bar" style={{ marginTop: 12 }}>
           {outcomes.map((o) => (
@@ -244,12 +253,13 @@ export default function Operations() {
           {outcomes.map((o) => (
             <span key={o.outcome} style={{ fontSize: 12.5 }}>
               <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: outColour(o.outcome), marginRight: 6, verticalAlign: -1 }} />
-              {o.outcome.replace(/_/g, ' ').toLowerCase()}: <strong>{o.n}</strong>{' '}
+              {outcomeLabel(o.outcome)}: <strong>{o.n}</strong>{' '}
               <span className="dim">({Math.round((Number(o.n) / decided) * 100)}%)</span>
             </span>
           ))}
           {!outcomes.length && <span className="dim">No cases decided yet.</span>}
         </div>
+      </div>
       </div>
     </div>
   )

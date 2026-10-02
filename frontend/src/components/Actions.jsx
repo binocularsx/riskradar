@@ -42,11 +42,11 @@ const STEPS = {
   'Verify quickly, then clear': [
     'Check the timeline — is the pattern consistent with what this customer normally does?',
     'No customer call needed unless something else looks wrong.',
-    'Record false positive. That answer is training data, so recording it is the useful part.',
+    'Record that no fraud was found. This helps improve future alerts.',
   ],
   'Contact the customer to verify': [
     'Call the number on file and confirm the transactions were theirs.',
-    'If confirmed legitimate, record false positive.',
+    'If confirmed legitimate, record that no fraud was found.',
     'If they did not make them, record confirmed fraud and raise a recall.',
   ],
   'Review the timeline, then contact the customer if it continues': [

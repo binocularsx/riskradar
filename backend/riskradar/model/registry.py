@@ -79,10 +79,24 @@ class ModelBundle:
         overhead, thirty-nine tree-ensemble evaluations deep — which alone would
         have put NFR-001 out of reach. Batched, the same work is one matrix.
         """
+        expected = len(MODEL_FEATURE_NAMES)
+        if len(vector) != expected:
+            raise ValueError(
+                f"model vector has {len(vector)} values; expected {expected}"
+            )
+
+        # Explanation metadata must never prevent a valid score from being
+        # recorded. Older stub rows carried the twelve-feature baseline from
+        # feature spec 1.2 even after the model input grew. Missing baseline
+        # values are neutral for that constant model; surplus legacy values are
+        # irrelevant to the current feature vector.
+        reference = [float(v) for v in baseline[:expected]]
+        reference.extend([0.0] * (expected - len(reference)))
+
         probes = [list(vector)]
         for i in range(len(MODEL_FEATURE_NAMES)):
             probe = list(vector)
-            probe[i] = baseline[i]
+            probe[i] = reference[i]
             probes.append(probe)
 
         predictions = self.scorer.predict_proba_many(probes)

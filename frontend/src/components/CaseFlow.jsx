@@ -3,6 +3,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, when } from '../lib/api'
 import { Banner } from './ui'
 
+const STAGE_NAME = { NEW: 'Not started', IN_REVIEW: 'Being reviewed', ESCALATED: 'With a specialist', AWAITING_APPROVAL: 'Waiting for approval', AWAITING_CLOSE: 'Ready to close', CLOSED: 'Completed' }
+const NEXT_STEP = {
+  NEW: 'A team member needs to start reviewing this case.',
+  IN_REVIEW: 'Complete the review steps and suggest a final result.',
+  ESCALATED: 'The specialist team is reviewing this case.',
+  AWAITING_APPROVAL: 'A team lead needs to check the suggested result.',
+  AWAITING_CLOSE: 'A team lead needs to complete this case.',
+  CLOSED: 'This case is complete.',
+}
+
 /**
  * Where this case is on its way to resolution, and the work that gets it there (D83).
  *
@@ -60,6 +70,8 @@ export default function CaseFlow({ caseId, user, onChanged }) {
 
   return (
     <div className="card caseflow">
+      <h3>Investigation workflow</h3>
+      <p className="investigation-section-sub">Complete the review steps and record what happened.</p>
       {error && <Banner kind="error">{error}</Banner>}
       {done && <Banner kind="ok">{done}</Banner>}
 
@@ -67,15 +79,15 @@ export default function CaseFlow({ caseId, user, onChanged }) {
         {flow.stages.map((s, i) => (
           <div key={s.key} className={`stage ${s.state}`}>
             <span className="dot">{s.state === 'done' ? '✓' : i + 1}</span>
-            <span className="name">{s.label}</span>
+            <span className="name">{STAGE_NAME[s.key] || s.label}</span>
           </div>
         ))}
       </div>
-      <p className="next"><strong>Next:</strong> {flow.next}
+      <p className="next"><strong>Next:</strong> {NEXT_STEP[stage] || flow.next}
         {flow.assignee && <span className="dim"> · with {flow.assignee}</span>}</p>
       {flow.escalation && (
         <div className="escalation-note">
-          Escalated to <strong>{flow.escalation.to === 'INFOSEC' ? 'InfoSec (retired)' : flow.escalation.to === 'FRAUD_OPS' ? 'Fraud Ops' : 'a team, since handed back'}</strong> by{' '}
+          Sent to <strong>{flow.escalation.to === 'INFOSEC' ? 'the Security team' : flow.escalation.to === 'FRAUD_OPS' ? 'the Fraud team' : 'a specialist team'}</strong> by{' '}
           {flow.escalation.by} · {when(flow.escalation.at)}
           <div className="muted">“{flow.escalation.reason}”</div>
         </div>
@@ -97,9 +109,9 @@ export default function CaseFlow({ caseId, user, onChanged }) {
                   s.action === 'OUTCOME' ? (
                     <span className="dim" style={{ fontSize: 12 }}>{s.status === 'done' ? 'recorded' : 'use the buttons at the bottom'}</span>
                   ) : s.action === 'ESCALATE' ? (
-                    s.status === 'done' ? <span className="dim" style={{ fontSize: 12 }}>escalated</span> :
+                    s.status === 'done' ? <span className="dim" style={{ fontSize: 12 }}>sent for help</span> :
                       can('cases:escalate') && <button onClick={() => { setEscalating(true); setTarget('FRAUD_OPS') }} disabled={!mine || busy}
-                                                       title={mine ? '' : 'Take the case first'}>Escalate…</button>
+                                                       title={mine ? '' : 'Take the case first'}>Send for help…</button>
                   ) : spec && (
                     <button onClick={() => { setOpen(s.action); setResult(''); setDetail('') }}
                             disabled={!mine || busy} title={mine ? spec.label : 'Take the case first'}>
@@ -150,7 +162,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
       {!closedOrWaiting && stage !== 'ESCALATED' && can('cases:escalate') && !escalating && (
         <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
           <button onClick={() => setEscalating(true)} disabled={!mine || busy} title={mine ? '' : 'Take the case first'}>
-            Escalate…
+            Send for help…
           </button>
           {canReturn && <button onClick={() => setReturning(true)} disabled={busy}>Hand back with findings…</button>}
         </div>
@@ -158,7 +170,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
 
       {escalating && (
         <div className="dialog">
-          <h3>Escalate this case</h3>
+          <h3>Send this case for specialist help</h3>
           <div className="segmented" style={{ marginBottom: 10 }}>
             {Object.entries(catalog.escalation).map(([k, v]) => (
               <button key={k} className={target === k ? 'on' : ''} onClick={() => setTarget(k)}>{v.label}</button>
@@ -166,7 +178,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
           </div>
           <div className="grid cols-2">
             <div>
-              <div className="stat-label">Escalate to {esc.label} when</div>
+              <div className="stat-label">Send to {esc.label} when</div>
               <ul className="tight">{esc.when.map((t) => <li key={t}>{t}</li>)}</ul>
             </div>
             <div>
@@ -181,7 +193,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
                     onClick={() => act(() => api.escalate(caseId, target, reason.trim()),
                                        `Escalated to ${esc.label}. It has left your queue; you will get it back with their findings.`)
                       .then(() => { setEscalating(false); setReason('') })}>
-              Escalate to {esc.label}
+              Send to {esc.label}
             </button>
             <button className="ghost" onClick={() => setEscalating(false)}>Cancel</button>
           </div>
@@ -192,7 +204,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
         <div className="dialog">
           <h3>Hand back to {flow.escalation?.by}</h3>
           <p className="dim" style={{ fontSize: 12, marginTop: 0 }}>
-            The case goes back to the analyst who escalated it, with your findings as a note. They record the outcome.
+            The case goes back to the team member who requested help, with your findings as a note. They record the result.
           </p>
           <textarea style={{ width: '100%', minHeight: 60 }} value={findings} onChange={(e) => setFindings(e.target.value)}
                     placeholder="What you found (required)" />

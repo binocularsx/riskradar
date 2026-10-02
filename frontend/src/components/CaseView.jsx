@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ago, api, clock, naira, nairaShort, when } from '../lib/api'
+import { api, clock, naira, nairaShort, when } from '../lib/api'
 import { Attributions, Banner, PolicyTrace, RiskBadge, SignalPill } from './ui'
 import RegulatoryClocks from './RegulatoryClocks'
 import WatchlistFlag from './WatchlistFlag'
@@ -9,6 +9,7 @@ import Why, { VersusNormal } from './Why'
 import { CONSEQUENCES, OwnershipBanner, RoleCapability } from './Actions'
 import CaseFlow from './CaseFlow'
 import LinkGraph from './LinkGraph'
+import { CaseIcon } from './CaseWorkspace'
 
 /**
  * The investigation panel — everything needed to decide, on one screen, in the
@@ -30,7 +31,7 @@ const OUTCOMES = [
   { key: 'CONFIRMED_FRAUD', label: 'Confirmed fraud', sub: 'The customer did not make these',
     cls: 'confirm', hint: '1',
     icon: ['M12 9v4', 'M12 17h.01', 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'] },
-  { key: 'FALSE_POSITIVE', label: 'False positive', sub: 'Legitimate, wrongly flagged',
+  { key: 'FALSE_POSITIVE', label: 'No fraud found', sub: 'The activity is legitimate',
     cls: 'dismiss', hint: '2',
     icon: ['M20 6 9 17l-5-5'] },
   { key: 'INCONCLUSIVE', label: "Can't tell", sub: 'Not enough evidence either way',
@@ -61,7 +62,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
   }, [caseId])
 
   const dispose = useCallback(async (outcome) => {
-    if (!caseId || busy) return
+    if (!caseId || busy || summary.assignee_id !== user.id || summary.state === 'CLOSED' || summary.outcome || !can('cases:submit_outcome')) return
     if (note.trim().length < MIN_RATIONALE) {
       setError(`Say why in at least ${MIN_RATIONALE} characters: a lead has to decide on something.`)
       return
@@ -83,7 +84,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
 
   const take = useCallback(async () => {
     setBusy(true)
-    try { await api.startReview(caseId); onDisposed?.({}) }
+    try { await api.startReview(caseId); onDisposed?.({ refreshOnly: true }) }
     catch (e) { setError(e.message) } finally { setBusy(false) }
   }, [caseId, onDisposed])
 
@@ -91,7 +92,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
   // a mouse three times per case.
   useEffect(() => {
     function onKey(e) {
-      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return
+      if (e.target.closest('input, textarea, select, button, a, [contenteditable]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const found = OUTCOMES.find((o) => o.hint === e.key)
       if (found && can('cases:submit_outcome')) { e.preventDefault(); dispose(found.key) }
@@ -120,125 +121,36 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
     <>
       {flash && <Banner kind="ok">{flash}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
-
-      {/* ------------------------------------------------- 1. who owns it */}
-      {!closed && (
-        <OwnershipBanner summary={summary} user={user} onTake={take} busy={busy} />
-      )}
-
-      {/* Figma case detail: Case Summary (left) + Why This Alert Fired (right) */}
-      <div className="grid cols-2" style={{ marginBottom: 14 }}>
-        <div className="card">
-          <h3>Case summary</h3>
-          <div className="kv">
-            <div className="kv-row"><span className="kv-k">Customer</span><span className="kv-v">{summary.customer_name || 'Unknown customer'}</span></div>
-            <div className="kv-row"><span className="kv-k">Opened</span><span className="kv-v">{ago(summary.opened_at)}</span></div>
-            <div className="kv-row"><span className="kv-k">Flagged transactions</span><span className="kv-v">{summary.alert_count}</span></div>
-            <div className="kv-row"><span className="kv-k">Destinations</span><span className="kv-v">{summary.distinct_beneficiaries}</span></div>
-            <div className="kv-row"><span className="kv-k">State</span><span className="kv-v" style={{ textTransform: 'capitalize' }}>{summary.state.replace(/_/g, ' ').toLowerCase()}</span></div>
-            <div className="kv-row"><span className="kv-k">SLA</span><span className="kv-v"><span className={`sla sla-${summary.sla_state}`}>{clock(summary.sla_remaining_minutes)}</span></span></div>
-            <div className="kv-row"><span className="kv-k">Exposure</span><span className="kv-v" style={{ color: 'var(--critical)', fontWeight: 700 }}>{naira(summary.exposure_minor)}</span></div>
-            {summary.attempted_minor > summary.exposure_minor && (
-              <div className="kv-row"><span className="kv-k">Attempted</span><span className="kv-v">{nairaShort(summary.attempted_minor)} <span className="dim">(rest declined)</span></span></div>
-            )}
-          </div>
-          <div className="row wrap" style={{ marginTop: 12, gap: 6 }}>
-            {summary.new_device && <span className="pill escalate">new device</span>}
-            {summary.declined_count > 0 && <span className="pill">{summary.declined_count} declined</span>}
-            {(summary.channels || []).map((c) => (
-              <span className="tag" key={c}>{c.replace(/_/g, ' ').toLowerCase()}</span>
-            ))}
-          </div>
-        </div>
-
-        <Why
-          alerts={detail?.alerts}
-          features={first?.features}
-          signals={first?.signals}
-          amountMinor={first?.amount_minor}
-          authResult={detail?.alerts?.length === 1 ? first?.auth_result : null}
-        />
-      </div>
-
-      {/* what should I do now */}
-      <div className={`recommend ${rec.urgency || ''}`}>
-        <div className="k">
-          Recommended
-          {rec.urgency === 'now' ? ' · act now'
-            : rec.urgency === 'soon' ? ' · within the hour' : ' · routine'}
-        </div>
-        <div className="action">{rec.action}</div>
-        <div className="because">{rec.because}</div>
-      </div>
-
-      {/* ------------------------- what the bank owes, once the customer reports */}
-      {detail && (
-        <RegulatoryClocks
-          caseRow={detail.case}
-          clocks={detail.clocks || []}
-          user={user}
-          onUpdated={(r) => setDetail((d) => ({ ...d, case: r.case, clocks: r.clocks }))}
-        />
-      )}
-      {detail && (
-        <WatchlistFlag
-          caseRow={detail.case}
-          flags={detail.watchlist || []}
-          identity={detail.identity}
-          industryFlags={detail.industry_flags || []}
-          user={user}
-          onUpdated={() => api.caseDetail(caseId).then(setDetail).catch((e) => setError(e.message))}
-        />
-      )}
-
-      {/* D84: who else shares this customer's destinations and devices */}
-      <div style={{ marginBottom: 14 }}>
-        <LinkGraph caseId={summary.id} />
-      </div>
-
-      {/* D97: restrictions a lead approved, and what the bank did about them */}
-      <Restrictions caseId={summary.id} />
-
-
-      {/* ------------------------------------ 4. what the activity looks like */}
-      {detail?.timeline?.length > 0 && <Timeline items={detail.timeline} />}
-
-      <div className="grid cols-2" style={{ marginTop: 14 }}>
-        <VersusNormal alerts={detail?.alerts} features={first?.features}
-                        amountMinor={first?.amount_minor} />
-
-        <div className="card">
-          <h3>This customer's accounts</h3>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr><th>Account</th><th>Product</th><th className="num">30d count</th><th className="num">30d value</th></tr>
-              </thead>
-              <tbody>
-                {detail?.baseline?.map((b) => (
-                  <tr key={b.account_token}>
-                    <td className="mono dim">…{b.account_token.slice(-8)}</td>
-                    <td className="muted">{b.product_type.toLowerCase()}</td>
-                    <td className="num">{b.txn_30d}</td>
-                    <td className="num">{nairaShort(b.approved_value_30d_minor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="dim" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
-            One customer, {detail?.baseline?.length ?? '—'} account
-            {detail?.baseline?.length === 1 ? '' : 's'}. The case follows the
-            <strong> customer</strong>, so an attacker moving between their own
-            accounts stays one investigation rather than becoming three.
-          </p>
-        </div>
-      </div>
-
-      {/* --------------------------------------------- 5. the detail, on demand */}
-      <div className="card" style={{ marginTop: 14 }}>
-        <h3>Every flagged transaction on this case</h3>
-        {!detail && <p className="dim">Loading…</p>}
+      <div className="investigation-layout">
+        <div className="investigation-main">
+          <section className="card investigation-overview" aria-labelledby="overview-title">
+            <div className="investigation-section-head"><h3 id="overview-title">Case overview</h3><span className="investigation-section-icon"><CaseIcon name="person" /></span></div>
+            <div className="investigation-customer">
+              <span className="investigation-avatar">{(summary.customer_name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('')}</span>
+              <div><strong>{summary.customer_name || 'Unknown customer'}</strong><span>Customer under review</span></div>
+            </div>
+            <dl className="investigation-fields">
+              <div><dt>Opened</dt><dd title={when(summary.opened_at)}>{summary.opened_at ? when(summary.opened_at) : '—'}</dd></div>
+              <div><dt>Review deadline</dt><dd>{closed ? <span className="pill">Case completed</span> : summary.sla_remaining_minutes == null ? 'Not available' : <span className={`sla sla-${summary.sla_state}`}>{clock(summary.sla_remaining_minutes)}</span>}</dd></div>
+              <div><dt>Flagged transactions</dt><dd>{summary.alert_count ?? '—'}<span className="investigation-field-hint">transactions to review</span></dd></div>
+              <div><dt>Destinations</dt><dd>{summary.distinct_beneficiaries ?? '—'}<span className="investigation-field-hint">linked beneficiaries</span></dd></div>
+              <div><dt>Money at risk</dt><dd className="investigation-field-money">{naira(summary.exposure_minor)}</dd></div>
+              <div><dt>Assigned to</dt><dd>{mine ? user.display_name || 'You' : summary.assignee_name || (summary.assignee_id ? 'Another investigator' : 'Unassigned')}</dd></div>
+            </dl>
+            <div className="investigation-overview-tags">
+              {summary.new_device && <span className="pill escalate">New device</span>}
+              {summary.declined_count > 0 && <span className="pill">{summary.declined_count} declined</span>}
+              {(summary.channels || []).map((channel) => <span className="tag" key={channel}>{channel.replace(/_/g, ' ').toLowerCase()}</span>)}
+              {summary.attempted_minor > summary.exposure_minor && <span className="tag">{nairaShort(summary.attempted_minor)} attempted</span>}
+            </div>
+          </section>
+          <Why alerts={detail?.alerts} features={first?.features} signals={first?.signals}
+               amountMinor={first?.amount_minor} authResult={detail?.alerts?.length === 1 ? first?.auth_result : null} />
+      <section className="card investigation-transactions" id="investigation-evidence" aria-labelledby="evidence-title">
+        <div className="investigation-section-head"><h3 id="evidence-title">Flagged transactions</h3><span className="pill">{summary.alert_count} alerts</span></div>
+        <p className="investigation-section-sub">The activity behind this case, with its signals and decision trail.</p>
+        {!detail && <p className="dim">{error ? 'Evidence could not be loaded.' : 'Loading evidence…'}</p>}
+        {detail && !detail.alerts?.length && <p className="dim">No flagged transactions are available for this case.</p>}
         {detail?.alerts?.map((a) => (
           <div key={a.id} style={{ padding: '11px 0', borderBottom: '1px solid var(--bg-2)' }}>
             <div className="between">
@@ -278,10 +190,84 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
             </details>
           </div>
         ))}
+      </section>
+
+          {detail?.timeline?.length > 0 && <Timeline items={detail.timeline} />}
+      <div className="investigation-comparison">
+        <VersusNormal alerts={detail?.alerts} features={first?.features}
+                        amountMinor={first?.amount_minor} />
+
+        <div className="card">
+          <h3>This customer's accounts</h3>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr><th>Account</th><th>Product</th><th className="num">30d count</th><th className="num">30d value</th></tr>
+              </thead>
+              <tbody>
+                {detail?.baseline?.map((b) => (
+                  <tr key={b.account_token}>
+                    <td className="mono dim">…{b.account_token.slice(-8)}</td>
+                    <td className="muted">{b.product_type.toLowerCase()}</td>
+                    <td className="num">{b.txn_30d}</td>
+                    <td className="num">{nairaShort(b.approved_value_30d_minor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="dim" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
+            One customer, {detail?.baseline?.length ?? '—'} account
+            {detail?.baseline?.length === 1 ? '' : 's'}. The case follows the
+            <strong> customer</strong>, so an attacker moving between their own
+            accounts stays one investigation rather than becoming three.
+          </p>
+        </div>
       </div>
 
+
+          <details className="investigation-connections">
+            <summary><span><CaseIcon name="transfer" /> Connections &amp; related activity</span><span className="investigation-expand-hint">Explore network</span></summary>
+      <div style={{ marginBottom: 14 }}>
+        <LinkGraph caseId={summary.id} />
+      </div>
+
+
+          </details>
+        </div>
+        <aside className="investigation-sidebar" aria-label="Case management and safeguards">
+          <section className="card investigation-management">
+            <div className="investigation-section-head"><h3>Case management</h3><span className="investigation-section-icon"><CaseIcon name="cases" /></span></div>
+            {rec.action && !closed && <div className={`recommend ${rec.urgency || ''}`}>
+              <div className="k">Recommended next step{rec.urgency === 'now' ? ' · Act now' : rec.urgency === 'soon' ? ' · Within the hour' : ''}</div>
+              <div className="action">{rec.action}</div><div className="because">{rec.because}</div>
+            </div>}
+            {!closed ? <OwnershipBanner summary={summary} user={user} onTake={take} busy={busy} />
+              : <div className="investigation-completed"><CaseIcon name="check" /><div><strong>Investigation completed</strong><p>{summary.outcome ? summary.outcome.replace(/_/g, ' ').toLowerCase() : 'This case has been closed.'}</p></div></div>}
+          </section>
+      {detail && (
+        <RegulatoryClocks
+          caseRow={detail.case}
+          clocks={detail.clocks || []}
+          user={user}
+          onUpdated={(r) => setDetail((d) => ({ ...d, case: r.case, clocks: r.clocks }))}
+        />
+      )}
+      {detail && (
+        <WatchlistFlag
+          caseRow={detail.case}
+          flags={detail.watchlist || []}
+          identity={detail.identity}
+          industryFlags={detail.industry_flags || []}
+          user={user}
+          onUpdated={() => api.caseDetail(caseId).then(setDetail).catch((e) => setError(e.message))}
+        />
+      )}
+
+
+          <Restrictions caseId={summary.id} />
       {(detail?.notes?.length > 0 || detail?.history?.length > 0) && (
-        <div className="card" style={{ marginTop: 14 }}>
+        <div className="card investigation-history">
           <h3>Notes and history</h3>
           {detail.notes.map((n) => (
             <div key={n.id} style={{ padding: '7px 0', borderBottom: '1px solid var(--bg-2)' }}>
@@ -299,31 +285,30 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         </div>
       )}
 
-      {/* D83: where the case is, the steps as a checklist, escalation and closing.
 
-          Kept second to last, immediately above the decision: an analyst should
-          have read the summary, the clocks, the network, the timeline and every
-          flagged transaction before anything asks them to act. It used to sit
-          fourth, so the case prompted for a decision before it had finished
-          explaining itself. */}
-      <div style={{ marginBottom: 14 }}>
-        <CaseFlow caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
-      </div>
-
-      {/* --------------------------------------------- 6. record the answer */}
+        </aside>
+        <section className="investigation-resolution" id="investigation-resolution" aria-label="Workflow and outcome">
+          <div className="investigation-workflow">
+        <CaseFlow key={`${summary.id}:${summary.assignee_id}`} caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
+          </div>
       {!closed && !summary.outcome && (
-        <div className="disposition">
+        <div className="disposition" aria-labelledby="outcome-title">
           <div className="disposition-head">
             <div>
-              <strong style={{ fontSize: 13.5 }}>Propose an outcome</strong>
+              <h3 id="outcome-title">Investigation outcome</h3>
               <span className="dim" style={{ fontSize: 12 }}>
-                {' '}— a lead who did not write it decides (D93).
+                A different team lead reviews your proposal.
               </span>
             </div>
             <button className="ghost" onClick={() => onSkip?.()}>Skip <kbd>n</kbd></button>
           </div>
 
           <RoleCapability user={user} />
+<label className="investigation-note-label" htmlFor="investigation-rationale">Your findings</label>
+          <textarea id="investigation-rationale" className="decision-note"
+                    placeholder={`Why? The lead decides on this — at least ${MIN_RATIONALE} characters.`}
+                    value={note} onChange={(e) => setNote(e.target.value)} />
+
 
           {can('cases:submit_outcome') ? (
             <div className="decisions">
@@ -348,7 +333,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
             </div>
           ) : (
             <p className="dim" style={{ fontSize: 12.5, margin: '6px 0 0' }}>
-              Your role can investigate and escalate, but not propose a fraud outcome.
+              Your role can investigate and send a case for specialist help, but cannot propose a final result.
             </p>
           )}
 
@@ -356,13 +341,10 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
             {hovered
               ? CONSEQUENCES[hovered]
               : mine
-                ? 'Hover a decision to see exactly what it causes. To escalate instead, use Escalate… in the steps above.'
+                ? 'Hover over a decision to see what it does. To ask a specialist for help, use Send for help in the steps above.'
                 : 'Take the case above before proposing an outcome.'}
           </p>
 
-          <textarea className="decision-note"
-                    placeholder={`Why? The lead decides on this — at least ${MIN_RATIONALE} characters.`}
-                    value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="decision-foot">
             <span className={note.trim().length >= MIN_RATIONALE ? 'ok-text' : 'dim'}>
               {note.trim().length}/{MIN_RATIONALE}
@@ -371,6 +353,8 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           </div>
         </div>
       )}
+        </section>
+      </div>
     </>
   )
 }
@@ -409,7 +393,7 @@ function Restrictions({ caseId }) {
     <div className="card" style={{ marginBottom: 14 }}>
       <h3>Restrictions asked of the bank</h3>
       <p className="dim" style={{ fontSize: 12, marginTop: 0 }}>
-        Advisory (D7): Risk Radar recommends and records; the bank applies and confirms.
+        Risk Radar suggests the action and records it. The bank applies and confirms it.
       </p>
       {items.map((r) => {
         const [text, cls] = RESTRICTION_STATUS[r.status] || [r.status, '']

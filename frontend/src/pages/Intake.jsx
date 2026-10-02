@@ -100,23 +100,23 @@ export default function Intake() {
       <div className="kpis">
         <Kpi label={`Received · last ${minutes}m`} value={Number(w.received).toLocaleString()}
              note={`${perMinute}/min now · ${nairaShort(w.received_value_minor)} · ${w.credits} credits`} />
-        <Kpi label="Waiting to be scored" value={q.waiting.toLocaleString()} tone={q.waiting > 200 ? 'warn' : ''}
+        <Kpi label="Waiting for a risk check" value={q.waiting.toLocaleString()} tone={q.waiting > 200 ? 'warn' : ''}
              note={q.waiting ? `oldest ${Math.round(q.oldest_seconds)}s` : 'nothing waiting'} />
-        <Kpi label="Time to a decision" value={`${q.scoring_lag_seconds_p50}s`}
+        <Kpi label="Risk-check time" value={`${q.scoring_lag_seconds_p50}s`}
              note={`95% within ${q.scoring_lag_seconds_p95}s · target 2s`} tone={q.scoring_lag_seconds_p95 > 2 ? 'warn' : ''} />
         <Kpi label={`Flagged · last ${minutes}m`} value={Number(w.alerts).toLocaleString()}
              note={`${w.scored ? ((100 * w.alerts) / w.scored).toFixed(2) : '0'}% of scored · ${nairaShort(w.flagged_value_minor)} at risk`} />
         <Kpi label={`Cases · last ${minutes}m`} value={`${w.cases_opened} opened`} note={`${w.cases_closed} closed`} />
-        <Kpi label="Expected next hour" value={`~${data.expected_next_hour.alerts} alerts`}
+        <Kpi label="Expected in the next hour" value={`~${data.expected_next_hour.alerts} alerts`}
              note={`~${data.expected_next_hour.received.toLocaleString()} transactions, at ${data.expected_next_hour.basis}`} />
-        <Kpi label="Alert budget today" value={b.alerts_per_day ? `${b.alerts_today} / ${b.alerts_per_day}` : b.alerts_today}
+        <Kpi label="Daily review limit" value={b.alerts_per_day ? `${b.alerts_today} / ${b.alerts_per_day}` : b.alerts_today}
              tone={overBudget ? 'warn' : ''}
              note={b.alerts_per_day ? `on pace for ${b.projected_today} by midnight` : 'no budget set'} />
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
-        <div className="between"><h2 style={{ margin: 0 }}>Arriving, scored and flagged, minute by minute</h2>
-          <span className="dim" style={{ fontSize: 12 }}>bars: alerts raised</span></div>
+        <div className="between"><h2 style={{ margin: 0 }}>Transactions received, checked and flagged</h2>
+          <span className="dim" style={{ fontSize: 12 }}>orange bars show alerts</span></div>
         <div style={{ height: 260, marginTop: 10 }}>
           <ResponsiveContainer>
             <ComposedChart data={data.series} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -136,22 +136,22 @@ export default function Intake() {
 
       <div className="grid cols-3" style={{ marginTop: 14 }}>
         <div className="card">
-          <h3>How risky the scored traffic was</h3>
+          <h3>Risk level of checked transactions</h3>
           <Bars rows={levels} total={scoredTotal} colour={(r) => LEVEL_COLOR[r.key.toUpperCase()]} />
           <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
             Medium and above can raise an alert; the budget decides how many do.
           </p>
         </div>
         <div className="card">
-          <h3>What fired</h3>
+          <h3>Why alerts were raised</h3>
           <Bars rows={data.signals.map((s) => ({ key: s.code, label: s.code.replace(/_/g, ' ').toLowerCase(), n: s.n }))}
                 colour={(r) => (data.signals.find((s) => s.code === r.key)?.power === 'SUPPRESS' ? 'var(--low)' : 'var(--high)')} />
           <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
-            Rules raise (orange) or lower (green) a score; alerts without a rule are the model's judgement.
+            Orange reasons increase concern; green reasons reduce it. Some alerts come from the detection system itself.
           </p>
         </div>
         <div className="card">
-          <h3>Who acts on it</h3>
+          <h3>Who handles it</h3>
           <Bars rows={Object.entries(data.by_disposition).map(([k, n]) => ({ key: k, label: TIER[k] || k, n }))} />
           <h3 style={{ marginTop: 16 }}>By channel</h3>
           <Bars rows={data.by_channel.map((c) => ({ key: c.channel, label: `${c.channel.replace(/_/g, ' ').toLowerCase()}${c.alerted ? ` · ${c.alerted} flagged` : ''}`, n: c.n }))} />
@@ -178,7 +178,7 @@ export default function Intake() {
           <table>
             <thead>
               <tr><th>Received</th><th>Customer</th><th className="num">Amount</th><th>Channel</th>
-                <th>Risk</th><th className="num">Score</th><th>Rules</th><th>Case</th></tr>
+                <th>Risk</th><th className="num">Risk score</th><th>Alert reasons</th><th>Case</th></tr>
             </thead>
             <tbody>
               {data.recent.map((t) => (

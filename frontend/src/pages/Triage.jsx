@@ -21,13 +21,13 @@ import CaseView from '../components/CaseView'
  */
 
 const SCOPES = [
-  { key: 'all', label: 'Everything' },
+  { key: 'all', label: 'All cases' },
   { key: 'mine', label: 'Mine' },
-  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'unassigned', label: 'Not assigned' },
   { key: 'breaching', label: 'Past due' },
-  { key: 'machine', label: 'Machine actions' },
-  { key: 'escalated', label: 'Escalated' },
-  { key: 'awaiting_close', label: 'Awaiting close' },
+  { key: 'machine', label: 'System handled' },
+  { key: 'escalated', label: 'Sent for help' },
+  { key: 'awaiting_close', label: 'Ready to close' },
 ]
 
 export default function Triage({ user }) {
@@ -166,7 +166,7 @@ export default function Triage({ user }) {
                   <strong style={{ color: 'var(--text-2)' }}>
                     Your {items.length} case{items.length === 1 ? '' : 's'}.
                   </strong>{' '}
-                  {s?.unassigned ?? 0} more are waiting in the shared pool —
+                  {s?.unassigned ?? 0} more are waiting for someone to take them —
                   press <strong>Start reviewing</strong> to take the next one.
                 </>
               ) : scope === 'unassigned' ? (
@@ -200,7 +200,7 @@ export default function Triage({ user }) {
                     <span className="tag">{c.distinct_beneficiaries} payees</span>
                   )}
                   {c.new_device && <span className="tag">new device</span>}
-                  {c.handling === 'MACHINE' && <span className="pill suppress" title="The system took the action; confirm with the customer">machine action</span>}
+                  {c.handling === 'MACHINE' && <span className="pill suppress" title="The system took the action; confirm with the customer">handled by system</span>}
                   {c.watchlisted && <span className="pill escalate" title="24-hour watch-list flag in force">flagged</span>}
                   {c.industry_flagged && <span className="pill override" title="Another institution flagged this BVN">flagged elsewhere</span>}
                   {c.regulatory_clock && (
@@ -215,7 +215,7 @@ export default function Triage({ user }) {
             ))}
             {!items.length && (
               <div className="empty">
-                <div className="big">Queue clear</div>
+                <div className="big">No cases waiting</div>
                 Nothing matches this filter.
               </div>
             )}

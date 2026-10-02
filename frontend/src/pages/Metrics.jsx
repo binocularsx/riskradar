@@ -37,6 +37,9 @@ const DRIVER_NAME = {
   SANCTIONED_BENEFICIARY: 'Sanctioned destination',
   KNOWN_MULE_BENEFICIARY: 'Known mule destination',
 }
+const RESULT_NAME = { CONFIRMED_FRAUD: 'Fraud confirmed', FALSE_POSITIVE: 'No fraud found', INCONCLUSIVE: 'More review needed' }
+const STATE_NAME = { NEW: 'Not started', IN_REVIEW: 'Being reviewed', ESCALATED: 'With a specialist', AWAITING_CLOSE: 'Ready to close', CLOSED: 'Completed' }
+const EFFECT_NAME = { ESCALATE: 'Raises risk', SUPPRESS: 'Lowers risk', OVERRIDE: 'Sets the result' }
 
 /**
  * False alarms per rule and per model, from analyst outcomes (D69d, base PRD
@@ -46,10 +49,9 @@ function FalseAlarmsByDriver({ detection }) {
   const rows = detection.by_driver
   return (
     <div className="card" style={{ marginTop: 16 }}>
-      <h2>False alarms by rule and by model</h2>
+      <h2>Alerts cleared as safe, by reason</h2>
       <p className="dim" style={{ fontSize: 12, marginTop: -6 }}>
-        Decided cases in the last {detection.window_days} days, by what put them in front of an
-        analyst. A case where two rules fired counts for both; "can't tell" is left out of the rate.
+        Completed cases from the last {detection.window_days} days, grouped by the reason the alert was raised.
       </p>
       {rows.length ? (
         <div className="table-scroll">
@@ -314,22 +316,22 @@ export default function Metrics({ user }) {
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
         <Stat
-          label="Alert budget"
+          label="Daily review limit"
           value={`${budget.last_24h} / ${budget.per_day}`}
           note={`${Math.round(utilisation * 100)}% of a ${budget.per_day}/day desk`}
         />
         <Stat
-          label="p95 decision latency"
+          label="Decision time"
           value={data.latency.p95_ms != null ? `${data.latency.p95_ms} ms` : '—'}
           note={`NFR-001 target < 2000 ms · ${scored} scored`}
         />
         <Stat
-          label="Queue depth"
+          label="Items waiting"
           value={data.queue.depth}
           note={`oldest ${Math.round(Number(data.queue.oldest_seconds))}s`}
         />
         <Stat
-          label="Active model"
+          label="Detection system"
           value={data.active_model ? data.active_model.name : 'none'}
           note={data.active_model
             ? `${data.active_model.version} · ${data.active_model.calibration}`
@@ -341,9 +343,9 @@ export default function Metrics({ user }) {
           (D11d), so it gets a bar rather than a buried figure. */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="between" style={{ marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Alert budget utilisation</h2>
+          <h2 style={{ margin: 0 }}>Daily review limit</h2>
           <span className={utilisation > 1 ? 'risk risk-HIGH' : 'muted'}>
-            {utilisation > 1 ? 'over budget' : 'within budget'}
+            {utilisation > 1 ? 'more than the team can review' : 'within the team limit'}
           </span>
         </div>
         <div className="bar-track">
@@ -353,9 +355,8 @@ export default function Metrics({ user }) {
           }} />
         </div>
         <p className="dim" style={{ fontSize: 12, marginBottom: 0, marginTop: 8 }}>
-          Every threshold in the system was derived backwards from this number —
-          three analysts at twenty-five reviewable alerts each. Going over it does not
-          mean more fraud; it means the desk cannot keep up.
+          This limit is based on three team members reviewing twenty-five alerts each day.
+          Going over it means new work is arriving faster than the team can review it.
         </p>
       </div>
 
@@ -400,33 +401,33 @@ export default function Metrics({ user }) {
         </div>
 
         <div className="card">
-          <h2>Rules fired</h2>
+          <h2>Reasons alerts were raised</h2>
           {data.signal_frequency.length ? (
             <table>
-              <thead><tr><th>Signal</th><th>Power</th><th className="num">Count</th></tr></thead>
+              <thead><tr><th>Reason</th><th>Effect</th><th className="num">Count</th></tr></thead>
               <tbody>
                 {data.signal_frequency.map((s) => (
                   <tr key={s.code}>
-                    <td className="mono">{s.code}</td>
-                    <td><span className={`pill ${String(s.power).toLowerCase()}`}>{s.power}</span></td>
+                    <td>{DRIVER_NAME[s.code] || s.code.replace(/_/g, ' ').toLowerCase()}</td>
+                    <td><span className={`pill ${String(s.power).toLowerCase()}`}>{EFFECT_NAME[s.power] || s.power}</span></td>
                     <td className="num">{s.n}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          ) : <Empty>No rules fired in this window.</Empty>}
+          ) : <Empty>No alert reasons recorded in this period.</Empty>}
         </div>
 
         <div className="card">
-          <h2>Case outcomes</h2>
+          <h2>Investigation results</h2>
           {data.case_outcomes.length ? (
             <table>
               <thead><tr><th>Outcome</th><th>State</th><th className="num">Cases</th></tr></thead>
               <tbody>
                 {data.case_outcomes.map((o, i) => (
                   <tr key={i}>
-                    <td>{o.outcome.replace(/_/g, ' ')}</td>
-                    <td className="muted">{o.state.replace(/_/g, ' ')}</td>
+                    <td>{RESULT_NAME[o.outcome] || o.outcome.replace(/_/g, ' ').toLowerCase()}</td>
+                    <td className="muted">{STATE_NAME[o.state] || o.state.replace(/_/g, ' ').toLowerCase()}</td>
                     <td className="num">{o.n}</td>
                   </tr>
                 ))}
@@ -434,9 +435,7 @@ export default function Metrics({ user }) {
             </table>
           ) : <Empty>No cases yet.</Empty>}
           <p className="dim" style={{ fontSize: 11, marginBottom: 0 }}>
-            Confirmed fraud and false positive are analyst-labelled ground truth —
-            the only non-circular labels this system produces, and the eventual
-            exit from simulator-only training.
+            These results come from completed reviews by the investigation team.
           </p>
         </div>
       </div>
@@ -446,7 +445,7 @@ export default function Metrics({ user }) {
       {detection && <FalseAlarmsByDriver detection={detection} />}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h2>Decision mix</h2>
+        <h2>System decisions</h2>
         <div className="table-scroll">
           <table>
             <thead><tr><th>Risk level</th><th>Decision</th><th className="num">Decisions</th></tr></thead>

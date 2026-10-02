@@ -1,10 +1,26 @@
 /** Small shared pieces. */
 
+export function SegmentedProgress({ value, label, color = 'var(--accent)' }) {
+  const percent = Math.min(100, Math.max(0, Number(value) || 0))
+  return (
+    <div className="segmented-progress" role="meter" aria-label={label}
+         aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
+         style={{ '--progress-color': color }}>
+      {Array.from({ length: 5 }, (_, index) => (
+        <span className="progress-step" key={index} aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.max(0, percent * 5 - index * 100))}%` }} />
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export function RiskBadge({ level }) {
   if (!level) return <span className="dim">—</span>
   // The word is always present, never colour alone: a queue that can only be
   // triaged by hue is a queue part of the team cannot triage.
-  return <span className={`risk risk-${level}`}>{level}</span>
+  const label = String(level).charAt(0).toUpperCase() + String(level).slice(1).toLowerCase()
+  return <span className={`risk risk-${level}`}>{label}</span>
 }
 
 export function SignalPill({ signal }) {

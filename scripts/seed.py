@@ -24,7 +24,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 import psycopg  # noqa: E402
 
 from riskradar.config import settings  # noqa: E402
-from riskradar.features.spec import FEATURE_SPEC_VERSION  # noqa: E402
+from riskradar.features.spec import FEATURE_SPEC_VERSION, MODEL_FEATURE_NAMES  # noqa: E402
 from riskradar.security.passwords import (  # noqa: E402
     hash_password,
     new_totp_secret,
@@ -260,7 +260,7 @@ def main() -> None:
                         json.dumps(
                             {
                                 "note": "constant 0.02; replaced in week 3 by the trained model",
-                                "feature_baseline": [0.0] * 12,
+                                "feature_baseline": [0.0] * len(MODEL_FEATURE_NAMES),
                             }
                         ),
                     ),

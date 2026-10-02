@@ -46,15 +46,15 @@ const ICONS = {
 function nav(permissions) {
   const can = (p) => permissions.includes(p)
   return [
-    can('cases:read') && { to: '/live', label: 'Live desk', section: 'Surveillance & cases', hint: 'what is arriving, what is waiting, what to expect' },
-    can('cases:read') && { to: '/triage', label: 'Case queue', section: 'Surveillance & cases', hint: 'work the queue' },
-    can('cases:read') && { to: '/tracker', label: 'Case tracker', section: 'Surveillance & cases', hint: 'every case, from alert to closed' },
-    can('cases:approve_fraud') && { to: '/approvals', label: 'Approvals', section: 'Surveillance & cases', hint: "decide other people's fraud findings" },
-    can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Intelligence', hint: 'is the desk coping' },
-    can('cases:read') && { to: '/transactions', label: 'Search', section: 'Intelligence', hint: 'find a transaction' },
-    can('metrics:read') && { to: '/analytics', label: 'Analytics', section: 'Intelligence', hint: 'volume and model' },
-    can('admin:rules') && { to: '/admin', label: 'Administration', section: 'Governance', hint: 'rules and thresholds' },
-    { to: '/roles', label: 'Who does what', section: 'Governance', hint: 'the four roles, and their limits' },
+    can('cases:read') && { to: '/live', label: 'New activity', section: 'Cases', hint: 'See new transactions and alerts' },
+    can('cases:read') && { to: '/triage', label: 'Cases to review', section: 'Cases', hint: 'Review cases that need attention' },
+    can('cases:read') && { to: '/tracker', label: 'All cases', section: 'Cases', hint: 'See every case and its current stage' },
+    can('cases:approve_fraud') && { to: '/approvals', label: 'Decisions to approve', section: 'Cases', hint: 'Check and approve investigation results' },
+    can('metrics:read') && { to: '/operations', label: 'Dashboard', section: 'Reports', hint: 'See workload and performance' },
+    can('cases:read') && { to: '/transactions', label: 'Find a transaction', section: 'Reports', hint: 'Search transaction records' },
+    can('metrics:read') && { to: '/analytics', label: 'Performance reports', section: 'Reports', hint: 'See transaction and detection trends' },
+    can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
+    { to: '/roles', label: 'Access and roles', section: 'Settings', hint: 'See what each team member can do' },
   ].filter(Boolean)
 }
 
@@ -97,7 +97,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span className="logo-tile">R</span>
+          <img className="brand-logo" src="/assets/risk-radar-logo.png" alt="" />
           <span className="brand-text">
             <span className="brand-name">Risk Intelligence</span>
             <span className="brand-tag">Institutional</span>
@@ -136,13 +136,23 @@ export default function App() {
         <header className="topbar">
           <div className="searchbar">
             <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} />
-            <input type="search" placeholder="Search cases, entities, transactions…"
+            <input type="search" placeholder="Search cases, customers, transactions..."
                    aria-label="Search" />
           </div>
           <div className="topbar-right">
-            <span className="live"><span className="live-dot on" /> System status: Nominal</span>
-            {/* The system is advisory and says so where an operator can see it. */}
-            <span className="pill" title="Risk Intelligence recommends; it does not block, hold or reverse.">Advisory</span>
+            <button className="topbar-icon" type="button" aria-label="Messages" title="Messages">
+              <Icon paths={['M4 5h16v12H7l-3 3z', 'M8 9h8', 'M8 13h5']} />
+            </button>
+            <button className="topbar-icon" type="button" aria-label="Notifications" title="Notifications">
+              <Icon paths={['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9', 'M10 21h4']} />
+            </button>
+            <div className="topbar-profile">
+              <span className="avatar">{initials(user.display_name)}</span>
+              <span className="topbar-profile-copy">
+                <strong>{user.display_name}</strong>
+                <small>{user.role.replace(/_/g, ' ').toLowerCase()}</small>
+              </span>
+            </div>
           </div>
         </header>
 

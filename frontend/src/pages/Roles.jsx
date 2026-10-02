@@ -15,19 +15,19 @@ const ROLES = [
     title: 'Fraud Analyst',
     who: 'The person who works the queue all day.',
     sees: [
-      'Triage — the worklist and the case beside it',
-      'Search — look up any transaction',
+      'Cases to review — the work assigned to them',
+      'Find a transaction — look up any transaction',
     ],
     can: [
       'Take a case from the shared pool',
       'Read every piece of evidence on it',
       'Add investigation notes',
-      'Record the outcome: confirmed fraud, false positive, or inconclusive',
-      'Escalate to InfoSec or to Fraud Ops',
+      'Suggest a result: fraud confirmed, no fraud found, or more review needed',
+      'Send a case to the Security or Fraud team for help',
     ],
     cannot: [
       'Close a case — a second pair of eyes closes it',
-      'Change any rule or threshold',
+      'Change how the system detects risk',
       'Create or manage users',
     ],
     why: 'They record what happened; somebody else signs it off. That separation '
@@ -39,7 +39,7 @@ const ROLES = [
     who: 'Runs the desk. Signs off the analysts’ work.',
     sees: [
       'Everything an analyst sees',
-      'Operations — backlog, ageing, team load, false-positive rate',
+      'Dashboard — waiting cases, time waiting, team workload and results',
     ],
     can: [
       'Everything an analyst can do',
@@ -47,7 +47,7 @@ const ROLES = [
       'See whether the desk is coping',
     ],
     cannot: [
-      'Change rules or thresholds — tuning detection is a different job',
+      'Change how the system detects risk — that is a different job',
     ],
     why: 'They are accountable for whether the queue is being cleared, which is '
        + 'why they get the operations view and nobody else on the floor does.',
@@ -57,12 +57,12 @@ const ROLES = [
     title: 'Information Security Analyst',
     who: 'Handles suspected account compromise rather than commercial loss.',
     sees: [
-      'Triage and Search',
-      'Operations',
+      'Cases to review and Find a transaction',
+      'Dashboard',
     ],
     can: [
       'Read and investigate any case',
-      'Escalate',
+      'Send a case for specialist help',
       'Add notes',
     ],
     cannot: [
@@ -79,14 +79,14 @@ const ROLES = [
     title: 'Administrator',
     who: 'Tunes the system. Never touches a case.',
     sees: [
-      'Administration — rules, thresholds, models, lists, the audit log',
-      'Operations',
-      'No queue. No case. Not even read-only.',
+      'System settings — detection rules, limits, system versions and activity records',
+      'Dashboard',
+      'No access to customer cases',
     ],
     can: [
       'Enable, disable and retune rules',
-      'Publish new threshold versions',
-      'Promote or roll back a model',
+      'Publish new risk limits',
+      'Change or restore a detection-system version',
       'Manage users and API keys',
       'Verify the audit chain',
     ],

@@ -1,111 +1,187 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { api, naira, when } from '../lib/api'
+import { api, when } from '../lib/api'
 import { Banner, RiskBadge } from '../components/ui'
+import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
 
-/**
- * Transactions (Figma "Transactions"): the searchable ledger (FR-032, D14b).
- * Alerts stream because they are few; transactions are searched because they are
- * many. Declined and reversed are first-class — a declined authorisation never
- * reaches a core ledger, which is why card testing is visible here at all.
- */
-
-const CHANNELS = ['MOBILE_APP', 'WEB', 'USSD', 'POS', 'ATM', 'AGENT', 'BRANCH', 'API']
-const RESULTS = ['APPROVED', 'DECLINED', 'FAILED', 'REVERSED']
+const CHANNELS = { MOBILE_APP: 'Mobile app', WEB: 'Web', USSD: 'USSD', POS: 'POS', ATM: 'ATM', AGENT: 'Agent', BRANCH: 'Branch', API: 'API' }
+const RESULTS = [
+  { key: '', label: 'All transactions' },
+  { key: 'APPROVED', label: 'Approved' },
+  { key: 'DECLINED', label: 'Declined' },
+  { key: 'FAILED', label: 'Failed' },
+  { key: 'REVERSED', label: 'Reversed' },
+]
+const EMPTY_FILTERS = { q: '', channel: '', auth_result: '', risk_level: '' }
+const PAGE_SIZE = 15
+const resultTone = (result) => result === 'APPROVED' ? 'ok' : ['DECLINED', 'FAILED'].includes(result) ? 'danger' : 'warn'
+const label = (value) => value ? value[0] + value.slice(1).toLowerCase() : 'Unknown'
+const amount = (t) => new Intl.NumberFormat('en-NG', {
+  style: 'currency', currency: t.currency || 'NGN', maximumFractionDigits: 2,
+}).format(Number(t.amount_minor) / 100)
 
 export default function Transactions() {
-  const [filters, setFilters] = useState({ q: '', channel: '', auth_result: '', risk_level: '' })
-  const [items, setItems] = useState([])
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const requestId = useRef(0)
+
+  useEffect(() => {
+    const timer = setTimeout(() => { setSearchTerm(filters.q.trim()); setPage(1) }, 250)
+    return () => clearTimeout(timer)
+  }, [filters.q])
 
   const search = useCallback(async () => {
-    setLoading(true)
+    const id = ++requestId.current
+    setLoading(true); setError(null)
     try {
-      const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v))
-      const data = await api.searchTransactions({ ...params, limit: 100 })
-      setItems(data.items); setError(null)
-    } catch (err) { setError(err.message) } finally { setLoading(false) }
-  }, [filters])
+      const params = Object.fromEntries(Object.entries({
+        q: searchTerm, channel: filters.channel, auth_result: filters.auth_result, risk_level: filters.risk_level,
+      }).filter(([, value]) => value))
+      // Fetch one extra row to find out whether there is another page. The API
+      // does not return a total, so do not imply that this page is the full ledger.
+      const result = await api.searchTransactions({ ...params, limit: PAGE_SIZE + 1, offset: (page - 1) * PAGE_SIZE })
+      if (id !== requestId.current) return
+      setData({ items: result.items.slice(0, PAGE_SIZE), hasNext: result.items.length > PAGE_SIZE, page })
+    } catch (err) { if (id === requestId.current) setError(err.message) }
+    finally { if (id === requestId.current) setLoading(false) }
+  }, [searchTerm, filters.channel, filters.auth_result, filters.risk_level, page])
 
-  useEffect(() => { search() }, [search])
+  useEffect(() => {
+    search()
+    return () => { requestId.current += 1 }
+  }, [search])
 
+  const set = (key, value) => { setFilters((previous) => ({ ...previous, [key]: value })); setPage(1) }
+  const reset = () => { setFilters(EMPTY_FILTERS); setSearchTerm(''); setPage(1) }
+  const items = data?.items ?? []
+  const updating = loading || filters.q.trim() !== searchTerm
+  const filtered = Object.values(filters).some(Boolean)
   const approved = items.filter((t) => t.auth_result === 'APPROVED').length
-  const declined = items.filter((t) => t.auth_result === 'DECLINED' || t.auth_result === 'FAILED').length
-  const set = (k) => (e) => setFilters({ ...filters, [k]: e.target.value })
-  const dot = (r) => (r === 'APPROVED' ? 'ok' : r === 'DECLINED' || r === 'FAILED' ? 'danger' : 'warn')
+  const declined = items.filter((t) => ['DECLINED', 'FAILED'].includes(t.auth_result)).length
+  const reversed = items.filter((t) => t.auth_result === 'REVERSED').length
+  const shownPage = data?.page ?? page
+  const start = (shownPage - 1) * PAGE_SIZE
 
   return (
-    <div className="page">
-      <div className="page-head">
+    <div className="page ops-dashboard cases-workspace transactions-workspace">
+      <div className="page-head ops-page-head">
         <div>
+          <div className="ops-eyebrow">Transaction monitoring</div>
           <h1>Transactions</h1>
-          <p className="page-sub">Every movement of value the channel and switch layer saw — approved, declined and reversed alike.</p>
+          <p className="page-sub">Trace every payment. Find the activity behind each investigation.</p>
+        </div>
+        <div className="ops-head-actions">
+          <Link className="ops-action" to="/triage">Review cases <CaseIcon name="arrow" /></Link>
+          <button className="ops-action primary" onClick={search} disabled={updating}>
+            <CaseIcon name="refresh" /> Refresh
+          </button>
         </div>
       </div>
 
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && <Banner kind="error">{error}{data && ' Previous results are still shown.'}
+        <button className="ghost" onClick={search} disabled={updating}>Retry</button>
+      </Banner>}
 
       <div className="statrow">
-        <div className="statcard"><div className="statcard-k">In view</div><div className="statcard-v">{items.length.toLocaleString()}</div></div>
-        <div className="statcard"><div className="statcard-k">Approved</div><div className="statcard-v" style={{ color: 'var(--ok)' }}>{approved.toLocaleString()}</div></div>
-        <div className="statcard"><div className="statcard-k">Declined / failed</div><div className="statcard-v danger">{declined.toLocaleString()}</div></div>
+        <CaseMetric label="Transactions in view" value={data ? items.length.toLocaleString() : null}
+          note="Current page · newest first" icon="transfer" featured />
+        <CaseMetric label="Approved" value={data ? approved.toLocaleString() : null}
+          note="Successful authorisations on this page" icon="check" tone="transaction-success" />
+        <CaseMetric label="Declined / failed" value={data ? declined.toLocaleString() : null}
+          note="Unsuccessful attempts on this page" icon="declined" tone={declined ? 'danger' : ''} />
+        <CaseMetric label="Reversed" value={data ? reversed.toLocaleString() : null}
+          note="Reversed transactions on this page" icon="reversed" />
       </div>
 
-      <div className="card" style={{ padding: 0 }}>
-        <div className="toolbar">
-          <div className="searchbar sm" style={{ width: 300 }}>
-            <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-              <circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" strokeLinecap="round" /></svg>
-            <input value={filters.q} onChange={set('q')} placeholder="Reference or customer…" />
+      <section className="card cases-panel" aria-labelledby="transactions-title">
+        <div className="cases-panel-head">
+          <div><h2 id="transactions-title">Transaction history</h2><p>Search across customers, channels and payment outcomes.</p></div>
+          <span className="transaction-load-status" role="status"><CaseIcon name="clock" />
+            {updating ? 'Updating results…' : error ? 'Update unavailable' : 'Newest first'}
+          </span>
+        </div>
+        <div className="case-tabs" role="group" aria-label="Transaction result">
+          {RESULTS.map((result) => <button key={result.key} className={filters.auth_result === result.key ? 'on' : ''}
+            aria-pressed={filters.auth_result === result.key} onClick={() => set('auth_result', result.key)}>{result.label}</button>)}
+        </div>
+        <div className="cases-filterbar transaction-filterbar">
+          <div className="searchbar cases-search">
+            <CaseIcon name="search" />
+            <input type="search" aria-label="Search transactions" placeholder="Search reference or customer…"
+              value={filters.q} onChange={(e) => setFilters((previous) => ({ ...previous, q: e.target.value }))} />
           </div>
-          <div className="row wrap" style={{ gap: 8 }}>
-            <select className="mini" value={filters.channel} onChange={set('channel')}>
+          <div className="cases-filter-actions">
+            <select aria-label="Filter by channel" value={filters.channel} onChange={(e) => set('channel', e.target.value)}>
               <option value="">All channels</option>
-              {CHANNELS.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+              {Object.entries(CHANNELS).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
             </select>
-            <select className="mini" value={filters.auth_result} onChange={set('auth_result')}>
-              <option value="">Any result</option>
-              {RESULTS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <select className="mini" value={filters.risk_level} onChange={set('risk_level')}>
-              <option value="">Any risk</option>
-              {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((l) => <option key={l} value={l}>{l}</option>)}
+            <select aria-label="Filter by risk" value={filters.risk_level} onChange={(e) => set('risk_level', e.target.value)}>
+              <option value="">All risk levels</option>
+              {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((level) => <option key={level} value={level}>{label(level)}</option>)}
             </select>
           </div>
         </div>
+        {filtered && <div className="transaction-active-filters">
+          <span>Filtered by</span>
+          {filters.q && <span className="tag">Search: {filters.q}</span>}
+          {filters.auth_result && <span className="tag">{label(filters.auth_result)}</span>}
+          {filters.channel && <span className="tag">{CHANNELS[filters.channel]}</span>}
+          {filters.risk_level && <span className="tag">{label(filters.risk_level)} risk</span>}
+          <button className="ghost" onClick={reset}>Clear filters</button>
+        </div>}
 
-        <div className="table-scroll">
-          <table className="rowtable">
-            <thead>
-              <tr>
-                <th>Time</th><th>Reference</th><th>Customer</th><th className="num">Amount</th>
-                <th>Channel</th><th>Result</th><th className="num">Score</th><th>Risk</th><th>Case</th>
-              </tr>
-            </thead>
+        <div className="table-scroll" role="region" aria-label="Scrollable transaction history" tabIndex={0} aria-busy={updating}>
+          <table className="rowtable cases-table transactions-table" aria-label="Transaction history">
+            <thead><tr>
+              <th scope="col">Transaction / Customer</th><th scope="col">Date & time</th><th scope="col" className="num">Amount</th>
+              <th scope="col">Channel</th><th scope="col">Result</th><th scope="col">Risk / Score</th><th scope="col">Linked case</th>
+            </tr></thead>
             <tbody>
-              {items.map((t) => (
-                <tr key={t.id}>
-                  <td className="mono dim" style={{ fontSize: 11.5 }}>{when(t.occurred_at)}</td>
-                  <td className="mono" style={{ color: 'var(--accent)' }}>{t.transaction_ref.slice(0, 16)}…</td>
-                  <td>{t.display_name || <span className="dim">—</span>}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>
-                    {t.direction === 'INBOUND' ? '+' : ''}{naira(t.amount_minor)}
-                  </td>
-                  <td className="muted">{t.channel.replace(/_/g, ' ').toLowerCase()}</td>
-                  <td><span className="authdot"><span className={`live-dot ${dot(t.auth_result)}`} />{t.auth_result.toLowerCase()}</span></td>
-                  <td className="num mono">{t.score_0_100 ?? '—'}</td>
-                  <td><RiskBadge level={t.risk_level} /></td>
-                  <td>{t.case_id ? <Link className="link" to={`/cases/${t.case_id}`}>CASE-{t.case_id}</Link> : <span className="dim">—</span>}</td>
-                </tr>
-              ))}
+              {items.map((t) => <tr key={t.id}>
+                <td><div className="case-customer">
+                  <span className={`case-customer-icon transaction-direction ${t.direction === 'INBOUND' ? 'inbound' : 'outbound'}`} aria-hidden="true"><CaseIcon name="arrow" /></span>
+                  <div className="transaction-identity">
+                    <span className="transaction-customer">{t.display_name || 'Unknown customer'}</span>
+                    <span className="transaction-reference" title={t.transaction_ref}>{t.transaction_ref}</span>
+                  </div>
+                </div></td>
+                <td><time className="transaction-time" dateTime={t.occurred_at} title={when(t.occurred_at)}>
+                  {t.occurred_at ? new Date(t.occurred_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                  <span className="case-cell-sub">{t.occurred_at ? new Date(t.occurred_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}</span>
+                </time></td>
+                <td className="num"><span className="transaction-amount">{t.direction === 'INBOUND' ? '+' : ''}{amount(t)}</span>
+                  <span className="case-cell-sub transaction-amount-note">{t.direction === 'INBOUND' ? 'Incoming' : t.direction === 'OUTBOUND' ? 'Outgoing' : '—'}</span></td>
+                <td><span className="transaction-channel">{CHANNELS[t.channel] || t.channel || '—'}</span></td>
+                <td><span className="authdot"><span className={`live-dot ${resultTone(t.auth_result)}`} />{label(t.auth_result)}</span>
+                  {t.decline_reason && <span className="transaction-decline-reason" title={t.decline_reason}>{t.decline_reason.replace(/_/g, ' ').toLowerCase()}</span>}</td>
+                <td><RiskBadge level={t.risk_level} /><span className="case-cell-sub">{t.score_0_100 == null ? 'Not scored' : `Score ${t.score_0_100} / 100`}</span></td>
+                <td>{t.case_id ? <Link className="transaction-case-link" to={`/cases/${t.case_id}`}>CASE-{t.case_id}<CaseIcon name="arrow" /></Link>
+                  : <span className="transaction-no-case">No linked case</span>}</td>
+              </tr>)}
             </tbody>
           </table>
-          {!items.length && <div className="empty">{loading ? 'Searching…' : 'No transactions match.'}</div>}
+          {!items.length && <div className="cases-empty" role="status">
+            <span className="cases-empty-icon"><CaseIcon name={filtered ? 'search' : 'transfer'} /></span>
+            <strong>{updating ? 'Loading transactions…' : error ? 'Unable to load transactions' : filtered ? 'No matching transactions' : 'No transactions yet'}</strong>
+            <p>{updating ? 'Finding the latest activity for this view.' : error ? 'Use Retry above to load the transaction history.' : filtered ? 'Try another reference, customer or filter.' : 'Transaction activity will appear here when it is available.'}</p>
+            {filtered && !updating && !error && <button className="ops-action" onClick={reset}>Clear filters</button>}
+          </div>}
         </div>
-        {items.length > 0 && <div className="table-foot dim">Showing {items.length} transaction{items.length === 1 ? '' : 's'}.</div>}
-      </div>
+        <div className="cases-table-foot">
+          <span>{data ? items.length ? `Showing ${start + 1}–${start + items.length} transactions` : '0 transactions' : 'Waiting for transactions'}</span>
+          <div className="cases-pagination" aria-label="Transaction pagination">
+            <button aria-label="Previous page" disabled={updating || !!error || shownPage === 1} onClick={() => setPage(shownPage - 1)}>‹</button>
+            <span>Page {shownPage}</span>
+            <button aria-label="Next page" disabled={updating || !!error || !data?.hasNext} onClick={() => setPage(shownPage + 1)}>›</button>
+          </div>
+        </div>
+      </section>
+      <p className="cases-footnote"><CaseIcon name="transfer" /> Summary counts reflect the current page. Approved, declined, failed and reversed activity is included.</p>
     </div>
   )
 }

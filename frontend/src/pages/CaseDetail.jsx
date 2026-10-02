@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { api, nairaShort } from '../lib/api'
 import { Banner, RiskBadge } from '../components/ui'
 import CaseView from '../components/CaseView'
+import { CaseIcon } from '../components/CaseWorkspace'
 
 /**
  * Case detail (Figma "CASE-1042"): the full-page investigation. The queue opens
@@ -17,61 +18,75 @@ export default function CaseDetail({ user }) {
   const navigate = useNavigate()
   const [summary, setSummary] = useState(null)
   const [error, setError] = useState(null)
+  const [revision, setRevision] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    setSummary((previous) => previous?.id === caseId ? previous : null)
+    setError(null)
     // The worklist item carries the header fields CaseView needs (exposure, SLA,
     // recommendation). Fetch across all scopes so a direct link resolves.
     api.worklist({ scope: 'all', limit: 200 })
-      .then((d) => {
+      .then(async (d) => {
         if (cancelled) return
         const found = d.items.find((c) => c.id === caseId)
         if (found) setSummary(found)
-        else setError('That case is not on the desk, or is outside what you may see.')
+        else {
+          // Completed cases and cases beyond the queue limit still have an
+          // authorised detail endpoint. Keep tracker links usable for both.
+          const detail = await api.caseDetail(caseId)
+          if (cancelled) return
+          const transactions = [...new Map(detail.alerts.map((a) => [a.transaction_id, a])).values()]
+          setSummary({
+            ...detail.case,
+            customer_name: transactions[0]?.display_name || 'Unknown customer',
+            exposure_minor: transactions.filter((a) => a.auth_result === 'APPROVED').reduce((sum, a) => sum + Number(a.amount_minor), 0),
+            attempted_minor: transactions.reduce((sum, a) => sum + Number(a.amount_minor), 0),
+            declined_count: transactions.filter((a) => a.auth_result === 'DECLINED').length,
+            channels: [...new Set(transactions.map((a) => a.channel).filter(Boolean))],
+          })
+        }
       })
       .catch((e) => !cancelled && setError(e.message))
     return () => { cancelled = true }
-  }, [caseId])
+  }, [caseId, revision])
 
   return (
-    <div className="page">
-      {/* The breadcrumb did go back, but as faint grey text nobody reads as a
-          control. A case is opened from the queue and returned to it dozens of
-          times a shift, so the way back is a button that looks like one. */}
-      <div className="crumb">
-        <button className="backbtn" onClick={() => navigate('/triage')}
-                title="Back to the case queue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-               strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M19 12H5" /><path d="m12 19-7-7 7-7" />
-          </svg>
-          Case queue
-        </button>
-        <span className="dim"> / </span><span className="mono">CASE-{caseId}</span>
-      </div>
-      {summary && (
-        <div className="case-topbar">
-          <div className="case-id-row">
-            <h1 className="mono">CASE-{caseId}</h1>
-            <RiskBadge level={summary.risk_level} />
-            <span className="pill">{(summary.state || 'open').replace(/_/g, ' ').toLowerCase()}</span>
-            {summary.handling === 'MACHINE' && <span className="pill suppress">machine action</span>}
-            {summary.watchlisted && <span className="pill escalate">flagged</span>}
+    <div className="page ops-dashboard cases-workspace case-detail-workspace">
+      <header className="investigation-header">
+        <div className="investigation-header-main">
+          <div>
+            <nav className="investigation-breadcrumb" aria-label="Breadcrumb">
+              <Link to="/triage">Cases</Link><span aria-hidden="true">/</span><span>CASE-{caseId}</span>
+            </nav>
+            <h1>Case investigation</h1>
+            <p>Review the evidence, record your findings and move the case forward.</p>
           </div>
-          <div className="case-exposure">
-            <span className="dim">Exposure</span>
-            <strong>{nairaShort(summary.exposure_minor)}</strong>
+          <div className="ops-head-actions">
+            <Link className="ops-action" to="/triage">Back to queue</Link>
+            {summary && <a className="ops-action primary" href="#investigation-resolution">
+              {summary.state === 'CLOSED' || summary.outcome ? 'View workflow' : 'Review outcome'}<CaseIcon name="arrow" />
+            </a>}
           </div>
         </div>
-      )}
-      {error && <Banner kind="error">{error}</Banner>}
-      {!error && !summary && <p className="muted">Loading case…</p>}
+        {summary && <div className="investigation-header-meta">
+          <div className="investigation-case-label"><CaseIcon name="cases" /><strong>CASE-{caseId}</strong>
+            <RiskBadge level={summary.risk_level} />
+            <span className="pill">{(summary.state || 'open').replace(/_/g, ' ').toLowerCase()}</span>
+            {summary.handling === 'MACHINE' && <span className="pill suppress">System handled</span>}
+            {summary.watchlisted && <span className="pill escalate">Watchlisted</span>}
+          </div>
+          <div className="investigation-header-exposure"><span>Money at risk</span><strong>{nairaShort(summary.exposure_minor)}</strong></div>
+        </div>}
+      </header>
+      {error && <Banner kind="error">{error} <button className="ghost" onClick={() => setRevision((r) => r + 1)}>Retry</button></Banner>}
+      {!error && !summary && <div className="card cases-empty" role="status"><CaseIcon name="cases" /><strong>Loading investigation…</strong><p>Gathering the case summary and supporting evidence.</p></div>}
       {summary && (
         <CaseView
           summary={summary}
           user={user}
           onDisposed={(result) => {
-            if (result?.refreshOnly) return
+            if (result?.refreshOnly) { setRevision((r) => r + 1); return }
             // Outcome recorded or case closed → return to the queue.
             navigate('/triage')
           }}
