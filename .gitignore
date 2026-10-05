@@ -28,3 +28,17 @@ ml/artifacts/datasets/*.jsonl
 ml/artifacts/datasets/*.log
 ml/artifacts/*.log
 .vs/
+
+# Ire's Nigerian-dataset analysis (archive/ire-ml-v1): local data and model files
+data/raw/*
+data/processed/*
+data/public/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/public/.gitkeep
+models/*.pkl
+models/*.joblib
+# manual archives dropped into data/ are never committed
+*.rar
+*.zip
+*.7z

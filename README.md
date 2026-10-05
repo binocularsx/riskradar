@@ -216,3 +216,18 @@ The suite runs against real PostgreSQL rather than a mock or SQLite: `SKIP
 LOCKED`, `LISTEN`/`NOTIFY` and the `audit_log` grant have no meaning on any other
 engine, so a suite that avoided Postgres would be testing a different system than
 the one that ships.
+
+---
+
+## ML history and the Nigerian-dataset analysis
+
+Before the branches were joined, the ML work on the ElectricSheep Nigerian
+dataset lived on its own line (tagged `archive/ire-ml-v1`). What is kept:
+
+- `docs/updates/ml-progress-update-1..5` — the record, including update 5, the
+  correction that the Nigerian file's labels carry no detectable signal
+  (ROC-AUC about 0.59; independently logged as D81a).
+- `ml/analysis/` — the scripts and notebooks behind that finding.
+- `ml/archive/` — a second feature package and model contract that the live
+  system does **not** use. The live feature contract is
+  `backend/riskradar/features/` (spec in `spec.py`).
