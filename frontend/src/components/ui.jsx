@@ -1,6 +1,6 @@
 /** Small shared pieces. */
 
-import { DECISION, MEASURE, RULE, RULE_EFFECT, say } from '../lib/words'
+import { DECISION, HOLD_REASON, MEASURE, RULE, RULE_EFFECT, say } from '../lib/words'
 
 export function SegmentedProgress({ value, label, color = 'var(--accent)' }) {
   const percent = Math.min(100, Math.max(0, Number(value) || 0))
@@ -132,6 +132,16 @@ export function PolicyTrace({ trace }) {
           {step.step === 'override' && (
             <><strong>{say(RULE, step.code)}</strong> set it straight to <RiskBadge level={step.to} />.
               This rule always wins, whatever the model or the other rules say.</>
+          )}
+          {step.step === 'budget' && (
+            step.verdict === 'DEFER'
+              ? <>It was held back for later, because {say(HOLD_REASON, step.reason)}.</>
+              : ({
+                  WITHIN_BUDGET: "It went to the team straight away, within today's review limit.",
+                  MANDATORY: 'It went to the team straight away: this kind of alert is always raised, whatever the daily limit.',
+                  MACHINE: 'Risk Radar handled it automatically, so it did not count against the daily review limit.',
+                  NOT_ENFORCED: 'It went to the team straight away (the daily review limit is switched off).',
+                }[step.reason] || 'It went to the team straight away.')
           )}
           {step.step === 'final' && (
             <>Final risk <RiskBadge level={step.level} />: {say(DECISION, step.decision).toLowerCase()}
