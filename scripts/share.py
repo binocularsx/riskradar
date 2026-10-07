@@ -4,6 +4,12 @@
     python scripts/share.py       # build the console, serve it, open the tunnel
     python scripts/share.py --stop
 
+People open the console on Vercel (riskradar-ml.vercel.app); Vercel forwards
+its API calls to this PC through the tunnel. Each start writes the tunnel's new
+address into frontend/vercel.json on the branch Vercel deploys from (through
+the GitHub API, as whoever `gh` is logged in as) and Vercel redeploys; pass
+--no-vercel to skip that and use the tunnel address directly.
+
 This PC becomes the server. The built console is served by `vite preview` on
 port 4173, which forwards the console's own calls to the API on port 8000, and
 `cloudflared` gives that one address a public HTTPS hostname. One address for
@@ -63,6 +69,60 @@ def find_cloudflared() -> str | None:
     return None
 
 
+REPO = os.environ.get("RISKRADAR_GITHUB_REPO", "binocularsx/riskradar")
+VERCEL_BRANCH = os.environ.get("RISKRADAR_VERCEL_BRANCH", "integration")
+VERCEL_URL = os.environ.get("RISKRADAR_VERCEL_URL", "https://riskradar-ml.vercel.app")
+VERCEL_FILE = "frontend/vercel.json"
+DESTINATION = re.compile(r"https://[^/\"]+(?=/(?:v1/:path\*|health)\")")
+
+
+def point_vercel(address: str) -> bool:
+    """Make the Vercel site forward its API calls to this tunnel.
+
+    The console on Vercel calls /v1 and /health on its own address, and
+    frontend/vercel.json forwards those to the API. A quick tunnel's address
+    changes every time it starts, so the file on the branch Vercel deploys from
+    is updated through the GitHub API (no local checkout is touched) and Vercel
+    redeploys on its own. Nothing is written when the address is already right.
+    """
+    gh = shutil.which("gh") or r"C:\Program Files\GitHub CLI\gh.exe"
+    path = f"repos/{REPO}/contents/{VERCEL_FILE}"
+    got = subprocess.run([gh, "api", f"{path}?ref={VERCEL_BRANCH}"], capture_output=True, text=True)
+    if got.returncode:
+        say("vercel", f"could not read {VERCEL_FILE}: {got.stderr.strip()[:200]}")
+        return False
+    meta = json.loads(got.stdout)
+    import base64
+
+    current = base64.b64decode(meta["content"]).decode("utf-8")
+    updated = DESTINATION.sub(address, current)
+    if updated == current:
+        say("vercel", "already forwards to this tunnel")
+        return True
+    put = subprocess.run(
+        [gh, "api", "--method", "PUT", path,
+         "-f", "message=Point Vercel at the current tunnel address (scripts/share.py)",
+         "-f", f"content={base64.b64encode(updated.encode('utf-8')).decode('ascii')}",
+         "-f", f"sha={meta['sha']}", "-f", f"branch={VERCEL_BRANCH}"],
+        capture_output=True, text=True)
+    if put.returncode:
+        say("vercel", f"could not update {VERCEL_FILE}: {put.stderr.strip()[:200]}")
+        return False
+    say("vercel", f"pointed at the tunnel on {VERCEL_BRANCH}; redeploying")
+    return True
+
+
+def wait_for_vercel(address: str, timeout_s: int = 300) -> bool:
+    """Wait until the Vercel site's /health is answered by this tunnel's API."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if http_ok(f"{VERCEL_URL}/health") and http_ok(f"{address}/health"):
+            # Both answer; the Vercel one only can once the new deployment is live.
+            return True
+        time.sleep(10)
+    return False
+
+
 def http_ok(url: str) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=4) as r:
@@ -100,6 +160,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--stop", action="store_true", help="close the tunnel and stop serving the console")
     parser.add_argument("--no-build", action="store_true", help="serve the last build as it is")
+    parser.add_argument("--no-vercel", action="store_true",
+                        help="open the tunnel but leave the Vercel site pointing where it was")
     args = parser.parse_args()
     print("\nRisk Radar - sharing from this PC\n")
     if args.stop:
@@ -144,9 +206,20 @@ def main() -> None:
     if not address:
         sys.exit(f"  the tunnel did not report an address; see {LOGS / 'tunnel.log'}")
     STATE.write_text(json.dumps({"pids": pids, "url": address}), encoding="utf-8")
+    say("tunnel", address)
 
-    print(f"\n  public address    {address}")
-    print("  it can take up to a minute before the address answers everywhere\n")
+    if not args.no_vercel:
+        for _ in range(30):  # a new quick tunnel takes a few seconds to answer
+            if http_ok(f"{address}/health"):
+                break
+            time.sleep(2)
+        if point_vercel(address):
+            say("vercel", "waiting for the new deployment...")
+            ready = wait_for_vercel(address)
+            say("vercel", "live" if ready else f"not answering yet; check {VERCEL_URL} in a minute")
+
+    print(f"\n  open the console  {VERCEL_URL}")
+    print("  (Vercel serves the console and forwards its API calls to this PC)\n")
     print("  who gets in      anyone with the address reaches the login page; every")
     print("                   account needs its password and MFA code (python scripts/codes.py)")
     print("  stays up while   this PC is on, awake and online")
