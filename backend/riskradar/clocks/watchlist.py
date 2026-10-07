@@ -213,7 +213,21 @@ def place(conn: Any, *, case: dict[str, Any], user_id: int, reason: str, hours: 
         payload={"flag_id": flag_id, "hours": hours, "expires_at": expires.isoformat(), "reason": reason,
                  "scope": "BVN" if bvn else "CUSTOMER", "shared_with_industry": bvn is not None},
     )
+    # D109f: the flag obliges the bank to contact the customer, and contacting
+    # customers is the support team's job, not the desk's. Same transaction, so
+    # a flag can never exist without support having been asked.
+    from .. import reporting
+    reporting.create_contact_request(conn, case, contact_by=expires, reason=reason)
     return describe(_get(conn, flag_id), now)
+
+
+def record_contact_for_case(conn: Any, *, case_id: int, user_id: int, outcome: str) -> dict[str, Any]:
+    """D109f: support records the contact against the case it was asked about."""
+    rows = _fetch(conn, f"SELECT {FLAG_COLUMNS} FROM subject_watchlist w WHERE w.case_id = %s "
+                        "ORDER BY w.placed_at DESC LIMIT 1", (case_id,))
+    if not rows:
+        raise WatchlistError(404, "this case has no watch flag")
+    return record_contact(conn, flag_id=rows[0]["id"], user_id=user_id, outcome=outcome)
 
 
 def record_contact(conn: Any, *, flag_id: int, user_id: int, outcome: str) -> dict[str, Any]:

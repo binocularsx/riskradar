@@ -14,12 +14,25 @@ from fastapi import HTTPException
 
 from riskradar.api.routers import cases as cases_router
 from riskradar.api.schemas import MilestoneIn, ReportIn
+from riskradar.cases import reports
 from riskradar.clocks import sweep as clock_sweep
 from riskradar.clocks.calendar import LAGOS, Calendar, Holiday, easter_sunday, observed
 from riskradar.clocks.engine import ClockDef, evaluate, most_urgent, parse_policy
 from riskradar.worker.scoring import system_user_id
 
 from conftest import login
+
+
+def _report(case_id, body, *, user, conn):
+    """D109e: reports reach the desk from support; this is the path they take
+    once they arrive, which is what starts the clocks."""
+    try:
+        reports.start_clocks(conn, case_id=case_id, user=user, reported_at=body.reported_at, channel=body.channel,
+                             counterparty_institution=body.counterparty_institution, note=body.note)
+    except reports.ReportError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
+    case = conn.execute("SELECT * FROM cases WHERE id = %s", (case_id,)).fetchone()
+    return {"case": dict(case), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
 
 EASTER_2026 = Calendar([Holiday(date(2026, 4, 3), "Good Friday"), Holiday(date(2026, 4, 6), "Easter Monday")])
 
@@ -173,13 +186,13 @@ def test_the_migration_ships_an_active_policy_and_a_calendar(conn):
 def test_report_starts_clocks_once(conn, case_id):
     analyst = _user(conn, "analyst@riskradar.local", ANALYST)
     reported = datetime.now(timezone.utc) - timedelta(minutes=5)
-    out = cases_router.record_report(case_id, ReportIn(reported_at=reported, channel="CONTACT_CENTRE"),
+    out = _report(case_id, ReportIn(reported_at=reported, channel="CONTACT_CENTRE"),
                                      user=analyst, conn=conn)
     assert out["case"]["clock_policy_version"] == 1
     assert {c["code"]: c["state"] for c in out["clocks"]}["NOTIFY_COUNTERPARTY"] == "RUNNING"
 
     with pytest.raises(HTTPException) as again:
-        cases_router.record_report(case_id, ReportIn(reported_at=reported, channel="BRANCH"),
+        _report(case_id, ReportIn(reported_at=reported, channel="BRANCH"),
                                    user=analyst, conn=conn)
     assert again.value.status_code == 409
 
@@ -192,7 +205,7 @@ def test_milestones_guard_their_order(conn, case_id):
         cases_router.record_milestone(case_id, MilestoneIn(milestone="ACKNOWLEDGED"), user=analyst, conn=conn)
     assert before_report.value.status_code == 400
 
-    cases_router.record_report(case_id, ReportIn(reported_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    _report(case_id, ReportIn(reported_at=datetime.now(timezone.utc) - timedelta(hours=1),
                                                  channel="MOBILE_APP"), user=analyst, conn=conn)
     with pytest.raises(HTTPException) as unnamed:
         cases_router.record_milestone(case_id, MilestoneIn(milestone="COUNTERPARTY_NOTIFIED"), user=analyst, conn=conn)
@@ -214,7 +227,7 @@ def test_milestones_guard_their_order(conn, case_id):
 def test_sweep_records_escalates_and_audits_a_breach_once(conn, case_id):
     analyst = _user(conn, "analyst@riskradar.local", ANALYST)
     system = system_user_id(conn)
-    cases_router.record_report(case_id, ReportIn(reported_at=datetime.now(timezone.utc) - timedelta(minutes=40),
+    _report(case_id, ReportIn(reported_at=datetime.now(timezone.utc) - timedelta(minutes=40),
                                                  channel="CONTACT_CENTRE"), user=analyst, conn=conn)
 
     actions = [a for a in clock_sweep.sweep(conn, system_user_id=system) if a["case_id"] == case_id]
@@ -231,7 +244,7 @@ def test_sweep_records_escalates_and_audits_a_breach_once(conn, case_id):
 
 def test_sweep_does_not_reopen_a_closed_case(conn, case_id):
     analyst = _user(conn, "analyst@riskradar.local", ANALYST)
-    cases_router.record_report(case_id, ReportIn(reported_at=datetime.now(timezone.utc) - timedelta(hours=2),
+    _report(case_id, ReportIn(reported_at=datetime.now(timezone.utc) - timedelta(hours=2),
                                                  channel="BRANCH"), user=analyst, conn=conn)
     conn.execute("UPDATE cases SET state = 'CLOSED', outcome = 'INCONCLUSIVE', closed_at = now() WHERE id = %s",
                  (case_id,))
@@ -240,10 +253,18 @@ def test_sweep_does_not_reopen_a_closed_case(conn, case_id):
     assert conn.execute("SELECT state FROM cases WHERE id = %s", (case_id,)).fetchone()["state"] == "CLOSED"
 
 
-def test_report_endpoint_refuses_a_naive_timestamp(client):
-    login(client, "analyst@riskradar.local", "Analyst#2026")
-    r = client.post("/v1/cases/1/report", json={"reported_at": "2026-09-14T10:00:00", "channel": "BRANCH"})
+def test_report_endpoint_refuses_a_naive_timestamp(client, api_headers):
+    r = client.post("/v1/support/reports", headers=api_headers, json={
+        "support_ticket_ref": "SUP-1", "customer_id": "c", "transaction_refs": ["x"],
+        "reported_at": "2026-09-14T10:00:00", "channel": "BRANCH"})
     assert r.status_code == 422
+
+
+def test_the_desk_no_longer_records_a_report(client):
+    """D109e: reports come from support, with the customer record."""
+    login(client, "analyst@riskradar.local", "Analyst#2026")
+    r = client.post("/v1/cases/1/report", json={"reported_at": "2026-09-14T10:00:00+01:00", "channel": "BRANCH"})
+    assert r.status_code == 410
 
 
 def test_clock_policy_endpoint(client):

@@ -96,7 +96,7 @@ def recommend(
     # A deterministic veto fired. Nothing about this is probabilistic.
     if "SANCTIONED_BENEFICIARY" in signals:
         return Recommendation(
-            action="Send to Information Security (InfoSec) and block payments to this recipient",
+            action="Recommend support blocks payments to this recipient",
             because="The recipient is on the sanctions list. This is an exact match, "
                     "not a judgement call.",
             urgency="now",
@@ -104,7 +104,7 @@ def recommend(
         )
     if "KNOWN_MULE_BENEFICIARY" in signals:
         return Recommendation(
-            action="Confirm fraud and ask the receiving bank to return the money",
+            action="Confirm fraud and recommend support asks the receiving bank to return the money",
             because="This recipient was confirmed as fraudulent on an earlier case. "
                     "Money is going to an account already known to be used for fraud.",
             urgency="now",
@@ -114,7 +114,7 @@ def recommend(
     # Card testing: the card is compromised, and the card is the thing to kill.
     if "CARD_TESTING_PROBES" in signals:
         return Recommendation(
-            action="Block the card and issue a new one",
+            action="Recommend support blocks the card and issues a new one",
             because=f"{declined_count} small card payments were declined in a short time. "
                     "That is what somebody does to test a stolen card before using it.",
             urgency="now",
@@ -124,15 +124,15 @@ def recommend(
     # D82: the four added fraud types, each with the step that saves the money.
     if "SIM_SWAP_TRANSFER" in signals:
         return Recommendation(
-            action="Hold further transfers and contact the customer another way, not on the phone number on file",
+            action="Recommend support holds further transfers and contacts the customer another way, not on the phone number on file",
             because=f"₦{naira:,.0f} was sent to a new recipient hours after the customer's SIM "
-                    "card was changed. Whoever holds the new SIM receives the OTPs, so do not call the "
-                    "number on file: use email, the branch or a registered alternative number.",
+                    "card was changed. Whoever holds the new SIM receives the OTPs, so support should not "
+                    "call the number on file: email, the branch or a registered alternative number instead.",
             urgency="now",
         )
     if "CARD_PRESENT_NEW_REGION_CASHOUT" in signals:
         return Recommendation(
-            action="Block the card and confirm where the customer is",
+            action="Recommend support blocks the card and confirms where the customer is",
             because=f"The card was used at one card machine after another ({declined_count} declined) "
                     "in a part of the country this customer has not used this month. A copied card "
                     "is emptied like this before the owner notices; a traveller rarely behaves this way.",
@@ -140,25 +140,25 @@ def recommend(
         )
     if "SCAM_BENEFICIARY_FANIN" in signals:
         return Recommendation(
-            action="Call the customer before paying out, and ask who asked them to pay",
+            action="Recommend support contacts the customer before paying out, and asks who asked them to pay",
             because=f"₦{naira:,.0f} went to a new account that several other customers also paid "
                     "today. Scammers collect money from many victims into one account like this. The customer made the "
-                    "payment themselves, so ask about the call or message that prompted it, then "
-                    "notify the receiving bank to place a hold.",
+                    "payment themselves, so support should ask about the call or message that prompted "
+                    "it, and ask the receiving bank to place a hold.",
             urgency="now",
         )
     if "DORMANT_ACCOUNT_REACTIVATION" in signals:
         return Recommendation(
-            action="Confirm it is really the owner, in person or by video call, before letting more money go",
+            action="Recommend support confirms it is really the owner, in person or by video call, before letting more money go",
             because=f"An account unused for months suddenly sent ₦{naira:,.0f} to a new recipient. "
-                    "Check whether its phone number or email was changed recently, and by whom.",
+                    "Check the customer's record for a recent change to the phone number or email, and how it was made.",
             urgency="now",
         )
 
     # Account takeover shape: new device plus rapid outbound movement.
     if new_device and "VELOCITY_BURST_1H" in signals:
         return Recommendation(
-            action="Call the customer before any further transfer clears",
+            action="Recommend support holds further transfers and calls the customer",
             because=f"A phone or computer this customer has never used before sent ₦{naira:,.0f} "
                     f"in {alert_count} payments to {distinct_beneficiaries} recipients. "
                     "That is what it looks like when someone else has taken over the account.",
@@ -190,7 +190,7 @@ def recommend(
 
     if risk_level == "CRITICAL":
         return Recommendation(
-            action="Call the customer to check they made these payments",
+            action="Send support a heads-up, then recommend they confirm the payments with the customer",
             because=f"₦{naira:,.0f} in {alert_count} payments is rated Critical, the highest "
                     "risk level, and nothing suggests it is normal for this customer "
                     "(no regular recipient, no usual amount).",
@@ -198,7 +198,7 @@ def recommend(
         )
     if risk_level == "HIGH":
         return Recommendation(
-            action="Look through the account's recent activity, then call the customer if it continues",
+            action="Look through the account's recent activity; if it continues, recommend support calls the customer",
             because=f"₦{naira:,.0f} at risk. This is unusual for the account, but no single "
                     "warning sign is strong enough to be sure.",
             urgency="soon",
@@ -207,7 +207,7 @@ def recommend(
     return Recommendation(
         action="Keep an eye on it — no action needed unless it happens again",
         because=f"₦{naira:,.0f} at risk. Slightly unusual, but not enough to "
-                "disturb the customer about.",
+                "involve support or the customer.",
         urgency="routine",
     )
 

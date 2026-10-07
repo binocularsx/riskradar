@@ -21,7 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from ... import governance
-from ... import reporting as account_manager_reporting
+from ... import reporting as support_reporting
 from ... import restrictions as delivery
 from ...security import visibility
 from ...security.rbac import Permission
@@ -254,40 +254,74 @@ def restriction_suggestions(
             "why": f"approved payment of {r['amount_minor'] / 100:,.2f} on this case",
         })
 
+    # D109b: what the analyst used to do themselves, now asked of support. The
+    # contact comes first in support's list because every other action is
+    # easier to explain to a customer who has already been reached.
+    paid_to = sorted({r["beneficiary_token"] for r in rows
+                      if r["beneficiary_token"] and r["auth_result"] == "APPROVED"})
+    asks: list[dict[str, Any]] = []
+    for token in sorted(accounts):
+        asks.append({
+            "action": "CONTACT_CUSTOMER", "account_token": token,
+            "beneficiary_token": None, "channel": None, "transaction_ref": None,
+            "reason": f"fraud desk finding on case {case_id}",
+            "why": "support confirms with the customer what happened, on a channel the fraudster does not control",
+        })
+        if compromised or "DORMANT_ACCOUNT_REACTIVATION" in signals:
+            asks.append({
+                "action": "VERIFY_IDENTITY", "account_token": token,
+                "beneficiary_token": None, "channel": None, "transaction_ref": None,
+                "reason": f"suspected account takeover on case {case_id}",
+                "why": "someone other than the owner may be using this account",
+            })
+    for token in paid_to:
+        asks.append({
+            "action": "NOTIFY_RECEIVING_BANK", "account_token": next(iter(sorted(accounts)), None),
+            "beneficiary_token": token, "channel": None, "transaction_ref": None,
+            "reason": f"fraud desk finding on case {case_id}",
+            "why": "money on this case reached this recipient's bank; it can hold or return it",
+        })
+    # Most urgent first, so truncation at MAX_SUGGESTIONS drops the least urgent:
+    # stop the money, reach the customer, then the per-recipient and per-payment asks.
+    order = {"DEBIT_RESTRICTION": 0, "CARD_FREEZE": 1, "CONTACT_CUSTOMER": 2, "VERIFY_IDENTITY": 3,
+             "SESSION_TERMINATION": 4, "CREDENTIAL_RESET": 4, "MFA_REENROLMENT": 4,
+             "BENEFICIARY_RESTRICTION": 5, "NOTIFY_RECEIVING_BANK": 6, "TRANSACTION_REVERSAL": 7}
+    items = sorted(items + asks, key=lambda i: order.get(i["action"], 9))
+
     omitted = max(0, len(items) - MAX_SUGGESTIONS)
     items = items[:MAX_SUGGESTIONS]
     return {"items": items,
             "omitted": omitted,
             "reversible_total": len(reversible),
             "note": ("Suggested from this case's alerted transactions. Edit or remove any of "
-                     "them before submitting; a lead sets what is finally asked of the bank "
-                     "when they approve."
+                     "them before submitting; a lead sets what is finally asked of the support "
+                     "team when they approve."
                      + (f" Showing the {REVERSAL_SUGGESTION_CAP} largest of {len(reversible)} "
                         f"reversible payments." if len(reversible) > REVERSAL_SUGGESTION_CAP else "")
                      + (f" {omitted} further suggestion(s) were left out: a finding carries at "
                         f"most {MAX_SUGGESTIONS}." if omitted else ""))}
 
 
-@staff_router.get("/cases/{case_id}/account-manager-reports")
-def case_account_manager_reports(
+@staff_router.get("/cases/{case_id}/support-reports")
+def case_support_reports(
     case_id: int,
     user: dict = Depends(requires(Permission.CASES_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """Whether the customer's account manager has actually been told (D106)."""
+    """What the support team has been sent about this case, and whether it landed (D109)."""
     if not visibility.can_read(conn, user, case_id):
         raise HTTPException(404, "case not found")
-    return {"items": account_manager_reporting.for_case(conn, case_id)}
+    return {"items": support_reporting.for_case(conn, case_id)}
 
 
-@staff_router.get("/metrics/account-manager-reports")
-def account_manager_report_status(
+@staff_router.get("/metrics/support-reports")
+def support_report_status(
     user: dict = Depends(requires(Permission.METRICS_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
     """Delivery health for the reports (FR-305, as for restrictions). A report
     nobody received is worse than none, because the desk believes it landed."""
-    return account_manager_reporting.status(conn)
+    return support_reporting.status(conn)
 
 
 @staff_router.post("/restrictions/{restriction_ref}/release-request")

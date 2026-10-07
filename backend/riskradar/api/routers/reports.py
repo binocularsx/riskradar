@@ -15,10 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ...cases import reports
-from ...clocks import sweep as clock_sweep
 from ...security.rbac import Permission
-from ...worker.scoring import system_user_id
 from ..deps import get_conn, requires
 from ..schemas import CustomerReportIn
 
@@ -37,16 +34,11 @@ def report(
     user: dict = Depends(requires(Permission.CASES_REVIEW)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    try:
-        done = reports.report_payments(
-            conn, user=user, sys_uid=system_user_id(conn), transaction_refs=body.transaction_refs,
-            reported_at=body.reported_at, channel=body.channel,
-            counterparty_institution=body.counterparty_institution, note=body.note,
-        )
-    except reports.ReportError as exc:
-        raise HTTPException(exc.status, exc.detail) from exc
-    done["clocks"] = {cid: clock_sweep.clocks_for_case(conn, cid) for cid in done["cases"]}
-    return done
+    # D109e: the desk no longer records customer reports; they arrive from the
+    # support team, with the customer record, on POST /v1/support/reports.
+    raise HTTPException(410, "Customer reports now come from the support team "
+                             "(POST /v1/support/reports, with the customer record). "
+                             "The fraud desk does not record them itself.")
 
 
 @router.get("/metrics/missed")

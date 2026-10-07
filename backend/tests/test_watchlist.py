@@ -161,3 +161,27 @@ def test_watchlist_endpoint_and_case_detail_shape(client):
     items = client.get("/v1/worklist?scope=all&limit=1").json()["items"]
     if items:
         assert "watchlisted" in items[0]
+
+
+def test_placing_a_flag_asks_support_to_make_the_contact(conn, case, analyst_id):
+    """D109f: the desk flags; support contacts the customer and records it."""
+    watchlist.place(conn, case=case, user_id=analyst_id, reason="new device then five payees", hours=24)
+    asked = conn.execute("SELECT kind, payload FROM support_reports WHERE case_id = %s", (case["id"],)).fetchall()
+    assert [r["kind"] for r in asked] == ["CONTACT_REQUEST"]
+    assert asked[0]["payload"]["reason"] == "new device then five payees"
+
+    system = system_user_id(conn)
+    contacted = watchlist.record_contact_for_case(conn, case_id=case["id"], user_id=system,
+                                                  outcome="CUSTOMER_CONFIRMED_GENUINE")
+    assert contacted["contact_state"] == "CONTACTED"
+
+
+def test_the_desk_cannot_record_the_contact_itself(client):
+    login(client, "analyst@riskradar.local", "Analyst#2026")
+    r = client.post("/v1/watchlist/1/contact", json={"outcome": "CUSTOMER_CONFIRMED_GENUINE"})
+    assert r.status_code == 410 and "support" in r.text
+
+
+def test_support_contact_needs_an_api_key(client):
+    r = client.post("/v1/support/watchlist/1/contact", json={"outcome": "CUSTOMER_CONFIRMED_GENUINE"})
+    assert r.status_code == 401

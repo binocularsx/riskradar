@@ -94,15 +94,19 @@ def case_workflow(
     name = {r["id"]: r["display_name"] for r in names}
 
     done = {a["action_code"] for a in actions}
+    heads_up = bool(_rows(conn, "SELECT 1 FROM support_reports WHERE case_id = %s AND kind = 'HEADS_UP'",
+                          (case_id,)))
+    proposed = bool(_rows(conn, "SELECT 1 FROM fraud_submissions WHERE case_id = %s AND state IN "
+                                "('PENDING', 'APPROVED')", (case_id,)))
     steps = []
-    for s in workflow.steps_for(rec.get("action")):
+    for s in workflow.steps_for(rec.get("action"), reported=case["first_reported_at"] is not None):
         code = s["action"]
         status = ("done" if (code in done
-                             or (code == "OUTCOME" and case["outcome"])
-                             or (code == "ESCALATE" and case["escalated_at"]))
+                             or (code == "OUTCOME" and (case["outcome"] or proposed))
+                             or (code == "ESCALATE" and case["escalated_at"])
+                             or (code == "HEADS_UP" and heads_up))
                   else "info" if not code else "todo")
-        steps.append({**s, "status": status,
-                      "label": workflow.ACTIONS.get(code, {}).get("label")})
+        steps.append({**s, "status": status, "label": workflow.label_for(code)})
 
     milestones = [
         {"key": "OPENED", "label": "Alert opened the case", "at": case["opened_at"], "by": "Risk Radar"},
@@ -113,7 +117,7 @@ def case_workflow(
             "CASE_REVIEW_STARTED": "Review started",
             "CASE_ESCALATED": f"Escalated to {((e['payload'] or {}).get('target') or '').replace('_', ' ').title()}",
             "CASE_RETURNED": "Handed back with findings",
-            "CASE_ACTION_RECORDED": f"{workflow.ACTIONS.get((e['payload'] or {}).get('action_code'), {}).get('label', 'Action')}",
+            "CASE_ACTION_RECORDED": workflow.label_for((e['payload'] or {}).get('action_code')) or 'Action',
             "CASE_OUTCOME_SET": f"Outcome recorded: {(e['to_state'] or '').replace('_', ' ').lower()}",
             # D93: proposed, then decided by someone else.
             "FRAUD_SUBMITTED": f"{(e['to_state'] or '').replace('_', ' ').title()} proposed for approval",
@@ -189,6 +193,11 @@ def record_action(
         raise HTTPException(400, "the case is closed")
     if case["assignee_id"] != user["id"]:
         raise HTTPException(403, "take the case before recording steps on it")
+    retired = workflow.RETIRED_ACTIONS.get(body.action_code)
+    if retired:
+        # D109: the desk is not customer-facing. This is support's to do now.
+        raise HTTPException(410, f"{retired['label']}. Propose it as an action for the support team "
+                                 "in your finding instead; a lead approves it before support sees it.")
     spec = workflow.ACTIONS.get(body.action_code)
     if not spec:
         raise HTTPException(422, f"unknown action {body.action_code}")
@@ -208,18 +217,9 @@ def record_action(
         payload={"action_code": body.action_code, "result": body.result,
                  "result_label": spec["results"][body.result], "action_id": action_id},
     )
-    stamped = None
-    # Telling the receiving bank is also a regulatory milestone once the customer has reported.
-    if (body.action_code == "RECEIVING_BANK_NOTIFIED" and body.result == "DONE"
-            and case["first_reported_at"] and not case["counterparty_notified_at"]):
-        with conn.cursor() as cur:
-            cur.execute("UPDATE cases SET counterparty_notified_at = now(), "
-                        "counterparty_institution = COALESCE(counterparty_institution, %s) WHERE id = %s",
-                        (body.detail or "receiving bank", case_id))
-        chain.append(conn, actor_user_id=user["id"], action="CLOCK_COUNTERPARTY_NOTIFIED", object_type="case",
-                     object_id=case_id, payload={"via": "case action", "action_id": action_id})
-        stamped = "COUNTERPARTY_NOTIFIED"
-    return {"action_id": action_id, "milestone_stamped": stamped, "workflow": case_workflow(case_id, user, conn)}
+    # D109b: telling the receiving bank is support's now; the milestone is
+    # stamped when support confirms it (restrictions.acknowledge).
+    return {"action_id": action_id, "milestone_stamped": None, "workflow": case_workflow(case_id, user, conn)}
 
 
 @router.post("/cases/{case_id}/return")

@@ -124,7 +124,8 @@ def rec(**over):
 def test_a_veto_rule_produces_an_immediate_action():
     r = rec(signals=["SANCTIONED_BENEFICIARY"], risk_level="CRITICAL")
     assert r.urgency == "now"
-    assert "InfoSec" in r.action
+    # D109: the desk recommends to support; it never acts on the customer.
+    assert r.action.startswith("Recommend support")
     assert r.disposition_hint == "CONFIRMED_FRAUD"
 
 
@@ -142,13 +143,31 @@ def test_card_testing_recommends_killing_the_card_not_calling_the_customer():
     assert "14" in r.because
 
 
-def test_takeover_shape_recommends_contacting_the_customer():
+def test_takeover_shape_recommends_support_contacts_the_customer():
     r = rec(
         signals=["VELOCITY_BURST_1H"], new_device=True,
         exposure_minor=420_000_000, alert_count=6, distinct_beneficiaries=4,
     )
-    assert "Call the customer" in r.action
+    assert "support" in r.action and "calls the customer" in r.action
     assert r.urgency == "now"
+
+
+def test_no_recommendation_tells_the_desk_to_contact_a_customer():
+    """D109: the fraud desk is not customer-facing. Any customer contact or
+    action on the profile is recommended to support, never done by the analyst."""
+    signal_sets = [
+        ["SANCTIONED_BENEFICIARY"], ["KNOWN_MULE_BENEFICIARY"], ["CARD_TESTING_PROBES"],
+        ["SIM_SWAP_TRANSFER"], ["CARD_PRESENT_NEW_REGION_CASHOUT"], ["SCAM_BENEFICIARY_FANIN"],
+        ["DORMANT_ACCOUNT_REACTIVATION"], ["ESTABLISHED_PAYEE_NORMAL"], [],
+    ]
+    actions = [rec(signals=s).action for s in signal_sets]
+    actions += [rec(risk_level=l).action for l in ("CRITICAL", "HIGH", "MEDIUM")]
+    actions.append(rec(signals=["VELOCITY_BURST_1H"], new_device=True).action)
+    for a in actions:
+        lower = a.lower()
+        for verb in ("call the customer", "contact the customer", "block the card", "hold further", "verify"):
+            if lower.startswith(verb):
+                raise AssertionError(f"recommendation tells the desk to act on the customer: {a!r}")
 
 
 def test_suppressed_cases_are_marked_as_probably_nothing():

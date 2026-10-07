@@ -1,9 +1,11 @@
-"""D90: a customer report reaches the desk, jumps the queue, and brings in what the detector missed.
+"""D90, as amended by D109e: a customer report reaches the desk from the support
+team, jumps the queue, and brings in what the detector missed.
 
-Pinned: a reported case outranks an unreported CRITICAL one; reporting a
-payment nobody alerted on raises an alert marked as the customer's, opens the
-case, starts the clocks and rings the stream; the missed-fraud figure counts
-it; and the old per-case report endpoint takes the same path.
+Pinned: a reported case outranks an unreported CRITICAL one; support forwarding
+a payment nobody alerted on raises an alert marked as the customer's, opens the
+case, starts the clocks, records support's ticket and rings the stream; the
+customer record has to match the payments; the desk can no longer record a
+report itself; and the missed-fraud figure counts it.
 """
 
 from __future__ import annotations
@@ -80,15 +82,16 @@ def _scored_payment(client, api_headers, sample_transaction) -> dict:
 def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
         client, api_headers, sample_transaction):
     body = _scored_payment(client, api_headers, sample_transaction)
-    login(client, "analyst@riskradar.local", "Analyst#2026")
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
         last_event = c.execute("SELECT coalesce(max(id), 0) AS n FROM stream_events").fetchone()["n"]
 
-    r = client.post("/v1/reports", json={
+    r = client.post("/v1/support/reports", headers=api_headers, json={
+        "support_ticket_ref": "SUP-1001",
+        "customer_id": body["customer_id"],
         "transaction_refs": [body["transaction_ref"]],
         "reported_at": datetime.now(timezone.utc).isoformat(),
         "channel": "CONTACT_CENTRE",
-        "note": "customer did not make this payment",
+        "customer_statement": "customer did not make this payment",
     })
     assert r.status_code == 200, r.text
     out = r.json()
@@ -102,15 +105,19 @@ def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
         kinds = [e["event_type"] for e in c.execute(
             "SELECT event_type FROM stream_events WHERE id > %s", (last_event,)).fetchall()]
         assert "case_reported" in kinds and "alert" in kinds
+        ticket = c.execute("SELECT support_ticket_ref FROM cases WHERE id = %s", (case_id,)).fetchone()
+        assert ticket["support_ticket_ref"] == "SUP-1001"
 
-    # A second report of the same payment does not restart the clocks.
-    again = client.post("/v1/reports", json={
+    # A second report of the same payment does not restart the clocks, or replace the first ticket.
+    again = client.post("/v1/support/reports", headers=api_headers, json={
+        "support_ticket_ref": "SUP-1002", "customer_id": body["customer_id"],
         "transaction_refs": [body["transaction_ref"]],
         "reported_at": datetime.now(timezone.utc).isoformat(), "channel": "BRANCH"})
     assert again.status_code == 200 and again.json()["clocks_started"] == []
     assert again.json()["already_alerted"] == [body["transaction_ref"]]
 
     # It is at the top of the worklist.
+    login(client, "analyst@riskradar.local", "Analyst#2026")
     items = client.get("/v1/worklist?scope=all&limit=200").json()["items"]
     ours = next(i for i in items if i["id"] == case_id)
     assert ours["reported"] and ours["missed_by_detector"] == 1
@@ -118,16 +125,33 @@ def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
         not i["reported"] for i in items) else True
 
 
-def test_unknown_or_mixed_payments_are_refused(client, api_headers, sample_transaction):
-    login(client, "analyst@riskradar.local", "Analyst#2026")
+def test_unknown_payments_and_a_mismatched_customer_are_refused(client, api_headers, sample_transaction):
     now = datetime.now(timezone.utc).isoformat()
-    assert client.post("/v1/reports", json={"transaction_refs": ["no-such-ref"], "reported_at": now,
-                                            "channel": "WEB"}).status_code == 404
     a = _scored_payment(client, api_headers, sample_transaction)
     b = _scored_payment(client, api_headers, sample_transaction)
-    r = client.post("/v1/reports", json={"transaction_refs": [a["transaction_ref"], b["transaction_ref"]],
-                                         "reported_at": now, "channel": "WEB"})
-    assert r.status_code == 400 and "more than one" in r.text
+
+    def report(refs, customer):
+        return client.post("/v1/support/reports", headers=api_headers, json={
+            "support_ticket_ref": "SUP-9", "customer_id": customer, "transaction_refs": refs,
+            "reported_at": now, "channel": "WEB"})
+
+    assert report(["no-such-ref"], a["customer_id"]).status_code == 404
+    # D109e: the record has to match. Another customer's payment is refused by name.
+    r = report([a["transaction_ref"], b["transaction_ref"]], a["customer_id"])
+    if a["customer_id"] != b["customer_id"]:
+        assert r.status_code == 422 and b["transaction_ref"] in r.text
+    r = report([a["transaction_ref"]], "not-this-customer")
+    assert r.status_code == 422 and a["transaction_ref"] in r.text
+
+
+def test_support_needs_an_api_key_and_the_desk_cannot_record_reports(client):
+    now = datetime.now(timezone.utc).isoformat()
+    body = {"support_ticket_ref": "SUP-1", "customer_id": "c", "transaction_refs": ["x"],
+            "reported_at": now, "channel": "WEB"}
+    assert client.post("/v1/support/reports", json=body).status_code == 401
+    login(client, "analyst@riskradar.local", "Analyst#2026")
+    r = client.post("/v1/reports", json={"transaction_refs": ["x"], "reported_at": now, "channel": "WEB"})
+    assert r.status_code == 410 and "support" in r.text
 
 
 def test_the_missed_fraud_figure_answers(client):
