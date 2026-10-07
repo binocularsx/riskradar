@@ -1,267 +1,136 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-
-import { api, nairaShort } from '../lib/api'
-import { Banner, RiskBadge, SegmentedProgress } from '../components/ui'
-
-/**
- * The Fraud Ops Lead's view — and the one to put in front of a stakeholder.
- *
- * It deliberately does not answer "how good is the model". That question
- * belongs in the QA report, is answered with held-out evaluation, and changes
- * once a quarter. This screen answers the question a lead has every morning:
- * **is the desk coping?**
- *
- * Four things say whether it is: how much is waiting, how old the oldest work
- * is, who is carrying what, and how much of what we raised turned out to be
- * nothing. The last one is the honest measure of whether the thresholds are set
- * right — a desk with a 95% false-positive rate is being drowned regardless of
- * how good the detection is.
- */
+import { api, clock, nairaShort, when } from '../lib/api'
+import { usePolling } from '../lib/usePolling'
+import { RiskBadge, SegmentedProgress } from '../components/ui'
+import { CaseMetric } from '../components/CaseWorkspace'
+import ReadStatus from '../components/ReadStatus'
+import ServiceHealth, { adapterDescription } from '../components/ServiceHealth'
 
 const LEVELS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
-const outcomeLabel = (value) => ({
-  CONFIRMED_FRAUD: 'Fraud confirmed',
-  FALSE_POSITIVE: 'No fraud found',
-  INCONCLUSIVE: 'More review needed',
-}[value] || String(value).replace(/_/g, ' ').toLowerCase())
-
-/**
- * Alerts raised each hour against what the team can review in an hour. The
- * dashed line is the budget every threshold was derived from (three analysts
- * at twenty-five a day, D76); bars above it turn orange and say so in the tooltip, so
- * the overrun never relies on colour alone.
- */
-function AlertsVsCapacity({ overview }) {
-  const [tip, setTip] = useState(null)
-  const perHour = overview.alert_budget.per_day / 24
-  const byHour = {}
-  for (const r of overview.alert_volume) {
-    byHour[r.bucket] = (byHour[r.bucket] || 0) + Number(r.alerts)
-  }
-  const hours = Object.keys(byHour).sort().map((b) => ({ at: b, n: byHour[b] }))
-  if (!hours.length) return <p className="dim">No alerts in the last day.</p>
-
-  const W = 760, H = 230, P = { l: 38, r: 14, t: 16, b: 30 }
-  const max = Math.max(perHour * 1.4, ...hours.map((h) => h.n))
-  const bw = (W - P.l - P.r) / hours.length
-  const y = (v) => H - P.b - (v / max) * (H - P.t - P.b)
-  const label = (at) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  const total = hours.reduce((a, h) => a + h.n, 0)
-
-  return (
-    <div className="chart" onMouseLeave={() => setTip(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img"
-           aria-label={`${total} alerts in the last day against a capacity of ${Math.round(perHour * 24)}`}>
-        {[0, Math.round(max / 2), Math.round(max)].map((v) => (
-          <g key={v}>
-            <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="var(--line)" />
-            <text x={P.l - 8} y={y(v) + 4} textAnchor="end" fontSize="10" fill="var(--text-3)"
-                  fontFamily="var(--mono)">{v}</text>
-          </g>
-        ))}
-        {hours.map((h, i) => {
-          const over = h.n > perHour
-          return (
-            <g key={h.at}>
-              <rect x={P.l + i * bw + 2} y={y(h.n)} width={Math.max(bw - 4, 1)}
-                    height={Math.max(H - P.b - y(h.n), 0)} rx="4"
-                    fill={over ? 'var(--high)' : 'var(--accent)'} />
-              <rect x={P.l + i * bw} y={P.t} width={bw} height={H - P.t - P.b} fill="transparent"
-                    onMouseMove={(e) => {
-                      const box = e.currentTarget.ownerSVGElement.parentNode.getBoundingClientRect()
-                      setTip({ x: e.clientX - box.left, y: e.clientY - box.top, h, over })
-                    }} />
-              {i % 3 === 0 && (
-                <text x={P.l + i * bw + bw / 2} y={H - 10} textAnchor="middle" fontSize="10"
-                      fill="var(--text-3)" fontFamily="var(--mono)">{label(h.at)}</text>
-              )}
-            </g>
-          )
-        })}
-        <line x1={P.l} x2={W - P.r} y1={y(perHour)} y2={y(perHour)}
-              stroke="var(--text-2)" strokeWidth="1.5" strokeDasharray="5 4" />
-        <text x={W - P.r} y={y(perHour) - 6} textAnchor="end" fontSize="10.5" fill="var(--text-2)">capacity</text>
-      </svg>
-      {tip && (
-        <div className="chart-tip" style={{ left: tip.x, top: tip.y }}>
-          <b>{label(tip.h.at)}</b> · {tip.h.n} alert{tip.h.n === 1 ? '' : 's'}
-          {tip.over ? ' · over capacity' : ''}
-        </div>
-      )}
-    </div>
-  )
-}
 const AGE_ORDER = ['under 30m', '30m - 2h', '2h - 8h', '8h - 24h', 'over 24h']
+const OUTCOME = { CONFIRMED_FRAUD: 'Fraud confirmed', FALSE_POSITIVE: 'No fraud found', INCONCLUSIVE: 'Inconclusive' }
+const loadWork = () => api.worklist({ scope: 'all', limit: 6 })
+const duration = (minutes) => minutes == null ? '—' : minutes >= 60 ? `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m` : `${Math.round(minutes)}m`
 
-export default function Operations() {
-  const [data, setData] = useState(null)
-  const [overview, setOverview] = useState(null)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const fetch = () =>
-      api.operations()
-        .then((d) => !cancelled && setData(d))
-        .catch((e) => !cancelled && setError(e.message))
-    const fetchOverview = () =>
-      api.overview(24).then((d) => !cancelled && setOverview(d)).catch(() => {})
-    fetch(); fetchOverview()
-    const overviewTimer = setInterval(fetchOverview, 60000)
-    const timer = setInterval(fetch, 20000)
-    return () => { cancelled = true; clearInterval(timer); clearInterval(overviewTimer) }
-  }, [])
-
-  if (error) return <Banner kind="error">{error}</Banner>
-  if (!data) return <p className="muted">Loading…</p>
-
-  const backlog = LEVELS.map(
-    (l) => data.backlog.find((b) => b.risk_level === l)
-      || { risk_level: l, cases: 0, exposure_minor: 0, avg_age_minutes: 0 }
-  )
-  const totalCases = backlog.reduce((a, b) => a + Number(b.cases), 0)
-  const totalExposure = backlog.reduce((a, b) => a + Number(b.exposure_minor), 0)
-  const critical = Number(backlog.find((b) => b.risk_level === 'CRITICAL')?.cases || 0)
-
-  const ageing = AGE_ORDER.map(
-    (b) => data.ageing.find((a) => a.bucket === b) || { bucket: b, cases: 0 }
-  )
-  const maxAge = Math.max(...ageing.map((a) => Number(a.cases)), 1)
-
-  const outcomes = data.outcomes || []
-  const decided = data.decided || 1
-  const fpRate = data.false_positive_rate
-  const budgetUsed = overview ? Math.round(overview.alert_budget.utilisation * 100) : null
-  const avgWait = totalCases ? Math.round(backlog.reduce((a, b) => a + Number(b.avg_age_minutes) * Number(b.cases), 0) / totalCases) : 0
-  const outColour = (o) => o === 'CONFIRMED_FRAUD' ? 'var(--critical)' : o === 'FALSE_POSITIVE' ? 'var(--low)' : 'var(--medium)'
-
-  return (
-    <div className="page ops-dashboard">
-      <div className="page-head ops-page-head">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="page-sub">Monitor fraud activity, workload and investigation performance in real time.</p>
-        </div>
-        <div className="ops-head-actions">
-          <span className="live"><span className="live-dot on" /> Today (live)</span>
-          <Link className="ops-action secondary" to="/analytics">View reports</Link>
-          <Link className="ops-action primary" to="/triage"><span>+</span> Review cases</Link>
-        </div>
-      </div>
-
-      <div className="statrow">
-        <div className="statcard featured">
-          <div className="statcard-top"><div className="statcard-k">Open cases</div><span className="statcard-arrow">↗</span></div>
-          <div className="statcard-v">{totalCases}</div>
-          <div className="statcard-note"><span className="metric-chip">{critical}</span> need urgent review</div>
-        </div>
-        <div className="statcard">
-          <div className="statcard-top"><div className="statcard-k">Daily review limit used</div><span className="statcard-arrow">↗</span></div>
-          <div className="statcard-v accent">{budgetUsed == null ? '—' : `${budgetUsed}%`}</div>
-          <div className="statcard-note">
-            {overview ? `${overview.alert_budget.last_24h} of ${overview.alert_budget.per_day} daily` : ''}</div>
-        </div>
-        <div className="statcard">
-          <div className="statcard-top"><div className="statcard-k">Cases cleared as safe</div><span className="statcard-arrow">↗</span></div>
-          <div className={`statcard-v ${fpRate > 0.85 ? 'danger' : ''}`}>{Math.round(fpRate * 100)}%</div>
-          <div className="statcard-note">of {decided} decided cases</div>
-        </div>
-        <div className="statcard">
-          <div className="statcard-top"><div className="statcard-k">Cases waiting</div><span className="statcard-arrow">↗</span></div>
-          <div className="statcard-v">{totalCases}</div>
-          <div className="statcard-note">avg wait {avgWait >= 60 ? `${Math.round(avgWait / 60)}h` : `${avgWait} min`}</div>
-        </div>
-      </div>
-
-      <div className="grid ops-primary-grid" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <h2>New alerts and team capacity</h2>
-          <p className="dim" style={{ fontSize: 12, margin: '2px 0 12px' }}>
-            Alerts received each hour compared with how many the team can review
-            {overview ? ` (${Math.round(overview.alert_budget.per_day / 24)}/h)` : ''}.</p>
-          {overview ? <AlertsVsCapacity overview={overview} /> : <p className="dim">Loading…</p>}
-        </div>
-
-        <div className="card">
-          <div className="between"><h2 style={{ margin: 0 }}>Waiting cases by risk level</h2>
-            <span className="dim" style={{ fontSize: 12 }}>Total {totalCases} cases</span></div>
-          <div style={{ marginTop: 12 }}>
-            {backlog.map((b) => {
-              const target = data.sla_minutes[b.risk_level]
-              const over = Number(b.avg_age_minutes) > target
-              const pct = totalCases ? Math.round((Number(b.cases) / totalCases) * 100) : 0
-              return (
-                <div key={b.risk_level} style={{ marginBottom: 14 }}>
-                  <div className="between" style={{ fontSize: 12.5, marginBottom: 5 }}>
-                    <span><RiskBadge level={b.risk_level} /> <strong style={{ marginLeft: 6 }}>{b.cases} cases</strong> <span className="dim">({pct}%)</span></span>
-                    <span className={over ? 'sla sla-BREACHED' : 'sla sla-OK'}>
-                      {over ? 'overdue' : 'on time'}</span>
-                  </div>
-                  <SegmentedProgress value={pct} label={`${b.risk_level.toLowerCase()} risk: ${pct}% of waiting cases`}
-                    color={b.risk_level === 'CRITICAL' ? 'var(--critical)' : b.risk_level === 'HIGH' ? 'var(--accent)' : b.risk_level === 'MEDIUM' ? 'var(--medium)' : 'var(--low)'} />
-                  <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>
-                    Review target: {target >= 60 ? `${target / 60}h` : `${target} min`}</div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid ops-bottom-grid">
-      <div className="card" style={{ padding: 0 }}>
-        <div className="toolbar">
-          <div><strong style={{ fontSize: 14 }}>Team workload</strong>
-            <div className="dim" style={{ fontSize: 12 }}>Cases being handled now and cases completed in the last 24 hours</div></div>
-          <span className="live"><span className="live-dot on" /> {data.analysts.length} active</span>
-        </div>
-        <div className="table-scroll">
-          <table className="rowtable">
-            <thead><tr><th>Team member</th><th>Role</th><th className="num">Open cases</th><th className="num">Closed today</th><th>Work status</th></tr></thead>
-            <tbody>
-              {data.analysts.map((a) => {
-                const strained = Number(a.open_cases) > 10
-                return (
-                  <tr key={a.display_name}>
-                    <td><div className="userpair"><span className="avatar sm">{(a.display_name || '?').split(/\s+/).slice(0, 2).map((s) => s[0]).join('').toUpperCase()}</span>
-                      <span style={{ fontWeight: 560 }}>{a.display_name}</span></div></td>
-                    <td className="muted" style={{ textTransform: 'capitalize' }}>{a.role.replace(/_/g, ' ').toLowerCase()}</td>
-                    <td className="num">{a.open_cases}</td>
-                    <td className="num">{a.closed_24h}</td>
-                    <td><span className={`authdot`}><span className={`live-dot ${strained ? 'warn' : 'ok'}`} />{strained ? 'At capacity' : 'On track'}</span></td>
-                  </tr>
-                )
-              })}
-              {!data.analysts.length && <tr><td colSpan={5} className="dim" style={{ textAlign: 'center', padding: 24 }}>No active analysts.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card ops-outcomes-card">
-        <div className="between"><h2 style={{ margin: 0 }}>Investigation results</h2>
-          <span className="dim" style={{ fontSize: 12 }}>{decided} completed investigations</span></div>
-        <div className="outcome-bar" style={{ marginTop: 12 }}>
-          {outcomes.map((o) => (
-            <span key={o.outcome} className="outcome-seg"
-                  style={{ flex: Number(o.n) || 0.001, background: outColour(o.outcome) }}
-                  title={`${o.outcome.replace(/_/g, ' ').toLowerCase()}: ${o.n}`} />
-          ))}
-        </div>
-        <div className="row wrap" style={{ gap: 18, marginTop: 12 }}>
-          {outcomes.map((o) => (
-            <span key={o.outcome} style={{ fontSize: 12.5 }}>
-              <i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: outColour(o.outcome), marginRight: 6, verticalAlign: -1 }} />
-              {outcomeLabel(o.outcome)}: <strong>{o.n}</strong>{' '}
-              <span className="dim">({Math.round((Number(o.n) / decided) * 100)}%)</span>
-            </span>
-          ))}
-          {!outcomes.length && <span className="dim">No cases decided yet.</span>}
-        </div>
-      </div>
-      </div>
-    </div>
-  )
+function Metric({ to, ...props }) {
+  return to ? <Link className="ops-metric-link" to={to}><CaseMetric {...props} /></Link> : <CaseMetric {...props} />
 }
 
+export default function Operations({ user }) {
+  const canRead = user.permissions.includes('cases:read')
+  const canApprove = user.permissions.includes('cases:approve_fraud')
+  const canSeeAll = user.permissions.includes('cases:close')
+  const operations = usePolling(api.operations)
+  const system = usePolling(api.systemStatus)
+  const integrations = usePolling(api.integrations, 60000)
+  const work = usePolling(loadWork, 20000, canRead)
+  const approvals = usePolling(api.approvals, 20000, canApprove)
+  const restrictions = usePolling(api.restrictionStatus, 20000, canRead)
+  const reconciliation = usePolling(api.restrictionReconciliation, 20000, canSeeAll)
+  const resources = [operations, system, integrations, ...(canRead ? [work, restrictions] : []), ...(canApprove ? [approvals] : []), ...(canSeeAll ? [reconciliation] : [])]
+  const data = operations.data
+  const backlog = LEVELS.map((level) => data?.backlog.find((b) => b.risk_level === level) || { risk_level: level, cases: 0, exposure_minor: 0 })
+  const total = backlog.reduce((n, b) => n + Number(b.cases), 0)
+  const exposure = backlog.reduce((n, b) => n + Number(b.exposure_minor), 0)
+  const outcomes = data?.outcomes || []
+  // `decided` is at least 1 on the API, even when no case has an outcome.
+  const decided = outcomes.reduce((n, o) => n + Number(o.n), 0)
+  const s = work.data?.summary
+  const waitingApprovals = approvals.data?.summary
+  const budget = system.data?.budget
+  const r = restrictions.data
+  const rec = reconciliation.data
+  const exceptions = rec ? [
+    ...rec.delivered_not_acknowledged.map((x) => ({ ...x, issue: `No bank response after ${duration(x.waiting_seconds / 60)}` })),
+    ...rec.not_delivered.map((x) => ({ ...x, issue: x.last_error || 'Not yet delivered to the bank' })),
+    ...rec.expired_still_standing.map((x) => ({ ...x, issue: 'Temporary restriction expired; no release order recorded' })),
+  ] : []
+
+  return <div className="page ops-dashboard operations-workspace">
+    <header className="page-head ops-page-head">
+      <div><div className="ops-eyebrow">Operational oversight</div><h1>Operations</h1>
+        <p className="page-sub">Service readiness, work needing attention and investigation outcomes.</p></div>
+      <div className="ops-head-actions">
+        <button className="ops-action" disabled={resources.some((x) => x.loading)} onClick={() => resources.forEach((x) => x.refresh())}>Refresh overview</button>
+        <Link className="ops-action" to="/analytics">Performance reports</Link>
+        {canRead && <Link className="ops-action primary" to="/triage?scope=all">Review cases</Link>}
+      </div>
+    </header>
+    <ServiceHealth resource={system} integrations={integrations} />
+    <ReadStatus resource={operations} label="Operations overview" />
+    <div className="ops-section-heading"><h2>Work requiring attention</h2><span className="dim">Open-case totals cover the bank. Case links follow your access.</span></div>
+    <div className="statrow">
+      <Metric label="Open cases" value={data ? total : null} note="All open investigation states" icon="cases" featured to={canRead ? '/tracker' : null} />
+      <Metric label="Value under investigation" value={data ? nairaShort(exposure) : null} note="Approved payments in open cases · not confirmed loss" icon="money" to={canRead ? '/triage?scope=all' : null} />
+      {canRead ? <Metric label="Overdue cases" value={s?.breaching} note={s ? `${s.due_soon} more due soon · within your access` : 'Case deadlines unavailable until loaded'} icon="clock" tone={s?.breaching ? 'danger' : ''} to="/triage?scope=breaching" />
+        : <Metric label="Critical cases" value={data ? Number(backlog[0].cases) : null} note="Aggregate only · case access restricted" icon="clock" />}
+      {canApprove ? <Metric label="Pending approvals" value={s?.awaiting_approval} note={waitingApprovals ? `${waitingApprovals.mine_awaiting_someone_else} of your proposals await another lead` : 'Includes proposals awaiting a different lead'} icon="check" to="/approvals" />
+        : <Metric label="Closed in last 7 days" value={data?.resolution?.closed_7d} note={data ? `Median resolution ${duration(data.resolution?.median_minutes)}` : 'Resolution history loading'} icon="check" />}
+    </div>
+    {canApprove && <ReadStatus resource={approvals} label="Approvals" />}
+    {canRead && <section className="card" aria-labelledby="priority-title">
+      <div className="between wrap"><h2 id="priority-title">Priority work</h2><Link to="/triage?scope=all">Open review queue →</Link></div>
+      <ReadStatus resource={work} label="Priority work" />
+      {s && <div className="row wrap ops-attention-links">
+        <Link to="/triage?scope=breaching">{s.breaching} overdue · {s.due_soon} due soon</Link>
+        <Link to="/triage?scope=awaiting_approval">{s.awaiting_approval} awaiting approval</Link>
+        <Link to="/triage?scope=awaiting_close">{s.awaiting_close} awaiting closure</Link>
+        <span>{s.regulatory_breached} cases with a breached regulatory clock</span>
+      </div>}
+      {work.data && <div className="table-scroll"><table className="rowtable">
+        <thead><tr><th>Case / customer</th><th>Risk</th><th>Owner</th><th>Review deadline</th><th>Next step</th></tr></thead>
+        <tbody>{work.data.items.map((c) => <tr key={c.id}>
+          <td><Link to={`/cases/${c.id}`}>CASE-{c.id}</Link><div className="dim">{c.customer_name}</div></td>
+          <td><RiskBadge level={c.risk_level} /></td><td>{c.assignee_name || 'Unassigned'}</td>
+          <td><span className={`sla sla-${c.sla_state}`}>{c.sla_remaining_minutes == null ? 'Unavailable' : clock(c.sla_remaining_minutes)}</span></td>
+          <td>{c.awaiting_approval ? 'A different lead reviews the proposal' : c.outcome ? 'Review closure requirements' : c.recommendation?.action || 'Review evidence'}</td>
+        </tr>)}{!work.data.items.length && <tr><td colSpan={5}>No open cases within your access.</td></tr>}</tbody>
+      </table><p className="dim">Top {work.data.items.length} of {work.data.total} visible open cases, ordered by priority.</p></div>}
+    </section>}
+    {canRead && <section className="card" id="bank-actions" aria-labelledby="bank-actions-title">
+      <h2 id="bank-actions-title">Bank action delivery</h2>
+      <p className="dim">Approval authorises a request. Delivery does not mean the bank applied it. Counts cover recorded orders across the bank.</p>
+      <ReadStatus resource={restrictions} label="Bank action delivery" />
+      {r && <>
+        <p className={['none', 'loopback'].includes(r.connector) ? 'service-problems' : 'dim'}>{adapterDescription(r.connector)}</p>
+        <div className="service-facts"><span><strong>{r.lifecycle.awaiting_delivery}</strong> awaiting delivery</span><span><strong>{r.lifecycle.awaiting_ack}</strong> delivered, awaiting bank outcome</span><span><strong>{r.lifecycle.acknowledged}</strong> bank outcomes received</span></div>
+        <div className="row wrap">{r.by_outcome.map((o) => <span key={o.outcome} className={`pill ${o.outcome === 'APPLIED' ? 'suppress' : 'escalate'}`}>{o.outcome === 'APPLIED' ? 'Bank reports applied' : o.outcome === 'NOT_APPLIED' ? 'Bank reports not applied' : 'Bank rejected'}: {o.n}</span>)}</div>
+        {r.outbox.filter((o) => o.status !== 'SENT' && o.last_error).map((o) => <p className="service-problems" key={o.status}>{o.n} {o.status.toLowerCase()}: {o.last_error}</p>)}
+      </>}
+      {canSeeAll && <><ReadStatus resource={reconciliation} label="Delivery exceptions" />
+        {rec && <details className="ops-detail" open={exceptions.length > 0}>
+          <summary>{exceptions.length} delivery exceptions · response target {rec.ack_overdue_hours}h</summary>
+          {exceptions.length ? <ul className="ops-exceptions">{exceptions.slice(0, 10).map((x, i) => <li key={`${x.restriction_ref}:${i}`}><Link to={`/cases/${x.case_id}`}>CASE-{x.case_id}</Link> · {x.issue}<small className="mono dim">Request {x.restriction_ref}</small></li>)}</ul> : <p className="dim">No exceptions reported at {when(rec.checked_at)}.</p>}
+          {exceptions.length > 10 && <p className="dim">Showing the first 10 exceptions.</p>}
+        </details>}</>}
+    </section>}
+    <div className="ops-section-heading"><h2>Team workload</h2><span className="dim">Current open cases · closures in the last 24 hours</span></div>
+    {data && <>
+      <div className="grid ops-primary-grid">
+        <section className="card"><h3>Open cases by risk</h3>{backlog.map((b) => <div className="ops-risk-row" key={b.risk_level}>
+          <div className="between"><RiskBadge level={b.risk_level} /><strong>{b.cases} cases</strong></div>
+          <SegmentedProgress value={total ? Number(b.cases) / total * 100 : 0} label={`${b.risk_level.toLowerCase()} share of open cases`} color={`var(--${b.risk_level.toLowerCase()})`} />
+          <p className="dim">Average age {Number(b.cases) ? duration(b.avg_age_minutes) : '—'} · review target {duration(data.sla_minutes[b.risk_level])}</p>
+        </div>)}</section>
+        <section className="card"><h3>Case ageing</h3><p className="dim">Age since opening, not time actively investigated.</p>{AGE_ORDER.map((bucket) => <div className="between ops-age-row" key={bucket}><span>{bucket}</span><strong>{data.ageing.find((a) => a.bucket === bucket)?.cases ?? 0}</strong></div>)}
+          <p className="dim">Median time to close: {duration(data.resolution?.median_minutes)} across {data.resolution?.closed_7d ?? 0} cases closed in the last 7 days.</p>
+        </section>
+      </div>
+      <section className="card"><h3>Assigned workload</h3><p className="dim">Assignment counts do not indicate whether a team member is online or at capacity.</p><div className="table-scroll"><table className="rowtable">
+        <thead><tr><th>Team member</th><th>Role</th><th className="num">Open cases</th><th className="num">Closed · last 24h</th></tr></thead>
+        <tbody>{data.analysts.map((a, i) => <tr key={`${a.display_name}:${a.role}:${i}`}><td>{a.display_name}</td><td>{a.role.replace(/_/g, ' ').toLowerCase()}</td><td className="num">{a.open_cases}</td><td className="num">{a.closed_24h}</td></tr>)}{!data.analysts.length && <tr><td colSpan={4}>No team workload returned.</td></tr>}</tbody>
+      </table></div></section>
+      <div className="ops-section-heading"><h2>Investigation results</h2><span className="dim">All recorded outcomes · includes cases awaiting closure</span></div>
+      <section className="card"><h3>{decided} cases with an outcome</h3>
+        <div className="service-facts">{outcomes.map((o) => <span key={o.outcome}><strong>{o.n}</strong> {OUTCOME[o.outcome] || o.outcome} · {decided ? Math.round(Number(o.n) / decided * 100) : 0}%</span>)}</div>
+        {!decided && <p className="dim">No investigation outcomes recorded yet.</p>}
+        <p className="dim">These are investigation findings, not a measure of fraud prevented or money recovered.</p>
+      </section>
+    </>}
+    {budget && <section className="card"><h2>Alert budget · {budget.local_day} (Nigeria)</h2>
+      <div className="service-facts"><span><strong>{budget.today.raised} / {budget.config.per_day}</strong> alerts raised / daily budget</span><span><strong>{budget.waiting.count}</strong> deferred alerts waiting</span><span><strong>{budget.waiting.critical}</strong> critical alerts deferred</span><span><strong>{budget.today.expired}</strong> deferrals expired today</span></div>
+      <p className="dim">Budget enforcement is {budget.config.enforced ? 'on' : 'off'}. This limits alert admission; it does not measure staffing capacity. Deferred alerts still require operational oversight.</p>
+    </section>}
+    <p className="dim ops-refresh-note">Operational reads refresh every 20 seconds; identity connections every minute. {operations.updatedAt && <>Overview last read {when(operations.updatedAt)}.</>}</p>
+  </div>
+}

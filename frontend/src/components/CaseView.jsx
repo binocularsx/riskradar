@@ -10,6 +10,9 @@ import { CONSEQUENCES, OwnershipBanner, RoleCapability } from './Actions'
 import CaseFlow from './CaseFlow'
 import LinkGraph from './LinkGraph'
 import { CaseIcon } from './CaseWorkspace'
+import BankActions from './BankActions'
+import { usePolling } from '../lib/usePolling'
+import ReadStatus from './ReadStatus'
 
 /**
  * The investigation panel — everything needed to decide, on one screen, in the
@@ -28,13 +31,13 @@ import { CaseIcon } from './CaseWorkspace'
 // and the wording has to say so — a button that reads "Confirm fraud" while it
 // files a recommendation is the kind of lie a control dies of.
 const OUTCOMES = [
-  { key: 'CONFIRMED_FRAUD', label: 'Confirmed fraud', sub: 'The customer did not make these',
+  { key: 'CONFIRMED_FRAUD', label: 'Propose confirmed fraud', sub: 'The evidence supports a fraud finding',
     cls: 'confirm', hint: '1',
     icon: ['M12 9v4', 'M12 17h.01', 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'] },
-  { key: 'FALSE_POSITIVE', label: 'No fraud found', sub: 'The activity is legitimate',
+  { key: 'FALSE_POSITIVE', label: 'Propose no fraud found', sub: 'The evidence supports legitimate activity',
     cls: 'dismiss', hint: '2',
     icon: ['M20 6 9 17l-5-5'] },
-  { key: 'INCONCLUSIVE', label: "Can't tell", sub: 'Not enough evidence either way',
+  { key: 'INCONCLUSIVE', label: 'Propose inconclusive', sub: 'Not enough evidence either way',
     cls: 'unsure', hint: '3',
     icon: ['M12 17h.01', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z'] },
 ]
@@ -50,19 +53,24 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
 
   const can = (p) => user.permissions.includes(p)
   const caseId = summary?.id
+  const loadProposals = useCallback(() => api.caseSubmissions(caseId), [caseId])
+  const proposals = usePolling(loadProposals, 20000, !!caseId)
+  const pending = summary?.awaiting_approval || !!proposals.data?.pending
+  const [evidenceRevision, setEvidenceRevision] = useState(0)
 
   useEffect(() => {
     let cancelled = false
-    setDetail(null); setNote(''); setError(null); setFlash(null)
+    setDetail(null); setError(null)
     if (!caseId) return undefined
     api.caseDetail(caseId)
       .then((d) => !cancelled && setDetail(d))
       .catch((e) => !cancelled && setError(e.message))
     return () => { cancelled = true }
-  }, [caseId])
+  }, [caseId, summary?.version, evidenceRevision])
+  useEffect(() => { setNote(''); setFlash(null) }, [caseId])
 
   const dispose = useCallback(async (outcome) => {
-    if (!caseId || busy || summary.assignee_id !== user.id || summary.state === 'CLOSED' || summary.outcome || !can('cases:submit_outcome')) return
+    if (!caseId || busy || pending || !proposals.data || proposals.error || !detail || summary.assignee_id !== user.id || summary.state === 'CLOSED' || summary.outcome || !can('cases:submit_outcome')) return
     if (note.trim().length < MIN_RATIONALE) {
       setError(`Say why in at least ${MIN_RATIONALE} characters: a lead has to decide on something.`)
       return
@@ -80,7 +88,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         + 'A Fraud Ops Lead who did not write it decides; it has left your queue.')
       onDisposed?.({ ...result, outcome })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
-  }, [caseId, busy, note, summary, onDisposed, can])
+  }, [caseId, busy, note, summary, onDisposed, can, pending, proposals.data, proposals.error, detail])
 
   const take = useCallback(async () => {
     setBusy(true)
@@ -120,7 +128,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
   return (
     <>
       {flash && <Banner kind="ok">{flash}</Banner>}
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && <Banner kind="error">{error} <button className="ghost" onClick={() => setEvidenceRevision((n) => n + 1)}>Reload evidence</button></Banner>}
       <div className="investigation-layout">
         <div className="investigation-main">
           <section className="card investigation-overview" aria-labelledby="overview-title">
@@ -129,12 +137,18 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
               <span className="investigation-avatar">{(summary.customer_name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('')}</span>
               <div><strong>{summary.customer_name || 'Unknown customer'}</strong><span>Customer under review</span></div>
             </div>
+            <div className="case-brief">
+              <div><span className="k">What happened</span><p>{summary.alert_count ?? '—'} flagged transactions are grouped into this investigation.</p></div>
+              <div><span className="k">Why it needs review</span><p>{rec.because || 'Read the flagged activity and its recorded decision reasons below.'}</p></div>
+              <div><span className="k">Next step</span><p>{closed ? 'Investigation closed. Review the recorded findings and bank action outcomes.' : pending ? 'A different lead must review the proposed outcome.' : summary.outcome ? 'A lead must check the closure requirements.' : rec.action || 'Review the evidence and record your findings.'}</p>
+                <a href="#investigation-resolution">Open workflow →</a></div>
+            </div>
             <dl className="investigation-fields">
               <div><dt>Opened</dt><dd title={when(summary.opened_at)}>{summary.opened_at ? when(summary.opened_at) : '—'}</dd></div>
               <div><dt>Review deadline</dt><dd>{closed ? <span className="pill">Case completed</span> : summary.sla_remaining_minutes == null ? 'Not available' : <span className={`sla sla-${summary.sla_state}`}>{clock(summary.sla_remaining_minutes)}</span>}</dd></div>
               <div><dt>Flagged transactions</dt><dd>{summary.alert_count ?? '—'}<span className="investigation-field-hint">transactions to review</span></dd></div>
               <div><dt>Destinations</dt><dd>{summary.distinct_beneficiaries ?? '—'}<span className="investigation-field-hint">linked beneficiaries</span></dd></div>
-              <div><dt>Money at risk</dt><dd className="investigation-field-money">{naira(summary.exposure_minor)}</dd></div>
+              <div><dt>Value under investigation</dt><dd className="investigation-field-money">{naira(summary.exposure_minor)}<span className="investigation-field-hint">Approved payments · not confirmed loss</span></dd></div>
               <div><dt>Assigned to</dt><dd>{mine ? user.display_name || 'You' : summary.assignee_name || (summary.assignee_id ? 'Another investigator' : 'Unassigned')}</dd></div>
             </dl>
             <div className="investigation-overview-tags">
@@ -238,7 +252,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         <aside className="investigation-sidebar" aria-label="Case management and safeguards">
           <section className="card investigation-management">
             <div className="investigation-section-head"><h3>Case management</h3><span className="investigation-section-icon"><CaseIcon name="cases" /></span></div>
-            {rec.action && !closed && <div className={`recommend ${rec.urgency || ''}`}>
+            {rec.action && !closed && !pending && !summary.outcome && <div className={`recommend ${rec.urgency || ''}`}>
               <div className="k">Recommended next step{rec.urgency === 'now' ? ' · Act now' : rec.urgency === 'soon' ? ' · Within the hour' : ''}</div>
               <div className="action">{rec.action}</div><div className="because">{rec.because}</div>
             </div>}
@@ -265,7 +279,16 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
       )}
 
 
-          <Restrictions caseId={summary.id} />
+          <section className="card"><h3>Outcome approval</h3>
+            <ReadStatus resource={proposals} label="Outcome approval" />
+            {proposals.data && (proposals.data.items.length ? proposals.data.items.slice(0, 3).map((p) => <div className="bank-action" key={p.id}>
+              <strong>{p.proposed_outcome.replace(/_/g, ' ').toLowerCase()}</strong>
+              <span className={`pill ${p.state === 'APPROVED' ? 'suppress' : 'escalate'}`}>{p.state === 'PENDING' ? 'Proposed · awaiting a different lead' : p.state.replace(/_/g, ' ').toLowerCase()}</span>
+              <p>{p.submitted_by_name} · {when(p.submitted_at)}</p>
+              {p.decided_by_name && <p>Reviewed by {p.decided_by_name} · {when(p.decided_at)}</p>}
+            </div>) : <p className="dim">No outcome proposals recorded.</p>)}
+          </section>
+          <BankActions key={summary.id} caseId={summary.id} />
       {(detail?.notes?.length > 0 || detail?.history?.length > 0) && (
         <div className="card investigation-history">
           <h3>Notes and history</h3>
@@ -291,11 +314,11 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           <div className="investigation-workflow">
         <CaseFlow key={`${summary.id}:${summary.assignee_id}`} caseId={summary.id} user={user} onChanged={() => onDisposed?.({ refreshOnly: true })} />
           </div>
-      {!closed && !summary.outcome && (
+      {!closed && !summary.outcome && !pending && (
         <div className="disposition" aria-labelledby="outcome-title">
           <div className="disposition-head">
             <div>
-              <h3 id="outcome-title">Investigation outcome</h3>
+              <h3 id="outcome-title">Propose an investigation outcome</h3>
               <span className="dim" style={{ fontSize: 12 }}>
                 A different team lead reviews your proposal.
               </span>
@@ -313,7 +336,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           {can('cases:submit_outcome') ? (
             <div className="decisions">
               {OUTCOMES.map((o) => (
-                <button key={o.key} className={`decision ${o.cls}`} disabled={busy || !mine}
+                <button key={o.key} className={`decision ${o.cls}`} disabled={busy || !mine || !detail || !proposals.data || !!proposals.error}
                         title={!mine ? 'Take the case first' : CONSEQUENCES[o.key]}
                         onMouseEnter={() => setHovered(o.key)}
                         onMouseLeave={() => setHovered(null)}
@@ -356,58 +379,5 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         </section>
       </div>
     </>
-  )
-}
-
-/**
- * D97: the restrictions a lead approved on this case, and what the bank did.
- * Risk Radar restricts nothing itself — it recommends, dispatches to the bank,
- * and records the outcome — so the wording says "recommended", never "applied".
- */
-const RESTRICTION_LABELS = {
-  DEBIT_RESTRICTION: 'Stop debits',
-  CHANNEL_RESTRICTION: 'Block a channel',
-  CARD_FREEZE: 'Freeze the card',
-  BENEFICIARY_RESTRICTION: 'Block a destination',
-}
-const RESTRICTION_STATUS = {
-  RECOMMENDED: ['queued for the bank', ''],
-  DELIVERED: ['sent to the bank, awaiting confirmation', ''],
-  APPLIED: ['the bank applied it', 'suppress'],
-  NOT_APPLIED: ['the bank did not apply it', 'escalate'],
-  REJECTED: ['the bank declined it', 'override'],
-}
-
-function Restrictions({ caseId }) {
-  const [items, setItems] = useState(null)
-  useEffect(() => {
-    let cancelled = false
-    api.caseRestrictions(caseId)
-      .then((d) => !cancelled && setItems(d.items))
-      .catch(() => !cancelled && setItems([]))
-    return () => { cancelled = true }
-  }, [caseId])
-
-  if (!items || !items.length) return null
-  return (
-    <div className="card" style={{ marginBottom: 14 }}>
-      <h3>Restrictions asked of the bank</h3>
-      <p className="dim" style={{ fontSize: 12, marginTop: 0 }}>
-        Risk Radar suggests the action and records it. The bank applies and confirms it.
-      </p>
-      {items.map((r) => {
-        const [text, cls] = RESTRICTION_STATUS[r.status] || [r.status, '']
-        return (
-          <div key={r.restriction_ref} className="between" style={{ padding: '8px 0', borderBottom: '1px solid var(--bg-2)' }}>
-            <div>
-              <strong>{RESTRICTION_LABELS[r.action] || r.action}</strong>
-              {r.channel && <span className="muted"> · {r.channel.replace(/_/g, ' ').toLowerCase()}</span>}
-              {r.reason && <div className="dim" style={{ fontSize: 12 }}>{r.reason}</div>}
-            </div>
-            <span className={`pill ${cls}`}>{text}</span>
-          </div>
-        )
-      })}
-    </div>
   )
 }

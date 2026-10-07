@@ -144,18 +144,6 @@ export default function Roles({ user }) {
         })}
       </div>
 
-      <div className="card" style={{ marginTop: 18 }}>
-        <h2>These limits are enforced by the server, not the menu</h2>
-        <p className="muted" style={{ fontSize: 13.5, marginBottom: 10 }}>
-          The missing links in the sidebar are a convenience. Every one of the
-          restrictions above is checked again on the API, on every request. An
-          administrator who types the case URL directly gets a refusal, not a
-          case — and the refusal says why.
-        </p>
-        <p className="dim mono" style={{ fontSize: 12, marginBottom: 0 }}>
-          403 — role ADMIN does not hold cases:read. This is separation of duties, not a bug.
-        </p>
-      </div>
     </>
   )
 }

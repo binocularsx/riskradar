@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { adapterDescription } from '../components/ServiceHealth'
 import { api, when } from '../lib/api'
 import { Banner, Empty, RiskBadge } from '../components/ui'
 
@@ -124,7 +125,7 @@ function useAsync(fn, deps = []) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const load = useCallback(() => {
-    fn().then(setData).catch((e) => setError(e.message))
+    fn().then((d) => { setData(d); setError(null) }).catch((e) => setError(e.message))
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
   return { data, error, reload: load, setError }
@@ -137,10 +138,10 @@ function useAsync(fn, deps = []) {
  * them. A message that cannot be sent yet is shown with its reason, not hidden.
  */
 function Integrations() {
-  const { data, error } = useAsync(() => Promise.all([api.integrations(), api.restrictionStatus()]))
-  if (error) return <Banner kind="error">{error}</Banner>
+  const { data, error, reload } = useAsync(api.integrations)
+  if (error) return <Banner kind="error">{error} <button onClick={reload}>Retry</button></Banner>
   if (!data) return <p className="muted">Loading…</p>
-  const [integrations, restrictions] = data
+  const integrations = data
   const cov = integrations.bvn_coverage_30d
   return (
     <>
@@ -149,11 +150,10 @@ function Integrations() {
           ['Core banking (BVN lookup)', integrations.adapters.core_resolver],
           ['Identity registry', integrations.adapters.identity_registry],
           ['Industry watch-list', integrations.adapters.industry_connector],
-          ['Restriction channel (D97)', restrictions.connector],
         ].map(([label, value]) => (
           <div className="card" key={label}>
             <div className="stat-label">{label}</div>
-            <div className="stat-value" style={{ fontSize: 20 }}>{value}</div>
+            <div style={{ marginTop: 10 }}>{adapterDescription(value)}</div>
           </div>
         ))}
       </div>
@@ -189,31 +189,7 @@ function Integrations() {
           {integrations.inbound.last_received ? `, last ${when(integrations.inbound.last_received)}` : ''}.
         </p>
       </div>
-      <div className="card">
-        <h2>Restriction delivery (D97)</h2>
-        <p className="dim" style={{ fontSize: 12, marginTop: 0 }}>
-          A lead's approved restriction is dispatched to the bank and its outcome recorded.
-          Risk Radar restricts nothing itself (D7).
-        </p>
-        <div className="row wrap" style={{ gap: 8 }}>
-          <span className="pill">{restrictions.lifecycle.total} recommended</span>
-          <span className="pill">{restrictions.lifecycle.awaiting_delivery} awaiting the bank</span>
-          <span className="pill">{restrictions.lifecycle.awaiting_ack} awaiting confirmation</span>
-          <span className="pill suppress">{restrictions.lifecycle.acknowledged} confirmed</span>
-        </div>
-        {restrictions.outbox.length > 0 && (
-          <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
-            {restrictions.outbox.map((o) => (
-              <span key={o.status} className="pill" title={o.last_error || ''}>{o.status.toLowerCase()} {o.n}</span>
-            ))}
-          </div>
-        )}
-        {restrictions.by_outcome.length > 0 && (
-          <p className="dim" style={{ fontSize: 12, marginBottom: 0, marginTop: 8 }}>
-            Bank outcomes: {restrictions.by_outcome.map((o) => `${o.outcome.toLowerCase().replace(/_/g, ' ')} ${o.n}`).join(' · ')}.
-          </p>
-        )}
-      </div>
+      <p className="dim">Bank action delivery is monitored by case-authorised staff in Operations.</p>
     </>
   )
 }

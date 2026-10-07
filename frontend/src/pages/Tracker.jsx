@@ -17,7 +17,7 @@ import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
 const STAGE_HELP = {
   NEW: 'Nobody has started these cases yet. The oldest case appears first.',
   IN_REVIEW: 'A team member is currently checking these cases.',
-  ESCALATED: 'These cases were sent to the Security or Fraud team for specialist help.',
+  ESCALATED: 'These cases were escalated for specialist review.',
   AWAITING_APPROVAL: 'A team lead needs to check the proposed investigation result.',
   AWAITING_CLOSE: 'The investigation is complete and waiting for a final check.',
   CLOSED: 'These cases were completed in the last 24 hours.',
@@ -63,8 +63,8 @@ export default function Tracker() {
       </div>
       {error && <Banner kind="error">{error}</Banner>}
       <div className="statrow">
-        <CaseMetric label="Open cases" value={data ? totalOpen : null} note="Across all investigation stages" icon="cases" featured />
-        <CaseMetric label="Money at risk" value={data ? nairaShort(exposure) : null} note="Total exposure across open cases" icon="money" />
+        <CaseMetric label="Open cases" value={data ? totalOpen : null} note="Across stages within your access" icon="cases" featured />
+        <CaseMetric label="Value under investigation" value={data ? nairaShort(exposure) : null} note="Approved payments in visible open cases" icon="money" />
         <CaseMetric label="Ready to close" value={data ? count('AWAITING_CLOSE') : null} note="Waiting for a final review" icon="clock" />
         <CaseMetric label="Completed" value={data ? count('CLOSED') : null} note="Cases closed in the last 24 hours" icon="check" />
       </div>
@@ -89,7 +89,7 @@ export default function Tracker() {
               </div>
               <p className="tracker-stage-help">{STAGE_HELP[s.key]}</p>
               <div className="row wrap" style={{ marginTop: 8, gap: 6 }}>
-                {s.exposure_minor > 0 && <span className="tag">{nairaShort(s.exposure_minor)} at risk</span>}
+                {s.exposure_minor > 0 && <span className="tag">{nairaShort(s.exposure_minor)} under review</span>}
                 {s.oldest_minutes != null && s.count > 0 && <span className="tag">oldest {age(s.oldest_minutes)}</span>}
                 {s.by_team && Object.entries(s.by_team).filter(([, n]) => n).map(([t, n]) => (
                   <span className="pill" key={t}>{n} with {t === 'INFOSEC' ? 'InfoSec' : 'Fraud Ops'}</span>))}

@@ -101,13 +101,13 @@ export default function Approvals() {
       }
       await api.decideSubmission(item.id, payload)
       clearEdits(item)
-      setFlash(`Case #${item.case_id}: ${decision.toLowerCase()}d.`)
+      setFlash(`Case #${item.case_id}: ${{ APPROVE: 'proposal approved; any bank action still requires delivery and a bank outcome', REJECT: 'proposal rejected; case remains open', RETURN: 'proposal returned for more work' }[decision]}.`)
       setReasons((r) => ({ ...r, [item.id]: '' }))
       await load()
     } catch (e) { setError(e.message) } finally { setBusy(null) }
   }, [reasons, load, edits])
 
-  if (!queue) return <p className="muted">Loading…</p>
+  if (!queue) return error ? <Banner kind="error">Approval queue unavailable: {error} <button onClick={load}>Retry</button></Banner> : <p className="muted" role="status">Loading approvals…</p>
   const { items, summary } = queue
 
   return (
@@ -120,11 +120,11 @@ export default function Approvals() {
         </p>
       </header>
 
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && <Banner kind="error">{error} Showing the last loaded queue. <button onClick={load}>Retry</button></Banner>}
       {flash && <Banner kind="ok">{flash}</Banner>}
 
       <div className="row wrap" style={{ gap: 18, margin: '4px 0 14px' }}>
-        <span><strong>{summary.waiting}</strong> waiting</span>
+        <span><strong>{summary.waiting}</strong> waiting in this queue (up to 50 shown)</span>
         <span className="dim">oldest {waited(summary.oldest_seconds)}</span>
         <span className="dim">{summary.with_restrictions} asking to restrict an account</span>
         {summary.mine_awaiting_someone_else > 0 && (
@@ -140,7 +140,7 @@ export default function Approvals() {
             <div>
               <strong>Case #{item.case_id}</strong>{' '}
               <span className={`pill ${String(item.risk_level).toLowerCase()}`}>{item.risk_level}</span>{' '}
-              <span className="dim">{item.alert_count} alert(s) · {money(item.exposure_minor)} at risk</span>
+              <span className="dim">{item.alert_count} alert(s) · {money(item.exposure_minor)} under investigation</span>
             </div>
             <div className="dim">
               proposed by {item.submitted_by_name} · waiting {waited(item.waiting_seconds)}
@@ -156,8 +156,7 @@ export default function Approvals() {
             <div className="warn-box" style={{ marginBottom: 8 }}>
               <strong>What the bank will be asked to do</strong>
               <p className="dim" style={{ margin: '4px 0 8px', fontSize: 12 }}>
-                This is your call, not the analyst's (D107a). They work transactions; what
-                reaches a customer's account is decided here. Uncheck anything that should
+                Review the proposed actions before approving. Uncheck anything that should
                 not be sent, or pull in what this case's own transactions suggest.
               </p>
 

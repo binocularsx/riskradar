@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { api, clock, nairaShort } from '../lib/api'
 import { useAlertStream } from '../lib/useStream'
@@ -12,6 +12,7 @@ const SCOPES = [
   { key: 'unassigned', label: 'Unassigned' },
   { key: 'breaching', label: 'Due soon & overdue' },
   { key: 'escalated', label: 'Escalated' },
+  { key: 'awaiting_approval', label: 'Awaiting approval' },
   { key: 'awaiting_close', label: 'Ready to close' },
 ]
 const PAGE_SIZE = 15
@@ -20,7 +21,10 @@ const STATE_LABELS = { OPEN: 'Not started', UNDER_REVIEW: 'In review', NEW: 'Not
 export default function CaseQueue({ user }) {
   const canReview = user.permissions.includes('cases:review')
   const supervises = user.permissions.includes('cases:close')
-  const [scope, setScope] = useState(canReview ? 'mine' : 'all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedScope = searchParams.get('scope')
+  const scope = SCOPES.some((s) => s.key === requestedScope) ? requestedScope : supervises ? 'all' : canReview ? 'mine' : 'all'
+  const setScope = (value) => setSearchParams({ scope: value })
   const [q, setQ] = useState('')
   const [severity, setSeverity] = useState('all')
   const [page, setPage] = useState(1)
@@ -43,7 +47,8 @@ export default function CaseQueue({ user }) {
   useEffect(() => {
     setError(null)
     load()
-    return () => { requestId.current += 1 }
+    const timer = setInterval(load, 20000)
+    return () => { requestId.current += 1; clearInterval(timer) }
   }, [load])
   const { connected } = useAlertStream({
     onAlert: load,
@@ -54,8 +59,8 @@ export default function CaseQueue({ user }) {
   const takeNext = async () => {
     setBusy(true); setNotice(null)
     try {
-      const { case: next } = await api.nextCase()
-      if (!next) { setNotice('The shared queue is clear. There are no unassigned cases to take.'); return }
+      const { case: next, note } = await api.nextCase()
+      if (!next) { setNotice(note || 'No case is available for you to review.'); return }
       navigate(`/cases/${next.id}`)
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -98,8 +103,8 @@ export default function CaseQueue({ user }) {
       <div className="statrow">
         <CaseMetric label="Open cases" value={s?.open_cases} icon="cases" featured
           note={s ? `${s.mine} assigned to you in this view` : 'Your current queue at a glance'} />
-        <CaseMetric label="Money at risk" value={s ? nairaShort(s.total_exposure_minor) : null} icon="money"
-          note="Total exposure in this view" />
+        <CaseMetric label="Value under investigation" value={s ? nairaShort(s.total_exposure_minor) : null} icon="money"
+          note="Approved payments · not confirmed loss" />
         <CaseMetric label="Overdue cases" value={s?.breaching} icon="clock" tone={s?.breaching ? 'danger' : ''}
           note={s ? `${s.due_soon ?? 0} more approaching their deadline` : 'Keep time-sensitive cases moving'} />
         <CaseMetric label="Unassigned cases" value={s?.unassigned} icon="person"

@@ -96,8 +96,7 @@ export function OwnershipBanner({ summary, user, onTake, busy }) {
   if (mine) {
     return (
       <div className="banner ok" style={{ marginBottom: 14 }}>
-        <strong>This case is assigned to you.</strong> Work it, record an outcome,
-        and it leaves your queue.
+        <strong>This case is assigned to you.</strong> Review the evidence and propose an outcome for a different lead to approve.
       </div>
     )
   }
@@ -118,7 +117,7 @@ export function OwnershipBanner({ summary, user, onTake, busy }) {
   }
   return (
     <div className="banner warn" style={{ marginBottom: 14 }}>
-      <strong>{summary.assignee_name} is working this case.</strong> You can read
+      <strong>{summary.assignee_name || 'Another investigator'} is working this case.</strong> You can read
       it, but do not act on it — two people calling the same customer is worse
       than nobody calling them.
     </div>
@@ -131,7 +130,7 @@ export function RoleCapability({ user }) {
 
   let text
   if (can('cases:close')) {
-    text = 'As Fraud Ops Lead you can record the outcome and close the case in one action.'
+    text = 'You can propose an outcome, but a different lead must approve it. Closure is a separate step once its requirements are met.'
   } else if (can('cases:submit_outcome')) {
     // Was `cases:set_outcome`, which is not a permission the server issues, so
     // this branch never matched and an analyst fell through to the line below —
@@ -149,12 +148,9 @@ export function RoleCapability({ user }) {
 /** What pressing each button actually causes. Stated, not implied. */
 export const CONSEQUENCES = {
   CONFIRMED_FRAUD:
-    'Records this as real fraud. Every destination on the case is added to the '
-    + 'known-mule list, so the next transfer to any of them is vetoed outright.',
+    'Proposes confirmed fraud for a different lead to review. No bank action is authorised by this proposal alone.',
   FALSE_POSITIVE:
-    'Records that the alert was wrong. This is the label the next model is '
-    + 'trained on, so it is as valuable as catching fraud.',
+    'Proposes that no fraud was found. The outcome is recorded only after a different lead approves it.',
   INCONCLUSIVE:
-    'Records that the evidence did not settle it. Use this honestly — a guess '
-    + 'recorded as certainty poisons the training data.',
+    'Proposes an inconclusive finding because the evidence is insufficient. A different lead reviews your reasoning.',
 }

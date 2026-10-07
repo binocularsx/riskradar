@@ -76,7 +76,7 @@ export default function CaseDetail({ user }) {
             {summary.handling === 'MACHINE' && <span className="pill suppress">System handled</span>}
             {summary.watchlisted && <span className="pill escalate">Watchlisted</span>}
           </div>
-          <div className="investigation-header-exposure"><span>Money at risk</span><strong>{nairaShort(summary.exposure_minor)}</strong></div>
+          <div className="investigation-header-exposure"><span>Value under investigation</span><strong>{nairaShort(summary.exposure_minor)}</strong></div>
         </div>}
       </header>
       {error && <Banner kind="error">{error} <button className="ghost" onClick={() => setRevision((r) => r + 1)}>Retry</button></Banner>}

@@ -136,17 +136,6 @@ export default function Timeline({ items }) {
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}
            role="img"
            aria-label={`Transaction timeline: ${items.length} transactions over ${spanLabel}, ${items.filter((i) => i.alerted).length} of them alerted.`}>
-        <defs>
-          {/* A gradient wash under the activity, so a dense stretch reads as
-              weight even before you count the dots. Taken from the reference
-              charts, where the fill under the line carries as much of the
-              signal as the line itself. */}
-          <linearGradient id="tlfill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--critical)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--critical)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
         {/* the envelope of alerted activity */}
         {(() => {
           const alerted = visible.filter((t) => t.alerted)
@@ -161,7 +150,7 @@ export default function Timeline({ items }) {
             `L ${pts[pts.length - 1][0]} ${H - PAD.b}`,
             'Z',
           ].join(' ')
-          return <path d={d} fill="url(#tlfill)" />
+          return <path d={d} fill="var(--critical)" fillOpacity="0.1" />
         })()}
 
         {/* amount gridlines */}
