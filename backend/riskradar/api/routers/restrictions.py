@@ -62,6 +62,8 @@ def _contract(order: dict[str, Any]) -> dict[str, Any]:
         state = "RECOMMENDED"
     return {
         "restriction_ref": str(order["restriction_ref"]),
+        # D109: support ties each action to the case and report it came with.
+        "case_id": order.get("case_id"),
         "action": order["action"],
         "account_token": order["account_token"],
         "beneficiary_token": order["beneficiary_token"],

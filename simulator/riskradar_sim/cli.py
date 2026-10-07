@@ -5,6 +5,8 @@
     python -m riskradar_sim stream  --rate 3              # live feed for the demo
     python -m riskradar_sim burst   --tps 250 --seconds 60  # NFR-002
     python -m riskradar_sim industry-flag --count 3       # another bank flags BVNs (D75)
+    python -m riskradar_sim support report --count 2      # support forwards victims' reports (D109)
+    python -m riskradar_sim support work                  # support carries out what the desk asked
 
 ``history`` posts through the batch endpoint with replay semantics (D8d), so
 seeding a month of behaviour does not raise a month of alerts. ``stream`` posts
@@ -30,6 +32,7 @@ from .engine import legitimate_event
 from .generate import SimulationConfig, generate, write_corpus
 from .identity import DEFAULT_CORE_FILE, CoreFile
 from .signals import EventLayer
+from . import support
 from .population import build_population
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
@@ -315,6 +318,9 @@ def cmd_stream(args: argparse.Namespace) -> None:
                     _, _, event = heapq.heappop(pending)
                     path = "/v1/transactions" if event.kind in ("PAYMENT", "CREDIT") else "/v1/events"
                     client.post(path, json=event.payload)
+                    # D109: the victim knows which payments were not theirs, and
+                    # may tell support; support forwards it (`support report`).
+                    support.note_victim(event)
 
                 if clock - last_print > 2:
                     last_print = clock
@@ -428,6 +434,12 @@ def cmd_industry_flag(args: argparse.Namespace) -> None:
     print(f"{args.institution} flagged {len(entries)} BVN(s): {response.json()}")
 
 
+def cmd_support(args: argparse.Namespace) -> None:
+    """Play the bank's support team (D109a)."""
+    with _client(args.base_url, args.api_key) as client:
+        support.run(client, args)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="riskradar_sim", description="Risk Radar simulator")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -503,6 +515,20 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--hours", type=float, default=24.0)
     p.add_argument("--core-file", default=str(DEFAULT_CORE_FILE))
     p.set_defaults(func=cmd_industry_flag)
+
+    p = sub.add_parser("support", help="play the bank's support team: forward reports, carry out actions (D109)")
+    p.add_argument("action", choices=["report", "work", "contact"])
+    p.add_argument("--count", type=int, default=1, help="report: customers to forward")
+    p.add_argument("--min-age", type=float, default=5.0, help="report: minutes since the payment was sent")
+    p.add_argument("--done-rate", type=float, default=0.9, help="work: share of actions support completes")
+    p.add_argument("--every", type=float, default=20.0, help="work: seconds between checks")
+    p.add_argument("--minutes", type=float, default=None, help="work: stop after this long")
+    p.add_argument("--once", action="store_true", help="work: one pass, then stop")
+    p.add_argument("--case-id", type=int, help="contact: the case support was asked about")
+    p.add_argument("--outcome", default="CUSTOMER_CONFIRMED_GENUINE",
+                   choices=["CUSTOMER_CONFIRMED_GENUINE", "CUSTOMER_REPORTED_FRAUD"])
+    p.add_argument("--note", default=None)
+    p.set_defaults(func=cmd_support)
 
     p = sub.add_parser("burst", help="NFR-002 burst test")
     p.add_argument("--tps", type=int, default=250)

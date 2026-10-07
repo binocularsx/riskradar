@@ -113,7 +113,11 @@ export default function CaseFlow({ caseId, user, onChanged }) {
                 </span>
                 {!closedOrWaiting && s.status !== 'info' && (
                   s.action === 'OUTCOME' ? (
-                    <span className="dim" style={{ fontSize: 12 }}>{s.status === 'done' ? 'recorded' : 'use the buttons at the bottom'}</span>
+                    <span className="dim" style={{ fontSize: 12 }}>{s.status === 'done' ? 'proposed' : 'use the buttons at the bottom'}</span>
+                  ) : s.action === 'HEADS_UP' ? (
+                    <span className="dim" style={{ fontSize: 12 }}>
+                      {s.status === 'done' ? 'sent to support' : <a href="#case-support">in the Support team panel</a>}
+                    </span>
                   ) : s.action === 'ESCALATE' ? (
                     s.status === 'done' ? <span className="dim" style={{ fontSize: 12 }}>sent for help</span> :
                       can('cases:escalate') && <button onClick={() => { setEscalating(true); setTarget('FRAUD_OPS') }} disabled={!mine || busy}

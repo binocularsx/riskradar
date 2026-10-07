@@ -102,7 +102,7 @@ export default function Approvals() {
       }
       await api.decideSubmission(item.id, payload)
       clearEdits(item)
-      setFlash(`Case #${item.case_id}: ${{ APPROVE: 'proposal approved; any bank action still requires delivery and a bank outcome', REJECT: 'proposal rejected; case remains open', RETURN: 'proposal returned for more work' }[decision]}.`)
+      setFlash(`Case #${item.case_id}: ${{ APPROVE: 'approved; the report and its recommended actions go to the support team, who confirm what they did', REJECT: 'proposal rejected; case remains open', RETURN: 'proposal returned for more work' }[decision]}.`)
       setReasons((r) => ({ ...r, [item.id]: '' }))
       await load()
     } catch (e) { setError(e.message) } finally { setBusy(null) }
@@ -155,7 +155,7 @@ export default function Approvals() {
 
           {(item.restrictions?.length > 0 || item.proposed_outcome === 'CONFIRMED_FRAUD') && (
             <div className="warn-box" style={{ marginBottom: 8 }}>
-              <strong>What the bank will be asked to do</strong>
+              <strong>What the support team will be asked to do</strong>
               <p className="dim" style={{ margin: '4px 0 8px', fontSize: 12 }}>
                 Review the proposed actions before approving. Uncheck anything that should
                 not be sent, or pull in what this case's own transactions suggest.
@@ -163,7 +163,7 @@ export default function Approvals() {
 
               {restrictionsFor(item).length === 0 && (
                 <p className="dim" style={{ margin: '0 0 8px', fontSize: 12.5 }}>
-                  Nothing proposed. Approving as-is asks the bank for nothing.
+                  Nothing proposed. Approving as-is asks support for no action on the customer.
                 </p>
               )}
 
@@ -204,8 +204,8 @@ export default function Approvals() {
               )}
               <p className="dim" style={{ margin: '8px 0 0', fontSize: 12 }}>
                 {edits[item.id]
-                  ? `On approval, ${chosenFor(item).length} restriction(s) go to the bank as you have set them, and the customer's account manager is told.`
-                  : 'On approval these go to the bank as proposed, and the customer’s account manager is told. Risk Radar recommends; the bank applies.'}
+                  ? `On approval, the support team gets the report with ${chosenFor(item).length} recommended action(s) as you have set them.`
+                  : 'On approval, the support team gets the report with these recommended actions. The fraud desk recommends; support decides and acts on the customer.'}
               </p>
             </div>
           )}

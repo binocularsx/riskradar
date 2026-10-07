@@ -138,6 +138,9 @@ export const BANK_ACTION = {
   MFA_REENROLMENT: 'Set up two-step login again',
   HOLD_REQUESTED: 'Hold requested',
   RECALL_REQUESTED: 'Recall of funds requested',
+  CONTACT_CUSTOMER: 'Contact the customer on a safe channel',
+  VERIFY_IDENTITY: 'Confirm it is really the owner',
+  NOTIFY_RECEIVING_BANK: 'Ask the receiving bank to hold or return the money',
 }
 
 /** Lists of accounts kept by the bank. */
@@ -164,11 +167,11 @@ export const DELIVERY = {
   SENT: 'Sent',
   FAILED: 'Could not send',
   NOT_SHAREABLE: 'Not shared (not allowed)',
-  RECOMMENDED: 'Approved, waiting to send to the bank',
-  DELIVERED: 'Sent, waiting for the bank to reply',
-  APPLIED: 'The bank applied it',
-  NOT_APPLIED: 'The bank did not apply it',
-  REJECTED: 'The bank refused it',
+  RECOMMENDED: 'Approved, waiting to send to support',
+  DELIVERED: 'Sent, waiting for support to reply',
+  APPLIED: 'Support has done it',
+  NOT_APPLIED: 'Support did not do it',
+  REJECTED: 'Support refused it',
 }
 
 /** Why an alert was held back instead of raised straight away. */
@@ -231,7 +234,6 @@ export const EVENT = {
   ESCALATE: 'Sent to a specialist',
   FRAUD_APPROVED: 'Fraud result approved',
   FRAUD_RETURNED: 'Fraud result sent back',
-  FRAUD_SUBMITTED: 'Result suggested for approval',
   HOLD_REQUESTED: 'Hold requested',
   IDENTITY_VERIFIED: "Customer's identity checked",
   LOGIN: 'Signed in',
@@ -252,6 +254,9 @@ export const EVENT = {
   WATCHLIST_FLAG_EXPIRED: '24-hour watch ended',
   WATCHLIST_FLAG_LIFTED: '24-hour watch lifted',
   WATCHLIST_FLAG_PLACED: '24-hour watch placed',
+  SUPPORT_HEADS_UP_SENT: 'Urgent heads-up sent to support',
+  SUPPORT_REPORT_RECEIVED: 'Customer report received from support',
+  FRAUD_SUBMITTED: 'Finding proposed for a lead to approve',
 }
 
 /**
@@ -320,4 +325,11 @@ export function sayParam(key, value) {
   const f = PARAM[key]
   if (f) return f(value)
   return `${words(key).toLowerCase()}: ${Array.isArray(value) ? value.map(words).join(', ') : value}`
+}
+
+/** What the support team has been sent about a case (D109). */
+export const SUPPORT_MESSAGE = {
+  REPORT: 'Report with recommendations',
+  HEADS_UP: 'Urgent heads-up: hold while we investigate',
+  CONTACT_REQUEST: 'Request to contact the customer within 24 hours',
 }

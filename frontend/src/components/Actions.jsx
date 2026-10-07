@@ -5,82 +5,12 @@
  * screen:
  *
  *   "Is this mine?"          -> OwnershipBanner
- *   "What do I do now?"      -> NextSteps
+ *   "What do I do now?"      -> the step checklist (CaseFlow)
  *   "What happens if I press that?" -> the consequence line under each button
  *
  * None of it is clever. All of it was missing.
  */
 
-const STEPS = {
-  'Escalate to the lead and hold the beneficiary': [
-    'Escalate to the Fraud Ops lead now — a sanctions match is their call, not yours.',
-    'Do not contact the customer. A sanctions hit has reporting rules attached.',
-    'Record the outcome as confirmed fraud so the destination is blocked bank-wide.',
-  ],
-  'Confirm fraud and ask the receiving bank to return the money': [
-    'Raise a recall on the transfers listed below, newest first — the newest money is the most recoverable.',
-    'Call the customer to confirm they did not authorise it.',
-    'Record confirmed fraud. The destination is already on the mule list; this adds the rest.',
-  ],
-  'Block the card and issue a new one': [
-    'Block the card immediately. The card is compromised, not the account.',
-    'Check whether any large authorisation went through after the small probes.',
-    'Call the customer to arrange a reissue, then record the outcome.',
-  ],
-  'Call the customer before any further transfer clears': [
-    'Call the number on file — not any number in the transaction.',
-    'Ask whether they made these transfers and whether they still hold their phone.',
-    'If unreachable, escalate to the lead: an unreachable customer during an active drain is the worst case.',
-    'Record the outcome either way, so the next model learns from it.',
-  ],
-  'Check the recipient accounts: they may be mule accounts working together': [
-    'Open the timeline below and check whether the destinations are all new.',
-    'Search each destination in Search to see whether other customers paid it too.',
-    'If several customers fed the same new account, escalate to Fraud Ops as a network.',
-    'Otherwise call the customer to confirm the payments were theirs.',
-  ],
-  'Check quickly, then close as no fraud': [
-    'Check the timeline — is the pattern consistent with what this customer normally does?',
-    'No customer call needed unless something else looks wrong.',
-    'Record that no fraud was found. This helps improve future alerts.',
-  ],
-  'Call the customer to check they made these payments': [
-    'Call the number on file and confirm the transactions were theirs.',
-    'If confirmed legitimate, record that no fraud was found.',
-    'If they did not make them, record confirmed fraud and raise a recall.',
-  ],
-  'Look through the account\'s recent activity, then call the customer if it continues': [
-    'Read the timeline below before doing anything else.',
-    'If the activity has stopped and nothing else stands out, monitor rather than call.',
-    'If it is still running, call the customer.',
-    'Record an outcome either way — leaving it open helps nobody.',
-  ],
-  'Keep an eye on it — no action needed unless it happens again': [
-    'No customer contact needed.',
-    'Record the outcome so the case leaves the queue.',
-    'If the same customer reappears within the day, treat the pair together.',
-  ],
-}
-
-const FALLBACK = [
-  'Read the timeline below and decide whether the pattern looks like the customer.',
-  'Call the customer if anything is unexplained.',
-  'Record an outcome so the case leaves the queue.',
-]
-
-export function NextSteps({ recommendation }) {
-  const steps = STEPS[recommendation?.action] || FALLBACK
-  return (
-    <div className="card" style={{ background: 'var(--bg-2)' }}>
-      <h3 style={{ marginBottom: 10 }}>What to do next</h3>
-      <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13.5 }}>
-        {steps.map((s, i) => (
-          <li key={i} style={{ marginBottom: 7 }}>{s}</li>
-        ))}
-      </ol>
-    </div>
-  )
-}
 
 /**
  * Who owns this case, and what the reader can do about it.
@@ -148,7 +78,7 @@ export function RoleCapability({ user }) {
 /** What pressing each button actually causes. Stated, not implied. */
 export const CONSEQUENCES = {
   CONFIRMED_FRAUD:
-    'Proposes confirmed fraud for a different lead to review. No bank action is authorised by this proposal alone.',
+    'Proposes confirmed fraud for a different lead to review. Nothing reaches the support team until a lead approves it.',
   FALSE_POSITIVE:
     'Proposes that no fraud was found. The outcome is recorded only after a different lead approves it.',
   INCONCLUSIVE:

@@ -11,6 +11,7 @@ import CaseFlow from './CaseFlow'
 import LinkGraph from './LinkGraph'
 import { CaseIcon } from './CaseWorkspace'
 import BankActions from './BankActions'
+import SupportPanel from './SupportPanel'
 import { usePolling } from '../lib/usePolling'
 import ReadStatus from './ReadStatus'
 import { CHANNEL, EVENT, OUTCOME, PROPOSAL_STATE, say, sayLower } from '../lib/words'
@@ -290,6 +291,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
               {p.decided_by_name && <p>Reviewed by {p.decided_by_name} · {when(p.decided_at)}</p>}
             </div>) : <p className="dim">No outcome proposals recorded.</p>)}
           </section>
+          <SupportPanel key={`support-${summary.id}`} summary={summary} user={user} />
           <BankActions key={summary.id} caseId={summary.id} />
       {(detail?.notes?.length > 0 || detail?.history?.length > 0) && (
         <div className="card investigation-history">

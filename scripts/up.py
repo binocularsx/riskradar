@@ -124,6 +124,10 @@ def main() -> None:
 
     s = settings()
     started = time.time()
+    # D109: on the demo desk the simulator plays the support team, so messages
+    # to support are accepted rather than left waiting for a real ticketing
+    # system. A deployment that sets its own connector keeps it.
+    os.environ.setdefault("RISKRADAR_SUPPORT_CONNECTOR", "loopback")
     pids: dict[str, int] = {}
     print("\nRisk Radar - starting\n")
 
@@ -160,6 +164,12 @@ def main() -> None:
             REPO_ROOT / "simulator", env,
         )
         say("live feed", f"{args.rate}/s - new alerts and cases arrive as it runs")
+        pids["support"] = spawn(
+            "support",
+            [str(PYTHON), "-u", "-m", "riskradar_sim", "support", "work", "--every", "30"],
+            REPO_ROOT / "simulator", env,
+        )
+        say("support team", "simulated - carries out approved actions every 30s")
 
     if vite_listening():
         say("frontend", "already up on 5173")
