@@ -4,8 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/v1/:path*", "destination": "https://REPLACE_WITH_API_HOST/v1/:path*" },
-    { "source": "/health", "destination": "https://REPLACE_WITH_API_HOST/health" },
+    { "source": "/v1/:path*", "destination": "https://teaching-wide-anime-females.trycloudflare.com/v1/:path*" },
+    { "source": "/health", "destination": "https://teaching-wide-anime-females.trycloudflare.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
