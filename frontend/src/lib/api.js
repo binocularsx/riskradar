@@ -32,23 +32,30 @@ async function request(path, options = {}) {
 
   const response = await fetch(path, {
     credentials: 'include',
+    signal: AbortSignal.timeout(20000),
     ...options,
     headers,
   })
 
   if (response.status === 401) {
+    if (path !== '/v1/auth/login') window.dispatchEvent(new Event('riskradar:auth-required'))
     const error = new Error('not authenticated')
     error.unauthenticated = true
     throw error
   }
 
   const text = await response.text()
-  const body = text ? JSON.parse(text) : null
+  let body = null
+  try { body = text ? JSON.parse(text) : null } catch {
+    throw new Error(`The service returned an unreadable response (HTTP ${response.status}). Try again.`)
+  }
 
   if (!response.ok) {
-    const error = new Error(
-      (body && (body.detail?.[0]?.msg || body.detail)) || `HTTP ${response.status}`
-    )
+    const detail = body?.detail
+    const message = typeof detail === 'string' ? detail
+      : Array.isArray(detail) ? detail.map((d) => d.msg).filter(Boolean).join('; ')
+        : detail?.message || `Request failed (HTTP ${response.status}).`
+    const error = new Error(message)
     error.status = response.status
     error.body = body
     throw error
@@ -85,6 +92,8 @@ export const api = {
   decideSubmission: (id, data) => post(`/v1/submissions/${id}/decision`, data),
   submissionCatalog: () => get('/v1/submissions/catalog'),
   operations: () => get('/v1/metrics/operations'),
+  systemStatus: () => get('/v1/system/status'),
+  restrictionReconciliation: () => get('/v1/metrics/restrictions/reconciliation'),
   // D83: the live desk, the case tracker and the workflow of one case
   intake: (minutes = 60) => get(`/v1/metrics/intake?minutes=${minutes}`),
   pipeline: () => get('/v1/workflow/pipeline'),

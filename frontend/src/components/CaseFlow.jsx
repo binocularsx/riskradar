@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api, when } from '../lib/api'
 import { Banner } from './ui'
+import { usePolling } from '../lib/usePolling'
+import ReadStatus from './ReadStatus'
 
 const STAGE_NAME = { NEW: 'Not started', IN_REVIEW: 'Being reviewed', ESCALATED: 'With a specialist', AWAITING_APPROVAL: 'Waiting for approval', AWAITING_CLOSE: 'Ready to close', CLOSED: 'Completed' }
 const NEXT_STEP = {
@@ -30,8 +32,11 @@ const NEXT_STEP = {
  */
 
 export default function CaseFlow({ caseId, user, onChanged }) {
-  const [flow, setFlow] = useState(null)
-  const [catalog, setCatalog] = useState(null)
+  const loadWorkflow = useCallback(() => api.caseWorkflow(caseId), [caseId])
+  const flowRead = usePolling(loadWorkflow)
+  const catalogRead = usePolling(api.workflowCatalog, 0)
+  const flow = flowRead.data
+  const catalog = catalogRead.data
   const [open, setOpen] = useState(null)          // step action being recorded
   const [result, setResult] = useState('')
   const [detail, setDetail] = useState('')
@@ -45,25 +50,24 @@ export default function CaseFlow({ caseId, user, onChanged }) {
   const [done, setDone] = useState(null)
   const can = (p) => user.permissions.includes(p)
 
-  const load = useCallback(() => api.caseWorkflow(caseId).then(setFlow).catch((e) => setError(e.message)), [caseId])
-  useEffect(() => { setFlow(null); setOpen(null); setEscalating(false); setReturning(false); setDone(null); load() }, [load])
-  useEffect(() => { api.workflowCatalog().then(setCatalog).catch(() => {}) }, [])
+  useEffect(() => { setOpen(null); setEscalating(false); setReturning(false); setDone(null) }, [caseId])
 
   const act = async (fn, message) => {
     setBusy(true); setError(null)
     try {
       await fn()
       setDone(message)
-      await load()
+      await flowRead.refresh()
       onChanged?.()
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
+      return true
+    } catch (e) { setError(e.message); return false } finally { setBusy(false) }
   }
 
-  if (!flow || !catalog) return <div className="card"><p className="dim" style={{ margin: 0 }}>Loading the case workflow…</p></div>
+  if (!flow || !catalog) return <div className="card"><ReadStatus resource={flowRead} label="Case workflow" /><ReadStatus resource={catalogRead} label="Workflow actions" /></div>
 
   const mine = flow.assignee_id === user.id
   const stage = flow.stage
-  const closedOrWaiting = stage === 'CLOSED' || stage === 'AWAITING_CLOSE'
+  const closedOrWaiting = ['CLOSED', 'AWAITING_CLOSE', 'AWAITING_APPROVAL'].includes(stage) || !!flowRead.error
   const canReturn = can('cases:escalate') && flow.escalation && flow.escalation.by_id !== user.id
                     && mine && stage === 'IN_REVIEW'
   const esc = catalog.escalation[target]
@@ -74,6 +78,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
       <p className="investigation-section-sub">Complete the review steps and record what happened.</p>
       {error && <Banner kind="error">{error}</Banner>}
       {done && <Banner kind="ok">{done}</Banner>}
+      <ReadStatus resource={flowRead} label="Case workflow" />
 
       <div className="stagebar">
         {flow.stages.map((s, i) => (
@@ -83,7 +88,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
           </div>
         ))}
       </div>
-      <p className="next"><strong>Next:</strong> {NEXT_STEP[stage] || flow.next}
+      <p className="next"><strong>Next:</strong> {flow.next || NEXT_STEP[stage]}
         {flow.assignee && <span className="dim"> · with {flow.assignee}</span>}</p>
       {flow.escalation && (
         <div className="escalation-note">
@@ -139,7 +144,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
                     <button className="primary" disabled={!result || busy}
                             onClick={() => act(() => api.recordAction(caseId, { action_code: s.action, result, detail: detail || null }),
                                                `Recorded: ${spec.label.toLowerCase()} — ${spec.results[result].toLowerCase()}.`)
-                              .then(() => setOpen(null))}>
+                              .then((ok) => { if (ok) setOpen(null) })}>
                       Save
                     </button>
                     <button className="ghost" onClick={() => setOpen(null)}>Cancel</button>
@@ -154,8 +159,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
       {stage === 'AWAITING_APPROVAL' && (
         <div className="dialog">
           <strong>Filed. Waiting for a lead.</strong> A lead who did not file this has to
-          approve it (D93). Nothing has been sent to the bank and no account manager has
-          been told until they do.
+          approve this proposal before it authorises any new bank action.
         </div>
       )}
 
@@ -172,7 +176,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
         <div className="dialog">
           <h3>Send this case for specialist help</h3>
           <div className="segmented" style={{ marginBottom: 10 }}>
-            {Object.entries(catalog.escalation).map(([k, v]) => (
+            {Object.entries(catalog.escalation).filter(([k]) => k !== 'INFOSEC').map(([k, v]) => (
               <button key={k} className={target === k ? 'on' : ''} onClick={() => setTarget(k)}>{v.label}</button>
             ))}
           </div>
@@ -192,7 +196,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
             <button className="primary" disabled={reason.trim().length < 5 || busy}
                     onClick={() => act(() => api.escalate(caseId, target, reason.trim()),
                                        `Escalated to ${esc.label}. It has left your queue; you will get it back with their findings.`)
-                      .then(() => { setEscalating(false); setReason('') })}>
+                      .then((ok) => { if (ok) { setEscalating(false); setReason('') } })}>
               Send to {esc.label}
             </button>
             <button className="ghost" onClick={() => setEscalating(false)}>Cancel</button>
@@ -211,7 +215,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
           <div className="row" style={{ marginTop: 8 }}>
             <button className="primary" disabled={findings.trim().length < 5 || busy}
                     onClick={() => act(() => api.returnCase(caseId, findings.trim()), 'Handed back with your findings.')
-                      .then(() => { setReturning(false); setFindings('') })}>
+                      .then((ok) => { if (ok) { setReturning(false); setFindings('') } })}>
               Hand back
             </button>
             <button className="ghost" onClick={() => setReturning(false)}>Cancel</button>

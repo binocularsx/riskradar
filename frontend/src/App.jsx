@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { api } from './lib/api'
 import Login from './pages/Login'
@@ -50,7 +50,7 @@ function nav(permissions) {
     can('cases:read') && { to: '/triage', label: 'Cases to review', section: 'Cases', hint: 'Review cases that need attention' },
     can('cases:read') && { to: '/tracker', label: 'All cases', section: 'Cases', hint: 'See every case and its current stage' },
     can('cases:approve_fraud') && { to: '/approvals', label: 'Decisions to approve', section: 'Cases', hint: 'Check and approve investigation results' },
-    can('metrics:read') && { to: '/operations', label: 'Dashboard', section: 'Reports', hint: 'See workload and performance' },
+    can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Reports', hint: 'See service readiness, urgent work and team workload' },
     can('cases:read') && { to: '/transactions', label: 'Find a transaction', section: 'Reports', hint: 'Search transaction records' },
     can('metrics:read') && { to: '/analytics', label: 'Performance reports', section: 'Reports', hint: 'See transaction and detection trends' },
     can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
@@ -65,13 +65,18 @@ function initials(name) {
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const location = useLocation()
+  const [logoutError, setLogoutError] = useState('')
 
   const refresh = useCallback(async () => {
     try { setUser(await api.me()) } catch { setUser(null) } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
+  useEffect(() => {
+    const requireAuthentication = () => setUser(null)
+    window.addEventListener('riskradar:auth-required', requireAuthentication)
+    return () => window.removeEventListener('riskradar:auth-required', requireAuthentication)
+  }, [])
 
   if (loading) return <div className="login-wrap"><p className="muted">Loading…</p></div>
   if (!user) return <Login onSignedIn={refresh} />
@@ -84,6 +89,8 @@ export default function App() {
   const home = supervises ? '/operations' : '/triage'
   const landing = links.find((l) => l.to === home)?.to
     ?? links.find((l) => l.to === '/triage')?.to ?? links[0]?.to ?? '/triage'
+  const guard = (permission, element) => user.permissions.includes(permission) ? element
+    : <div className="card"><h1>Access restricted</h1><p>Your role cannot open this page.</p><Link to={landing}>Return to your workspace</Link></div>
 
   // Nav grouped under its section headers, order preserved.
   const sections = []
@@ -125,7 +132,7 @@ export default function App() {
               <span className="profile-role">{user.role.replace(/_/g, ' ').toLowerCase()}</span>
             </span>
             <button className="ghost icon-btn" title="Sign out"
-                    onClick={async () => { await api.logout(); refresh() }} aria-label="Sign out">
+                    onClick={async () => { try { await api.logout(); setUser(null); setLogoutError('') } catch (e) { setLogoutError(e.message) } }} aria-label="Sign out">
               <Icon paths={['M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4', 'M10 17l5-5-5-5', 'M15 12H3']} />
             </button>
           </div>
@@ -134,18 +141,11 @@ export default function App() {
 
       <main className="main">
         <header className="topbar">
-          <div className="searchbar">
-            <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} />
-            <input type="search" placeholder="Search cases, customers, transactions..."
-                   aria-label="Search" />
-          </div>
+          {user.permissions.includes('cases:read') ? <Link className="topbar-workspace-link" to="/transactions">
+            <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} /> Find a transaction
+          </Link> : <span className="muted">Technology operations</span>}
           <div className="topbar-right">
-            <button className="topbar-icon" type="button" aria-label="Messages" title="Messages">
-              <Icon paths={['M4 5h16v12H7l-3 3z', 'M8 9h8', 'M8 13h5']} />
-            </button>
-            <button className="topbar-icon" type="button" aria-label="Notifications" title="Notifications">
-              <Icon paths={['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9', 'M10 21h4']} />
-            </button>
+            {user.permissions.includes('cases:approve_fraud') && <Link to="/approvals">Pending decisions</Link>}
             <div className="topbar-profile">
               <span className="avatar">{initials(user.display_name)}</span>
               <span className="topbar-profile-copy">
@@ -157,17 +157,18 @@ export default function App() {
         </header>
 
         <div className="content">
+          {logoutError && <div className="banner error" role="alert">Sign out failed: {logoutError}. Try again.</div>}
           <Routes>
             <Route path="/" element={<Navigate to={landing} replace />} />
-            <Route path="/live" element={<Intake />} />
-            <Route path="/tracker" element={<Tracker />} />
-            <Route path="/approvals" element={<Approvals />} />
-            <Route path="/triage" element={<CaseQueue user={user} />} />
-            <Route path="/cases/:id" element={<CaseDetail user={user} />} />
-            <Route path="/operations" element={<Operations />} />
-            <Route path="/transactions" element={<Transactions />} />
-            <Route path="/analytics" element={<Metrics user={user} />} />
-            <Route path="/admin" element={<Admin user={user} />} />
+            <Route path="/live" element={guard('cases:read', <Intake />)} />
+            <Route path="/tracker" element={guard('cases:read', <Tracker />)} />
+            <Route path="/approvals" element={guard('cases:approve_fraud', <Approvals />)} />
+            <Route path="/triage" element={guard('cases:read', <CaseQueue user={user} />)} />
+            <Route path="/cases/:id" element={guard('cases:read', <CaseDetail user={user} />)} />
+            <Route path="/operations" element={guard('metrics:read', <Operations user={user} />)} />
+            <Route path="/transactions" element={guard('cases:read', <Transactions />)} />
+            <Route path="/analytics" element={guard('metrics:read', <Metrics user={user} />)} />
+            <Route path="/admin" element={guard('admin:rules', <Admin user={user} />)} />
             <Route path="/roles" element={<Roles user={user} />} />
             <Route path="*" element={<Navigate to={landing} replace />} />
           </Routes>

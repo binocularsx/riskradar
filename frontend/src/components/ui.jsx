@@ -43,7 +43,7 @@ export function Stat({ label, value, note }) {
 }
 
 export function Banner({ kind = 'info', children }) {
-  return <div className={`banner ${kind}`}>{children}</div>
+  return <div className={`banner ${kind}`} role={kind === 'error' || kind === 'warn' ? 'alert' : 'status'}>{children}</div>
 }
 
 export function Empty({ children }) {
