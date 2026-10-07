@@ -50,9 +50,9 @@ function nav(permissions) {
     can('cases:read') && { to: '/live', label: 'New activity', section: 'Cases', hint: 'See new transactions and alerts' },
     can('cases:read') && { to: '/triage', label: 'Cases to review', section: 'Cases', hint: 'Review cases that need attention' },
     can('cases:read') && { to: '/tracker', label: 'Progress board', section: 'Cases', hint: 'Every open case, laid out by stage' },
+    can('cases:read') && { to: '/transactions', label: 'Payment lookup', section: 'Cases', hint: 'Find any payment and see how it was checked' },
     can('cases:approve_fraud') && { to: '/approvals', label: 'Decisions to approve', section: 'Cases', hint: 'Check and approve investigation results' },
     can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Reports', hint: 'See service readiness, urgent work and team workload' },
-    can('cases:read') && { to: '/transactions', label: 'Find a transaction', section: 'Reports', hint: 'Search transaction records' },
     can('metrics:read') && { to: '/analytics', label: 'Performance reports', section: 'Reports', hint: 'See transaction and detection trends' },
     can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
     { to: '/roles', label: 'Access and roles', section: 'Settings', hint: 'See what each team member can do' },
@@ -143,7 +143,7 @@ export default function App() {
       <main className="main">
         <header className="topbar">
           {user.permissions.includes('cases:read') ? <Link className="topbar-workspace-link" to="/transactions">
-            <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} /> Find a transaction
+            <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} /> Look up a payment
           </Link> : <span className="muted">Technology operations</span>}
           <div className="topbar-right">
             {user.permissions.includes('cases:approve_fraud') && <Link to="/approvals">Pending decisions</Link>}

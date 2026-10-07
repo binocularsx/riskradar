@@ -217,3 +217,21 @@ def test_the_live_stream_only_carries_events_a_subscriber_may_see(somebody_elses
             assert 4 in seen, "their own case's alerts still arrive"
         # A lead sees all of it.
         assert {r["id"] for r in _visible(c, lead, rows)} == {r["id"] for r in rows}
+
+
+def test_a_payment_check_is_scoped_like_search(client, api_headers, sample_transaction):
+    """One payment's check (Payment lookup) follows the same rule as search:
+    for a customer outside the analyst's cases it does not exist; a lead sees
+    it, flagged or not."""
+    body = sample_transaction()
+    r = client.post("/v1/transactions", json=body, headers=api_headers)
+    assert r.status_code in (200, 201, 202), r.text
+    path = f"/v1/transactions/{body['transaction_ref']}/check"
+    assert as_user("analyst@riskradar.local").get(path).status_code == 404
+    seen = as_user("lead@riskradar.local").get(path)
+    assert seen.status_code == 200, seen.text
+    check = seen.json()
+    assert check["transaction"]["transaction_ref"] == body["transaction_ref"]
+    assert check["case"] is None or check["case"].get("not_on_this_payment")
+    # Tokens identify customers; the check never hands them out.
+    assert "subject_token" not in check["transaction"] and "beneficiary_token" not in check["transaction"]

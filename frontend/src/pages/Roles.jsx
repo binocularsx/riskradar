@@ -17,7 +17,7 @@ const ROLES = [
     who: 'The person who works the queue all day.',
     sees: [
       'Cases to review — the work assigned to them',
-      'Find a transaction — look up any transaction',
+      'Payment lookup — find a payment on their cases and see how it was checked',
     ],
     can: [
       'Take a case from the shared pool',
@@ -58,7 +58,7 @@ const ROLES = [
     title: 'Information Security Analyst',
     who: 'Handles suspected account compromise rather than commercial loss.',
     sees: [
-      'Cases to review and Find a transaction',
+      'Cases to review and Payment lookup',
       'Dashboard',
     ],
     can: [

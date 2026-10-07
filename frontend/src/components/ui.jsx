@@ -145,7 +145,7 @@ export function PolicyTrace({ trace }) {
           )}
           {step.step === 'final' && (
             <>Final risk <RiskBadge level={step.level} />: {say(DECISION, step.decision).toLowerCase()}
-              {step.actionable ? ', and an alert was raised for the team.' : '. Too low to raise an alert.'}</>
+              {step.actionable ? '. Serious enough to alert the team.' : '. Too low to raise an alert.'}</>
           )}
         </li>
       ))}

@@ -235,7 +235,7 @@ function peakAcross(alerts) {
   return peak
 }
 
-export default function Why({ alerts, features, signals, amountMinor, authResult }) {
+export default function Why({ alerts, features, signals, amountMinor, authResult, title, emptyText }) {
   const merged = peakAcross(alerts) || features
   if (!merged) return null
   features = merged
@@ -258,10 +258,12 @@ export default function Why({ alerts, features, signals, amountMinor, authResult
   return (
     <div className="card" style={{ background: 'var(--bg-2)' }}>
       <h3 style={{ marginBottom: 10 }}>
-        Why this was flagged{alerts?.length > 1 ? ` — across all ${alerts.length} transactions` : ''}
+        {title || <>Why this was flagged{alerts?.length > 1 ? ` — across all ${alerts.length} transactions` : ''}</>}
       </h3>
 
-      {found.length === 0 ? (
+      {found.length === 0 && emptyText ? (
+        <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>{emptyText}</p>
+      ) : found.length === 0 ? (
         <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
           No single reading was far out of the ordinary. The model flagged this on
           the <em>combination</em> of several mildly unusual things — which is

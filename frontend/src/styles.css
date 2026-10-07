@@ -451,6 +451,8 @@ td { padding: 11px 14px; border-bottom: 1px solid var(--bg-2); vertical-align: m
 tbody tr:last-child td { border-bottom: none; }
 tbody tr.clickable { cursor: pointer; }
 tbody tr.clickable:hover { background: var(--surface-2); }
+tbody tr.selected { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+.payment-check { margin-bottom: 14px; scroll-margin-top: 16px; }
 .num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
 
 /* ---------------------------------------------------------------- misc */

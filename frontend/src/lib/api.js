@@ -137,6 +137,7 @@ export const api = {
   geography: (hours = 168) => get(`/v1/metrics/geography?hours=${hours}`),
   budgetMenu: () => get('/v1/metrics/budget-menu'),
   searchTransactions: (params) => get(`/v1/transactions/search?${new URLSearchParams(params)}`),
+  paymentCheck: (ref) => get(`/v1/transactions/${encodeURIComponent(ref)}/check`),
 
   // administration
   rules: () => get('/v1/admin/rules'),
