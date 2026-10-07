@@ -49,7 +49,7 @@ function nav(permissions) {
   return [
     can('cases:read') && { to: '/live', label: 'New activity', section: 'Cases', hint: 'See new transactions and alerts' },
     can('cases:read') && { to: '/triage', label: 'Cases to review', section: 'Cases', hint: 'Review cases that need attention' },
-    can('cases:read') && { to: '/tracker', label: 'All cases', section: 'Cases', hint: 'See every case and its current stage' },
+    can('cases:read') && { to: '/tracker', label: 'Progress board', section: 'Cases', hint: 'Every open case, laid out by stage' },
     can('cases:approve_fraud') && { to: '/approvals', label: 'Decisions to approve', section: 'Cases', hint: 'Check and approve investigation results' },
     can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Reports', hint: 'See service readiness, urgent work and team workload' },
     can('cases:read') && { to: '/transactions', label: 'Find a transaction', section: 'Reports', hint: 'Search transaction records' },

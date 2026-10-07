@@ -161,7 +161,7 @@ export default function Intake() {
 
       <div className="card" style={{ marginTop: 14 }}>
         <div className="between"><h2 style={{ margin: 0 }}>Where the cases are</h2>
-          <Link to="/tracker" className="dim" style={{ fontSize: 12 }}>open the case tracker →</Link></div>
+          <Link to="/tracker" className="dim" style={{ fontSize: 12 }}>open the progress board →</Link></div>
         <div className="pipeline-strip">
           {data.pipeline.map((s) => (
             <Link to={`/tracker#${s.key}`} key={s.key} className="pipe-stage">

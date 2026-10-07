@@ -88,7 +88,7 @@ export default function CaseQueue({ user }) {
           <p className="page-sub">A clear view of your queue. Focus on the cases that matter most.</p>
         </div>
         <div className="ops-head-actions">
-          <Link className="ops-action" to="/tracker">View all stages <CaseIcon name="arrow" /></Link>
+          <Link className="ops-action" to="/tracker">Open progress board <CaseIcon name="arrow" /></Link>
           {canReview && !supervises && <button className="primary ops-action" onClick={takeNext} disabled={busy}>
             <span aria-hidden="true">+</span> {busy ? 'Finding a case…' : 'Take next case'}
           </button>}
