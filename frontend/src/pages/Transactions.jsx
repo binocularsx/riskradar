@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { api, when } from '../lib/api'
 import { Banner, RiskBadge } from '../components/ui'
 import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
+import { DECLINE_REASON, say } from '../lib/words'
 
 const CHANNELS = { MOBILE_APP: 'Mobile app', WEB: 'Web', USSD: 'USSD', POS: 'POS', ATM: 'ATM', AGENT: 'Agent', BRANCH: 'Branch', API: 'API' }
 const RESULTS = [
@@ -158,7 +159,7 @@ export default function Transactions() {
                   <span className="case-cell-sub transaction-amount-note">{t.direction === 'INBOUND' ? 'Incoming' : t.direction === 'OUTBOUND' ? 'Outgoing' : '—'}</span></td>
                 <td><span className="transaction-channel">{CHANNELS[t.channel] || t.channel || '—'}</span></td>
                 <td><span className="authdot"><span className={`live-dot ${resultTone(t.auth_result)}`} />{label(t.auth_result)}</span>
-                  {t.decline_reason && <span className="transaction-decline-reason" title={t.decline_reason}>{t.decline_reason.replace(/_/g, ' ').toLowerCase()}</span>}</td>
+                  {t.decline_reason && <span className="transaction-decline-reason" title={t.decline_reason}>{say(DECLINE_REASON, t.decline_reason)}</span>}</td>
                 <td><RiskBadge level={t.risk_level} /><span className="case-cell-sub">{t.score_0_100 == null ? 'Not scored' : `Score ${t.score_0_100} / 100`}</span></td>
                 <td>{t.case_id ? <Link className="transaction-case-link" to={`/cases/${t.case_id}`}>CASE-{t.case_id}<CaseIcon name="arrow" /></Link>
                   : <span className="transaction-no-case">No linked case</span>}</td>

@@ -2,13 +2,8 @@ import { useCallback } from 'react'
 import { api, when } from '../lib/api'
 import { usePolling } from '../lib/usePolling'
 import ReadStatus from './ReadStatus'
+import { BANK_ACTION, CHANNEL, DELIVERY, say } from '../lib/words'
 
-const ACTIONS = {
-  DEBIT_RESTRICTION: 'Debit restriction', CHANNEL_RESTRICTION: 'Channel restriction',
-  CARD_FREEZE: 'Card freeze', BENEFICIARY_RESTRICTION: 'Destination restriction',
-  TRANSACTION_REVERSAL: 'Transaction reversal', SESSION_TERMINATION: 'Session termination',
-  CREDENTIAL_RESET: 'Credential reset', MFA_REENROLMENT: 'MFA re-enrolment',
-}
 const STATUS = {
   RECOMMENDED: ['Approved request · awaiting delivery', 'escalate'],
   DELIVERED: ['Delivered · awaiting bank outcome', 'escalate'],
@@ -27,11 +22,11 @@ export default function BankActions({ caseId }) {
     <ReadStatus resource={resource} label="Bank action requests" />
     {items?.length === 0 && <p className="dim">No approved bank action requests recorded for this case.</p>}
     {items?.map((r) => {
-      const [label, tone] = STATUS[r.status] || [r.status || 'Unknown status', '']
+      const [label, tone] = STATUS[r.status] || [say(DELIVERY, r.status) || 'Status not known', '']
       return <article className="bank-action" key={r.restriction_ref}>
-        <strong>{ACTIONS[r.action] || r.action.replace(/_/g, ' ').toLowerCase()}</strong>
+        <strong>{say(BANK_ACTION, r.action)}</strong>
         <span className={`pill ${tone}`}>{label}</span>
-        {r.channel && <p>Channel: {r.channel.replace(/_/g, ' ').toLowerCase()}</p>}
+        {r.channel && <p>Channel: {say(CHANNEL, r.channel)}</p>}
         {r.transaction_ref && <p className="mono">Payment: {r.transaction_ref}</p>}
         {r.reason && <p>{r.reason}</p>}
         <details><summary>Request reference and dates</summary><p className="mono">{r.restriction_ref}</p><p>Issued {when(r.issued_at)}<br />Bank outcome received {when(r.acknowledged_at)}</p></details>

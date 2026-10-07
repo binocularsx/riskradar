@@ -52,7 +52,7 @@ ACTIONS: dict[str, dict[str, Any]] = {
     "RECEIVING_BANK_NOTIFIED": {
         "label": "Receiving bank notified",
         "results": {"DONE": "Notified and asked to hold", "NOT_POSSIBLE": "Could not reach them"},
-        "hint": "Recording this also stamps the counterparty-notified milestone when the customer has reported.",
+        "hint": "If the customer has reported the fraud, this also records when the receiving bank was told, for the regulatory deadline.",
     },
     "DESTINATIONS_CHECKED": {
         "label": "Checked the destination accounts",
@@ -77,22 +77,22 @@ ACTIONS: dict[str, dict[str, Any]] = {
 # Steps per recommended action (triage.recommend). Each step is the thing to do
 # and the action that records it. Order is the order to do them in.
 STEPS: dict[str, list[dict[str, str]]] = {
-    "Escalate to InfoSec and hold the beneficiary": [
+    "Send to Information Security (InfoSec) and block payments to this recipient": [
         {"text": "Escalate to InfoSec now. They own sanctions matches.", "action": "ESCALATE"},
         {"text": "Do not contact the customer: a sanctions hit has reporting rules.", "action": ""},
         {"text": "Hold further transfers to the destination.", "action": "HOLD_REQUESTED"},
     ],
-    "Confirm fraud and recall the funds": [
+    "Confirm fraud and ask the receiving bank to return the money": [
         {"text": "Raise a recall on the transfers below, newest first.", "action": "RECALL_REQUESTED"},
         {"text": "Call the customer to confirm they did not authorise it.", "action": "CUSTOMER_CONTACTED"},
         {"text": "Record confirmed fraud.", "action": "OUTCOME"},
     ],
-    "Block the card and reissue": [
+    "Block the card and issue a new one": [
         {"text": "Block the card. The card is compromised, not the account.", "action": "CARD_BLOCK_REQUESTED"},
         {"text": "Call the customer to arrange a reissue.", "action": "CUSTOMER_CONTACTED"},
         {"text": "Record the outcome.", "action": "OUTCOME"},
     ],
-    "Hold further transfers and reach the customer on a second channel": [
+    "Hold further transfers and contact the customer another way, not on the phone number on file": [
         {"text": "Hold further transfers in core banking.", "action": "HOLD_REQUESTED"},
         {"text": "Reach the customer by email or the branch, not the phone number on file.", "action": "CUSTOMER_CONTACTED"},
         {"text": "If they did not make the transfers, notify the receiving bank.", "action": "RECEIVING_BANK_NOTIFIED"},
@@ -109,7 +109,7 @@ STEPS: dict[str, list[dict[str, str]]] = {
         {"text": "Check whether other customers paid the same account.", "action": "DESTINATIONS_CHECKED"},
         {"text": "Record the outcome.", "action": "OUTCOME"},
     ],
-    "Verify the owner in person or by video before releasing more": [
+    "Confirm it is really the owner, in person or by video call, before letting more money go": [
         {"text": "Check who changed the phone number or email, and when.", "action": "CONTACT_DETAILS_CHECKED"},
         {"text": "Hold further transfers until the owner is verified.", "action": "HOLD_REQUESTED"},
         {"text": "Verify the owner in person or by video.", "action": "IDENTITY_VERIFIED"},
@@ -119,30 +119,30 @@ STEPS: dict[str, list[dict[str, str]]] = {
     "Call the customer before any further transfer clears": [
         {"text": "Call the number on file, not any number in the transaction.", "action": "CUSTOMER_CONTACTED"},
         {"text": "If they did not make them, hold further transfers.", "action": "HOLD_REQUESTED"},
-        {"text": "If unreachable during an active drain, escalate to InfoSec.", "action": "ESCALATE"},
+        {"text": "If you cannot reach them while money is still leaving, send the case to InfoSec.", "action": "ESCALATE"},
         {"text": "Record the outcome.", "action": "OUTCOME"},
     ],
-    "Review the destination accounts for a mule network": [
+    "Check the recipient accounts: they may be mule accounts working together": [
         {"text": "Check whether the destinations are new and paid by other customers.", "action": "DESTINATIONS_CHECKED"},
         {"text": "If several customers fed the same new accounts, escalate to Fraud Ops as a network.", "action": "ESCALATE"},
         {"text": "Otherwise call the customer to confirm the payments.", "action": "CUSTOMER_CONTACTED"},
         {"text": "Record the outcome.", "action": "OUTCOME"},
     ],
-    "Verify quickly, then clear": [
+    "Check quickly, then close as no fraud": [
         {"text": "Check the timeline is consistent with this customer.", "action": "TIMELINE_REVIEWED"},
-        {"text": "Record false positive: that answer trains the next model.", "action": "OUTCOME"},
+        {"text": "Record 'No fraud found'. That answer also teaches the system what normal looks like.", "action": "OUTCOME"},
     ],
-    "Contact the customer to verify": [
+    "Call the customer to check they made these payments": [
         {"text": "Call the number on file and confirm the transactions.", "action": "CUSTOMER_CONTACTED"},
         {"text": "If they did not make them, raise a recall.", "action": "RECALL_REQUESTED"},
         {"text": "Record the outcome.", "action": "OUTCOME"},
     ],
-    "Review the timeline, then contact the customer if it continues": [
+    "Look through the account's recent activity, then call the customer if it continues": [
         {"text": "Read the timeline before doing anything else.", "action": "TIMELINE_REVIEWED"},
         {"text": "If the activity is still running, call the customer.", "action": "CUSTOMER_CONTACTED"},
         {"text": "Record the outcome.", "action": "OUTCOME"},
     ],
-    "Monitor — no action needed unless it repeats": [
+    "Keep an eye on it — no action needed unless it happens again": [
         {"text": "Check the timeline; no customer contact needed.", "action": "TIMELINE_REVIEWED"},
         {"text": "Record the outcome so the case leaves the queue.", "action": "OUTCOME"},
     ],

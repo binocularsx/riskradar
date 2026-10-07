@@ -5,6 +5,7 @@ import { api, clock, nairaShort } from '../lib/api'
 import { useAlertStream } from '../lib/useStream'
 import { Banner, RiskBadge } from '../components/ui'
 import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
+import { ALARM, say } from '../lib/words'
 
 const SCOPES = [
   { key: 'mine', label: 'My cases' },
@@ -95,7 +96,7 @@ export default function CaseQueue({ user }) {
       </div>
 
       {[...new Map(alarms.map((a) => [`${a.code}:${a.detail}`, a])).values()].map((a, i) => (
-        <Banner key={i} kind="warn"><strong>System alarm — {a.code}.</strong> {a.detail}</Banner>
+        <Banner key={i} kind="warn"><strong>System problem: {say(ALARM, a.code)}.</strong> {a.detail}</Banner>
       ))}
       {error && <Banner kind="error">{error} <button className="ghost" onClick={load}>Retry</button></Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}

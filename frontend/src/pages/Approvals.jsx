@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { api } from '../lib/api'
-import { Banner } from '../components/ui'
+import { Banner, RiskBadge } from '../components/ui'
+import { BANK_ACTION, CHANNEL, OUTCOME, say, sayLower } from '../lib/words'
 
 /**
  * The lead's queue (D93).
@@ -139,7 +140,7 @@ export default function Approvals() {
           <div className="between wrap">
             <div>
               <strong>Case #{item.case_id}</strong>{' '}
-              <span className={`pill ${String(item.risk_level).toLowerCase()}`}>{item.risk_level}</span>{' '}
+              <RiskBadge level={item.risk_level} />{' '}
               <span className="dim">{item.alert_count} alert(s) · {money(item.exposure_minor)} under investigation</span>
             </div>
             <div className="dim">
@@ -148,7 +149,7 @@ export default function Approvals() {
           </div>
 
           <p style={{ margin: '10px 0 4px' }}>
-            Proposes <strong>{String(item.proposed_outcome).replace(/_/g, ' ').toLowerCase()}</strong>
+            Proposes <strong>{sayLower(OUTCOME, item.proposed_outcome)}</strong>
           </p>
           <p className="dim" style={{ whiteSpace: 'pre-wrap', margin: '0 0 8px' }}>{item.rationale}</p>
 
@@ -171,11 +172,13 @@ export default function Approvals() {
                   <input type="checkbox" checked={!r._off} style={{ marginTop: 3 }}
                          onChange={() => toggleRestriction(item, i)} />
                   <span style={{ fontSize: 12.5 }}>
-                    <span className="pill">{String(r.action).replace(/_/g, ' ').toLowerCase()}</span>{' '}
-                    <span className="mono dim">
-                      {r.transaction_ref || r.account_token || r.beneficiary_token || ''}
+                    <span className="pill">{say(BANK_ACTION, r.action)}</span>{' '}
+                    <span className="dim">
+                      {r.transaction_ref ? <>payment <span className="mono">{r.transaction_ref}</span></>
+                        : r.beneficiary_token ? "on the recipient's account"
+                          : r.account_token ? "on this customer's account" : ''}
                     </span>
-                    {r.channel ? <span className="dim"> ({r.channel})</span> : null}
+                    {r.channel ? <span className="dim"> ({say(CHANNEL, r.channel)})</span> : null}
                     {r.why ? <span className="dim"> — {r.why}</span> : null}
                   </span>
                 </label>
@@ -202,7 +205,7 @@ export default function Approvals() {
               <p className="dim" style={{ margin: '8px 0 0', fontSize: 12 }}>
                 {edits[item.id]
                   ? `On approval, ${chosenFor(item).length} restriction(s) go to the bank as you have set them, and the customer's account manager is told.`
-                  : 'On approval these go to the bank as proposed, and the customer’s account manager is told. Risk Radar recommends; the bank applies (D7).'}
+                  : 'On approval these go to the bank as proposed, and the customer’s account manager is told. Risk Radar recommends; the bank applies.'}
               </p>
             </div>
           )}

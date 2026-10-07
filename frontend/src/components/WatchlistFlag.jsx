@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { api, clock, when } from '../lib/api'
 import { Banner } from './ui'
+import { sayLower } from '../lib/words'
 
 /**
  * The twenty-four hour flag (WP-06, D73).
@@ -69,7 +70,7 @@ function Elsewhere({ identity, industryFlags }) {
       </div>
       {industryFlags.map((f) => (
         <div key={f.external_ref} className="dim" style={{ fontSize: 11.5, padding: '2px 0' }}>
-          {f.institution_code} · {f.reason_code.replace(/_/g, ' ').toLowerCase()} · {when(f.flagged_at)} to {when(f.expires_at)}
+          {f.institution_code} · {sayLower({}, f.reason_code)} · {when(f.flagged_at)} to {when(f.expires_at)}
           {f.active ? '' : ' (ended)'}
         </div>
       ))}

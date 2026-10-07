@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { naira, when } from '../lib/api'
+import { CHANNEL, PAYMENT_RESULT, say } from '../lib/words'
 
 /**
  * The customer's transactions plotted against time.
@@ -185,7 +186,7 @@ export default function Timeline({ items }) {
           const cx = x(new Date(t.occurred_at).getTime())
           const cy = y(Math.max(Number(t.amount_minor) / 100, 1))
           const declined = t.auth_result !== 'APPROVED'
-          const title = `${when(t.occurred_at)} · ${naira(t.amount_minor)} · ${t.channel} · ${t.auth_result}${t.alerted ? ' · ALERTED' : ''}`
+          const title = `${when(t.occurred_at)} · ${naira(t.amount_minor)} · ${say(CHANNEL, t.channel)} · ${say(PAYMENT_RESULT, t.auth_result)}${t.alerted ? ' · flagged' : ''}`
 
           if (declined) {
             return (

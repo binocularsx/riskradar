@@ -176,6 +176,26 @@ def test_every_recommendation_explains_itself():
         assert r.urgency in ("now", "soon", "routine")
 
 
+def test_every_recommendation_has_its_steps():
+    """The step checklist is looked up by the recommendation's wording. Reword
+    one without re-keying workflow.STEPS and the case silently falls back to
+    the generic steps — this catches that."""
+    from riskradar.cases import workflow
+
+    signal_sets = [
+        ["SANCTIONED_BENEFICIARY"], ["KNOWN_MULE_BENEFICIARY"], ["CARD_TESTING_PROBES"],
+        ["SIM_SWAP_TRANSFER"], ["CARD_PRESENT_NEW_REGION_CASHOUT"], ["SCAM_BENEFICIARY_FANIN"],
+        ["DORMANT_ACCOUNT_REACTIVATION"], ["ESTABLISHED_PAYEE_NORMAL"], [],
+    ]
+    produced = {rec(signals=s).action for s in signal_sets}
+    produced.add(rec(signals=["VELOCITY_BURST_1H"], new_device=True).action)
+    produced.add(rec(signals=["VELOCITY_BURST_1H"], distinct_beneficiaries=5).action)
+    for level in ("CRITICAL", "HIGH", "MEDIUM"):
+        produced.add(rec(risk_level=level).action)
+    assert len(produced) == 13
+    assert not [a for a in produced if a not in workflow.STEPS]
+
+
 def test_the_amount_appears_in_the_reason():
     """An analyst deciding whether to interrupt a customer needs the number in
     the sentence, not on another part of the screen."""

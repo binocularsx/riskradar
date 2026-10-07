@@ -13,6 +13,7 @@ import Roles from './pages/Roles'
 import Intake from './pages/Intake'
 import Approvals from './pages/Approvals'
 import Tracker from './pages/Tracker'
+import { ROLE, say } from './lib/words'
 
 /* Line icons for the nav, inline so they inherit currentColor and need no
  * fetch. Generic UI glyphs, not brand marks. */
@@ -129,7 +130,7 @@ export default function App() {
             <span className="avatar">{initials(user.display_name)}</span>
             <span className="profile-text">
               <span className="profile-name">{user.display_name}</span>
-              <span className="profile-role">{user.role.replace(/_/g, ' ').toLowerCase()}</span>
+              <span className="profile-role">{say(ROLE, user.role)}</span>
             </span>
             <button className="ghost icon-btn" title="Sign out"
                     onClick={async () => { try { await api.logout(); setUser(null); setLogoutError('') } catch (e) { setLogoutError(e.message) } }} aria-label="Sign out">
@@ -150,7 +151,7 @@ export default function App() {
               <span className="avatar">{initials(user.display_name)}</span>
               <span className="topbar-profile-copy">
                 <strong>{user.display_name}</strong>
-                <small>{user.role.replace(/_/g, ' ').toLowerCase()}</small>
+                <small>{say(ROLE, user.role)}</small>
               </span>
             </div>
           </div>

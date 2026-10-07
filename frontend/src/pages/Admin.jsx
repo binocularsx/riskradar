@@ -3,8 +3,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { adapterDescription } from '../components/ServiceHealth'
 import { api, when } from '../lib/api'
 import { Banner, Empty, RiskBadge } from '../components/ui'
+import { ALARM, BANK_ACTION, DELIVERY, EVENT, LIST_KIND, ROLE, RULE, RULE_EFFECT, say, sayLower, sayParam, words } from '../lib/words'
 
-const TABS = ['System overview', 'Rules', 'Thresholds', 'Pending', 'Models', 'Lists', 'Enforcement', 'Integrations', 'Access & audit']
+const MODE = { SHADOW: 'Trial (not sent to the bank)', LIVE: 'Live (sent to the bank)', OFF: 'Off' }
+const OBJECT = { case: 'Case', alert: 'Alert', user: 'User', decision: 'Payment check', restriction_order: 'Bank instruction', config_change_request: 'Setting change', app_config: 'Setting', api_key: 'Connection key', threshold_set: 'Risk levels', enforcement_policy: 'Automatic-action policy' }
+/** "case 531" -> "Case #531"; a system alarm names the problem. */
+const auditObject = (a) => a.object_type === 'system'
+  ? say(ALARM, a.object_id)
+  : `${say(OBJECT, a.object_type)}${a.object_id ? ` #${a.object_id}` : ''}`
+
+const TABS = ['System overview', 'Rules', 'Risk levels', 'Pending', 'Models', 'Lists', 'Bank instructions', 'Integrations', 'Access & audit']
 
 /**
  * Administration (FR-040 to FR-042).
@@ -38,11 +46,11 @@ export default function Admin() {
       </div>
       {tab === 'System overview' && <SystemOverview go={setTab} />}
       {tab === 'Rules' && <Rules />}
-      {tab === 'Thresholds' && <Thresholds />}
+      {tab === 'Risk levels' && <Thresholds />}
       {tab === 'Pending' && <PendingChanges />}
       {tab === 'Models' && <Models />}
       {tab === 'Lists' && <Lists />}
-      {tab === 'Enforcement' && <Enforcement />}
+      {tab === 'Bank instructions' && <Enforcement />}
       {tab === 'Integrations' && <Integrations />}
       {tab === 'Access & audit' && <Audit />}
     </div>
@@ -79,12 +87,12 @@ function SystemOverview({ go }) {
         <div className="statcard">
           <div className="statcard-k">Active rules</div>
           <div className="statcard-v">{enabledRules}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>ruleset v{rules.ruleset.version}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>rule set v{rules.ruleset.version}</div>
         </div>
         <div className="statcard">
-          <div className="statcard-k">Thresholds</div>
+          <div className="statcard-k">Risk levels</div>
           <div className="statcard-v" style={{ fontSize: 20 }}>v{activeThresh?.version ?? '—'}</div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>alert ≥ {activeThresh?.alert_min_level ?? '—'}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>alerts from {activeThresh?.alert_min_level ? words(activeThresh.alert_min_level) : '—'} up</div>
         </div>
         <div className="statcard">
           <div className="statcard-k">Reviews overdue</div>
@@ -107,9 +115,9 @@ function SystemOverview({ go }) {
               {audit.items.map((a) => (
                 <tr key={a.id}>
                   <td className="mono dim" style={{ fontSize: 11.5 }}>{when(a.occurred_at)}</td>
-                  <td>{a.actor} <span className="dim">({a.actor_role})</span></td>
-                  <td className="mono">{a.action}</td>
-                  <td className="muted">{a.object_type} {a.object_id}</td>
+                  <td>{a.actor_role === 'SYSTEM' ? 'Risk Radar (automatic)' : <>{a.actor} <span className="dim">({sayLower(ROLE, a.actor_role)})</span></>}</td>
+                  <td>{say(EVENT, a.action)}</td>
+                  <td className="muted">{auditObject(a)}</td>
                 </tr>
               ))}
             </tbody>
@@ -172,11 +180,11 @@ function Integrations() {
         {integrations.outbox.length ? (
           <div className="table-scroll">
             <table>
-              <thead><tr><th>Outbox</th><th className="num">Messages</th><th>Oldest</th><th>Last reason</th></tr></thead>
+              <thead><tr><th>Sending status</th><th className="num">Messages</th><th>Oldest</th><th>Last reason</th></tr></thead>
               <tbody>
                 {integrations.outbox.map((o) => (
                   <tr key={o.status}>
-                    <td className="mono">{o.status}</td><td className="num">{o.n}</td>
+                    <td>{say(DELIVERY, o.status)}</td><td className="num">{o.n}</td>
                     <td className="mono dim">{when(o.oldest)}</td><td className="dim">{o.last_error || '—'}</td>
                   </tr>
                 ))}
@@ -211,14 +219,14 @@ function Enforcement() {
     <>
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="between">
-          <h2 style={{ margin: 0 }}>Enforcement policy v{active?.version ?? '—'}</h2>
-          <span className={`pill ${active?.mode === 'LIVE' ? 'suppress' : ''}`}>{active?.mode ?? 'none'}</span>
+          <h2 style={{ margin: 0 }}>Automatic-action policy v{active?.version ?? '—'}</h2>
+          <span className={`pill ${active?.mode === 'LIVE' ? 'suppress' : ''}`}>{active ? say(MODE, active.mode) : 'None'}</span>
         </div>
         {active && (
           <>
             <p className="dim" style={{ fontSize: 12.5 }}>
-              A directive may be acted on for {active.ttl_seconds} seconds after it is issued. Late, expired or
-              missing: {active.fail_open_action.replace(/_/g, ' ').toLowerCase()} (fail open).
+              An instruction to the bank may be carried out up to {active.ttl_seconds} seconds after it is sent. If it is late, expired or
+              missing, the payment is {active.fail_open_action === 'APPROVE' ? 'let through' : 'let through and watched'}.
               {active.signed_by ? ` Signed by ${active.signed_by}, ${when(active.signed_at)}.` : ' Not signed: LIVE is unavailable.'}
             </p>
             <p style={{ fontSize: 13, whiteSpace: 'pre-wrap', marginBottom: 0 }}>{active.policy_text}</p>
@@ -226,7 +234,7 @@ function Enforcement() {
         )}
       </div>
       <div className="card">
-        <h2>Directives, last {metrics.window_days} days</h2>
+        <h2>Instructions sent to the bank, last {metrics.window_days} days</h2>
         {metrics.by_action.length ? (
           <div className="table-scroll">
             <table>
@@ -237,7 +245,7 @@ function Enforcement() {
               <tbody>
                 {metrics.by_action.map((r) => (
                   <tr key={`${r.action}-${r.mode}`}>
-                    <td className="mono">{r.action}</td><td>{r.mode}</td>
+                    <td>{say(BANK_ACTION, r.action)}</td><td>{say(MODE, r.mode)}</td>
                     <td className="num">{r.issued}</td><td className="num">{r.delivered}</td>
                     <td className="num">{r.delivered_in_time}</td><td className="num">{r.acknowledged}</td>
                   </tr>
@@ -245,11 +253,11 @@ function Enforcement() {
               </tbody>
             </table>
           </div>
-        ) : <Empty>No directives issued in this window. They are written for live, not replayed, payments.</Empty>}
+        ) : <Empty>No instructions sent in this period. They are only sent for live payments, not replayed test data.</Empty>}
         <p className="dim" style={{ fontSize: 11.5, marginBottom: 0 }}>
-          Median time to first delivery {metrics.timing.median_seconds_to_delivery ?? '—'}s ·
-          p95 {metrics.timing.p95_seconds_to_delivery ?? '—'}s. Risk Radar never enforces a directive; the bank does,
-          and only under a signed LIVE policy.
+          Usually delivered in {metrics.timing.median_seconds_to_delivery ?? '—'}s;
+          95% delivered within {metrics.timing.p95_seconds_to_delivery ?? '—'}s. Risk Radar never carries out an instruction itself; the bank does,
+          and only once a live policy has been signed.
         </p>
       </div>
     </>
@@ -258,9 +266,11 @@ function Enforcement() {
 
 /* ------------------------------------------------------------------ rules */
 
-const prettyRule = (code) => code.split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ')
-const paramSummary = (params) => Object.entries(params || {})
-  .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join('/') : v}`).join(' · ') || '—'
+const prettyRule = (code) => say(RULE, code)
+const paramSummary = (params) => {
+  const s = Object.entries(params || {}).map(([k, v]) => sayParam(k, v)).join('; ')
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'
+}
 
 /**
  * Detection Configuration › Rule Engine (Figma): the rules as a table. Every
@@ -274,13 +284,13 @@ function Rules() {
 
   async function toggle(rule) {
     const reason = window.prompt(
-      `${rule.enabled ? 'Disable' : 'Enable'} ${rule.code}?\nReason (a second administrator approves it):`)
+      `${rule.enabled ? 'Turn off' : 'Turn on'} "${prettyRule(rule.code)}"?\nReason (a second administrator approves it):`)
     if (!reason || !reason.trim()) return
     setBusy(true); setNotice(null)
     try {
       const res = await api.updateRule(rule.code, { enabled: !rule.enabled, rationale: reason.trim() })
       if (res?.status === 'pending') {
-        setNotice(`Proposed change #${res.request.id} to ${rule.code}. It applies once a different administrator approves it (Pending tab).`)
+        setNotice(`Proposed change #${res.request.id} to "${prettyRule(rule.code)}". It applies once a different administrator approves it (Pending tab).`)
       }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
@@ -295,7 +305,7 @@ function Rules() {
     <>
       {notice && <Banner kind="ok">{notice}</Banner>}
       <div className="statrow" style={{ marginTop: 4 }}>
-        <div className="statcard"><div className="statcard-k">Active rules</div><div className="statcard-v" style={{ color: 'var(--ok)' }}>{enabled}</div><div className="dim" style={{ fontSize: 11, marginTop: 4 }}>ruleset v{data.ruleset.version}</div></div>
+        <div className="statcard"><div className="statcard-k">Active rules</div><div className="statcard-v" style={{ color: 'var(--ok)' }}>{enabled}</div><div className="dim" style={{ fontSize: 11, marginTop: 4 }}>rule set v{data.ruleset.version}</div></div>
         <div className="statcard"><div className="statcard-k">Disabled</div><div className="statcard-v">{data.rules.length - enabled}</div></div>
         <div className="statcard"><div className="statcard-k">Reviews overdue</div><div className={`statcard-v ${overdue ? 'warn' : ''}`}>{overdue}</div></div>
         <div className="statcard"><div className="statcard-k">Total rules</div><div className="statcard-v">{data.rules.length}</div></div>
@@ -303,8 +313,8 @@ function Rules() {
 
       <div className="card" style={{ padding: 0 }}>
         <div className="toolbar">
-          <strong style={{ fontSize: 14 }}>Rule engine</strong>
-          <span className="dim" style={{ fontSize: 12 }}>A change is proposed; a second administrator approves it (D96).</span>
+          <strong style={{ fontSize: 14 }}>Detection rules</strong>
+          <span className="dim" style={{ fontSize: 12 }}>A change is proposed; a second administrator approves it.</span>
         </div>
         <div className="table-scroll">
           <table className="rowtable">
@@ -316,18 +326,17 @@ function Rules() {
                 <tr key={rule.code}>
                   <td>
                     <div style={{ fontWeight: 560 }}>{prettyRule(rule.code)}</div>
-                    <div className="mono dim" style={{ fontSize: 11 }}>{rule.code}</div>
                   </td>
-                  <td><span className={`pill ${rule.power.toLowerCase()}`}>{rule.power.toLowerCase()}</span></td>
+                  <td><span className={`pill ${rule.power.toLowerCase()}`}>{say(RULE_EFFECT, rule.power)}</span></td>
                   <td><RiskBadge level={rule.severity} /></td>
-                  <td className="reco-cell mono" style={{ fontSize: 11 }}>{paramSummary(rule.params)}</td>
+                  <td className="reco-cell" style={{ fontSize: 11.5 }}>{paramSummary(rule.params)}</td>
                   <td>
                     <span className="authdot"><span className={`live-dot ${rule.enabled ? 'ok' : ''}`} style={!rule.enabled ? { background: 'var(--text-3)', boxShadow: 'none' } : {}} />{rule.enabled ? 'Active' : 'Disabled'}</span>
                     {(rule.review_overdue || rule.orphaned || rule.dormant) && (
                       <div className="cellflags">
                         {rule.orphaned && <span className="risk risk-HIGH">no owner</span>}
                         {rule.review_overdue && <span className="risk risk-HIGH">review overdue</span>}
-                        {rule.dormant && <span className="risk risk-MEDIUM">dormant</span>}
+                        {rule.dormant && <span className="risk risk-MEDIUM" title="Switched on, but has not flagged anything in 30 days">nothing flagged in 30 days</span>}
                       </div>
                     )}
                   </td>
@@ -341,7 +350,7 @@ function Rules() {
             </tbody>
           </table>
         </div>
-        <div className="table-foot dim">{data.rules.length} rules in ruleset v{data.ruleset.version}. Threshold and list changes are the other tabs.</div>
+        <div className="table-foot dim">{data.rules.length} rules in rule set v{data.ruleset.version}. Risk levels and account lists are on the other tabs.</div>
       </div>
     </>
   )
@@ -381,7 +390,7 @@ function Thresholds() {
     try {
       const res = await api.createThresholds(form)
       if (res?.status === 'pending') {
-        setNotice(`Proposed threshold change #${res.request.id}. It publishes once a different administrator approves it (Pending tab).`)
+        setNotice(`Proposed risk-level change #${res.request.id}. It publishes once a different administrator approves it (Pending tab).`)
       }
       reload()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
@@ -394,12 +403,12 @@ function Thresholds() {
         analysts multiplied by reviewable alerts per day — then checked against
         recall. Never from "80 sounds high". <code>scripts/derive_thresholds.py</code>{' '}
         computes them from a scored sample. Publishing is <strong>proposed</strong> to a
-        second administrator and applied only on approval (D96).
+        second administrator and applied only on approval.
       </Banner>
       {notice && <Banner kind="ok">{notice}</Banner>}
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h2>Publish a new threshold version</h2>
+        <h2>Publish new risk levels</h2>
         <div className="grid cols-4">
           {['p_monitor', 'p_review', 'p_hold'].map((key) => (
             <div key={key}>
@@ -493,7 +502,7 @@ function PendingChanges() {
     <>
       <Banner kind="info">
         Changes to detection and to accounts are proposed by one administrator and
-        approved by another (D96, D98, D99). Even the account that tunes detection
+        approved by another. Even the account that tunes detection
         cannot tune it alone.
       </Banner>
       {notice && <Banner kind="ok"><span style={{ wordBreak: 'break-all' }}>{notice}</span></Banner>}
@@ -540,7 +549,7 @@ function Models() {
   if (!data) return <p className="muted">Loading…</p>
 
   async function propose(m) {
-    const reason = window.prompt('Why promote this model? A second administrator approves it (D98).')
+    const reason = window.prompt('Why promote this model? A second administrator approves it.')
     if (!reason) return
     setBusy(true); setNotice(null)
     try {
@@ -556,7 +565,7 @@ function Models() {
     <>
       <Banner kind="info">
         Promotion repoints a pointer and is audited. It is <strong>proposed</strong> to a
-        second administrator and goes live only on approval (D98). Rollback is proposing the
+        second administrator and goes live only on approval. Rollback is proposing the
         previous version back — not a redeploy.
       </Banner>
       {notice && <Banner kind="ok">{notice}</Banner>}
@@ -629,7 +638,7 @@ function Lists() {
   }
 
   async function remove(entry) {
-    const reason = window.prompt('Why remove this entry? A second administrator approves it (D98).')
+    const reason = window.prompt('Why remove this entry? A second administrator approves it.')
     if (!reason) return
     setBusy(true); setNotice(null)
     try {
@@ -646,7 +655,7 @@ function Lists() {
       <Banner kind="info">
         Entries are supplied as account numbers and stored as one-way HMAC tokens.
         Adding or removing one is <strong>proposed</strong> to a second administrator and
-        applied only on approval (D98). Risk Radar can check membership; it can never
+        applied only on approval. Risk Radar can check membership; it can never
         resolve an entry back to an account.
       </Banner>
       {notice && <Banner kind="ok">{notice}</Banner>}
@@ -656,9 +665,9 @@ function Lists() {
         <div className="row wrap">
           <select style={{ width: 180 }} value={form.kind}
                   onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-            <option value="SANCTIONED">Sanctioned (override)</option>
-            <option value="KNOWN_MULE">Known mule (override)</option>
-            <option value="ALLOWLIST">Allowlist (suppress)</option>
+            <option value="SANCTIONED">Sanctions list (always Critical)</option>
+            <option value="KNOWN_MULE">Known mule account (always Critical)</option>
+            <option value="ALLOWLIST">Trusted (lowers risk)</option>
           </select>
           <input style={{ flex: 1, minWidth: 200 }} placeholder="Beneficiary account number"
                  value={form.beneficiary_account_id}
@@ -678,11 +687,11 @@ function Lists() {
       <div className="card" style={{ padding: 0 }}>
         <div className="table-scroll">
           <table>
-            <thead><tr><th>Kind</th><th>Token</th><th>Scope</th><th>Note</th><th>Added</th><th></th></tr></thead>
+            <thead><tr><th>Kind</th><th>Account (masked)</th><th>Scope</th><th>Note</th><th>Added</th><th></th></tr></thead>
             <tbody>
               {data.items.map((e) => (
                 <tr key={e.id}>
-                  <td><span className={`pill ${e.kind === 'ALLOWLIST' ? 'suppress' : 'override'}`}>{e.kind}</span></td>
+                  <td><span className={`pill ${e.kind === 'ALLOWLIST' ? 'suppress' : 'override'}`}>{say(LIST_KIND, e.kind)}</span></td>
                   <td className="mono dim">{e.token.slice(0, 22)}…</td>
                   <td className="mono dim">{e.account_token ? `${e.account_token.slice(0, 14)}…` : 'global'}</td>
                   <td className="muted">{e.note}</td>
@@ -864,7 +873,7 @@ function Users() {
           <p className="dim" style={{ fontSize: 12 }}>
             The password is hashed before it is stored, and the authenticator secret is
             minted only when the second administrator approves — so neither ever sits in
-            a pending change request waiting to be read (D99). New accounts start with the
+            a pending change request waiting to be read. New accounts start with the
             code prompt on.
           </p>
           <div className="row" style={{ gap: 8 }}>
@@ -878,7 +887,7 @@ function Users() {
       <div className="card" style={{ padding: 0 }}>
         <div className="toolbar">
           <strong style={{ fontSize: 14 }}>Users &amp; access</strong>
-          <span className="dim" style={{ fontSize: 12 }}>Roles enforce separation of duties on every request (D12b).</span>
+          <span className="dim" style={{ fontSize: 12 }}>Roles enforce separation of duties on every request.</span>
           {!adding && (
             <button className="primary" style={{ marginLeft: 'auto' }}
                     onClick={() => { setAdding(true); setNotice(null); setError(null) }}>
@@ -998,7 +1007,7 @@ function Users() {
                             <button type="button" className="ghost" onClick={() => setPanel(null)}>Cancel</button>
                             <p className="dim" style={{ fontSize: 11.5, width: '100%', margin: 0 }}>
                               Hashed before it is stored, so the plaintext never reaches the database
-                              or the pending request (D99).
+                              or the pending request.
                             </p>
                           </form>
                         )}
@@ -1012,7 +1021,7 @@ function Users() {
         </div>
         <div className="table-foot dim">
           Showing {users.items.length} user{users.items.length === 1 ? '' : 's'}. Every change here
-          is proposed, and takes a second administrator&apos;s approval (D99, D104, D105).
+          is proposed, and takes a second administrator&apos;s approval.
         </div>
       </div>
     </>
@@ -1062,9 +1071,9 @@ function AuditLog() {
               {data.items.map((a) => (
                 <tr key={a.id}>
                   <td className="mono">{when(a.occurred_at)}</td>
-                  <td>{a.actor} <span className="dim">({a.actor_role})</span></td>
-                  <td className="mono">{a.action}</td>
-                  <td className="muted">{a.object_type} {a.object_id}</td>
+                  <td>{a.actor_role === 'SYSTEM' ? 'Risk Radar (automatic)' : <>{a.actor} <span className="dim">({sayLower(ROLE, a.actor_role)})</span></>}</td>
+                  <td>{say(EVENT, a.action)}</td>
+                  <td className="muted">{auditObject(a)}</td>
                   <td className="dim">
                     {a.from_state || a.to_state
                       ? `${String(a.from_state ?? '—').slice(0, 30)} → ${String(a.to_state ?? '—').slice(0, 30)}`

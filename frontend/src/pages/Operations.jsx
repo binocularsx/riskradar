@@ -127,9 +127,9 @@ export default function Operations({ user }) {
         <p className="dim">These are investigation findings, not a measure of fraud prevented or money recovered.</p>
       </section>
     </>}
-    {budget && <section className="card"><h2>Alert budget · {budget.local_day} (Nigeria)</h2>
-      <div className="service-facts"><span><strong>{budget.today.raised} / {budget.config.per_day}</strong> alerts raised / daily budget</span><span><strong>{budget.waiting.count}</strong> deferred alerts waiting</span><span><strong>{budget.waiting.critical}</strong> critical alerts deferred</span><span><strong>{budget.today.expired}</strong> deferrals expired today</span></div>
-      <p className="dim">Budget enforcement is {budget.config.enforced ? 'on' : 'off'}. This limits alert admission; it does not measure staffing capacity. Deferred alerts still require operational oversight.</p>
+    {budget && <section className="card"><h2>Daily review limit · {budget.local_day} (Nigeria)</h2>
+      <div className="service-facts"><span><strong>{budget.today.raised} / {budget.config.per_day}</strong> alerts raised / daily limit</span><span><strong>{budget.waiting.count}</strong> held-back alerts waiting</span><span><strong>{budget.waiting.critical}</strong> critical alerts held back</span><span><strong>{budget.today.expired}</strong> held-back alerts expired today</span></div>
+      <p className="dim">The daily limit is {budget.config.enforced ? 'on' : 'off'}. It controls how many alerts reach the team each day; it does not measure how many people are working. Held-back alerts still need someone to keep an eye on them.</p>
     </section>}
     <p className="dim ops-refresh-note">Operational reads refresh every 20 seconds; identity connections every minute. {operations.updatedAt && <>Overview last read {when(operations.updatedAt)}.</>}</p>
   </div>

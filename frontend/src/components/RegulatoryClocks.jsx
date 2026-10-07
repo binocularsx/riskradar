@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { api, clock, when } from '../lib/api'
 import { Banner } from './ui'
+import { CHANNEL, sayLower } from '../lib/words'
 
 /**
  * The regulator's clocks on a case (WP-05, D71).
@@ -99,7 +100,7 @@ export default function RegulatoryClocks({ caseRow, clocks, user, onUpdated }) {
       <div className="between">
         <h3 style={{ margin: 0 }}>Regulatory clocks</h3>
         <span className="dim" style={{ fontSize: 11.5 }}>
-          reported {when(caseRow.first_reported_at)} via {String(caseRow.report_channel).replace(/_/g, ' ').toLowerCase()}
+          reported {when(caseRow.first_reported_at)} via {sayLower(CHANNEL, caseRow.report_channel)}
           {' '}· policy v{caseRow.clock_policy_version}
         </span>
       </div>

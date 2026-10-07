@@ -13,6 +13,7 @@ import { CaseIcon } from './CaseWorkspace'
 import BankActions from './BankActions'
 import { usePolling } from '../lib/usePolling'
 import ReadStatus from './ReadStatus'
+import { CHANNEL, EVENT, OUTCOME, PROPOSAL_STATE, say, sayLower } from '../lib/words'
 
 /**
  * The investigation panel — everything needed to decide, on one screen, in the
@@ -84,7 +85,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         followed_recommendation: summary.recommendation?.disposition_hint === outcome,
         expected_case_version: summary.version ?? null,
       })
-      setFlash(`${outcome.replace(/_/g, ' ').toLowerCase()} proposed for case #${caseId}. `
+      setFlash(`"${say(OUTCOME, outcome)}" suggested for case #${caseId}. `
         + 'A Fraud Ops Lead who did not write it decides; it has left your queue.')
       onDisposed?.({ ...result, outcome })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
@@ -147,7 +148,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
               <div><dt>Opened</dt><dd title={when(summary.opened_at)}>{summary.opened_at ? when(summary.opened_at) : '—'}</dd></div>
               <div><dt>Review deadline</dt><dd>{closed ? <span className="pill">Case completed</span> : summary.sla_remaining_minutes == null ? 'Not available' : <span className={`sla sla-${summary.sla_state}`}>{clock(summary.sla_remaining_minutes)}</span>}</dd></div>
               <div><dt>Flagged transactions</dt><dd>{summary.alert_count ?? '—'}<span className="investigation-field-hint">transactions to review</span></dd></div>
-              <div><dt>Destinations</dt><dd>{summary.distinct_beneficiaries ?? '—'}<span className="investigation-field-hint">linked beneficiaries</span></dd></div>
+              <div><dt>Recipients</dt><dd>{summary.distinct_beneficiaries ?? '—'}<span className="investigation-field-hint">different recipients</span></dd></div>
               <div><dt>Value under investigation</dt><dd className="investigation-field-money">{naira(summary.exposure_minor)}<span className="investigation-field-hint">Approved payments · not confirmed loss</span></dd></div>
               <div><dt>Assigned to</dt><dd>{mine ? user.display_name || 'You' : summary.assignee_name || (summary.assignee_id ? 'Another investigator' : 'Unassigned')}</dd></div>
             </dl>
@@ -162,7 +163,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
                amountMinor={first?.amount_minor} authResult={detail?.alerts?.length === 1 ? first?.auth_result : null} />
       <section className="card investigation-transactions" id="investigation-evidence" aria-labelledby="evidence-title">
         <div className="investigation-section-head"><h3 id="evidence-title">Flagged transactions</h3><span className="pill">{summary.alert_count} alerts</span></div>
-        <p className="investigation-section-sub">The activity behind this case, with its signals and decision trail.</p>
+        <p className="investigation-section-sub">The activity behind this case, with the warning signs and how each risk level was reached.</p>
         {!detail && <p className="dim">{error ? 'Evidence could not be loaded.' : 'Loading evidence…'}</p>}
         {detail && !detail.alerts?.length && <p className="dim">No flagged transactions are available for this case.</p>}
         {detail?.alerts?.map((a) => (
@@ -174,7 +175,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
                 {a.direction === 'INBOUND' && (
                   <span className="pill suppress" title={`Credit from bank ${a.remitter_bank_code || 'unknown'}`}>incoming credit</span>
                 )}
-                <span className="muted">{a.channel.replace(/_/g, ' ').toLowerCase()}</span>
+                <span className="muted">{say(CHANNEL, a.channel)}</span>
                 {a.auth_result !== 'APPROVED' && <span className="pill">{a.auth_result.toLowerCase()}</span>}
               </div>
               <span className="mono dim" style={{ fontSize: 11 }}>{when(a.occurred_at)}</span>
@@ -194,12 +195,13 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
                 <PolicyTrace trace={a.policy_trace} />
                 <h3 style={{ marginTop: 14 }}>What moved the score</h3>
                 {a.rule_only_mode
-                  ? <Banner kind="warn">Scored in rule-only mode — the model was unavailable.</Banner>
+                  ? <Banner kind="warn">The risk model was not available, so only the written rules checked this payment.</Banner>
                   : <Attributions attributions={a.attributions} limit={6} />}
-                <div className="mono dim" style={{ fontSize: 10.5, marginTop: 12 }}>
-                  model {a.model_name ?? 'none'}:{a.model_version ?? '—'} · ruleset v{a.ruleset_version}
-                  {' '}· thresholds v{a.threshold_version} · features {a.feature_spec_version}
-                </div>
+                <details className="dim" style={{ fontSize: 10.5, marginTop: 12 }}>
+                  <summary>Versions used (for audit)</summary>
+                  <span className="mono">risk model {a.model_name ?? 'none'} {a.model_version ?? '—'} · rules v{a.ruleset_version}
+                  {' '}· risk levels v{a.threshold_version} · measurements v{a.feature_spec_version}</span>
+                </details>
               </div>
             </details>
           </div>
@@ -216,7 +218,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           <div className="table-scroll">
             <table>
               <thead>
-                <tr><th>Account</th><th>Product</th><th className="num">30d count</th><th className="num">30d value</th></tr>
+                <tr><th>Account</th><th>Product</th><th className="num">Payments (30 days)</th><th className="num">Value (30 days)</th></tr>
               </thead>
               <tbody>
                 {detail?.baseline?.map((b) => (
@@ -257,7 +259,7 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
               <div className="action">{rec.action}</div><div className="because">{rec.because}</div>
             </div>}
             {!closed ? <OwnershipBanner summary={summary} user={user} onTake={take} busy={busy} />
-              : <div className="investigation-completed"><CaseIcon name="check" /><div><strong>Investigation completed</strong><p>{summary.outcome ? summary.outcome.replace(/_/g, ' ').toLowerCase() : 'This case has been closed.'}</p></div></div>}
+              : <div className="investigation-completed"><CaseIcon name="check" /><div><strong>Investigation completed</strong><p>{summary.outcome ? `Result: ${sayLower(OUTCOME, summary.outcome)}.` : 'This case has been closed.'}</p></div></div>}
           </section>
       {detail && (
         <RegulatoryClocks
@@ -282,8 +284,8 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           <section className="card"><h3>Outcome approval</h3>
             <ReadStatus resource={proposals} label="Outcome approval" />
             {proposals.data && (proposals.data.items.length ? proposals.data.items.slice(0, 3).map((p) => <div className="bank-action" key={p.id}>
-              <strong>{p.proposed_outcome.replace(/_/g, ' ').toLowerCase()}</strong>
-              <span className={`pill ${p.state === 'APPROVED' ? 'suppress' : 'escalate'}`}>{p.state === 'PENDING' ? 'Proposed · awaiting a different lead' : p.state.replace(/_/g, ' ').toLowerCase()}</span>
+              <strong>{say(OUTCOME, p.proposed_outcome)}</strong>
+              <span className={`pill ${p.state === 'APPROVED' ? 'suppress' : 'escalate'}`}>{p.state === 'PENDING' ? 'Suggested · waiting for a different lead' : say(PROPOSAL_STATE, p.state)}</span>
               <p>{p.submitted_by_name} · {when(p.submitted_at)}</p>
               {p.decided_by_name && <p>Reviewed by {p.decided_by_name} · {when(p.decided_at)}</p>}
             </div>) : <p className="dim">No outcome proposals recorded.</p>)}
@@ -301,8 +303,8 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
           {detail.history.map((h, i) => (
             <div key={i} style={{ padding: '5px 0', fontSize: 12 }}>
               <span className="mono dim">{when(h.occurred_at)}</span>{' '}
-              {h.action.replace(/_/g, ' ').toLowerCase()}{' '}
-              <span className="muted">by {h.actor}</span>
+              {sayLower(EVENT, h.action)}{' '}
+              <span className="muted">by {String(h.actor).replace(/ \(system\)$/, '')}</span>
             </div>
           ))}
         </div>

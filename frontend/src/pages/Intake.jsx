@@ -6,6 +6,7 @@ import {
 
 import { api, nairaShort } from '../lib/api'
 import { Banner, RiskBadge } from '../components/ui'
+import { CHANNEL, RULE, say } from '../lib/words'
 
 /**
  * The live desk (D83): what is arriving, what is waiting, what was flagged, and
@@ -111,7 +112,7 @@ export default function Intake() {
              note={`~${data.expected_next_hour.received.toLocaleString()} transactions, at ${data.expected_next_hour.basis}`} />
         <Kpi label="Daily review limit" value={b.alerts_per_day ? `${b.alerts_today} / ${b.alerts_per_day}` : b.alerts_today}
              tone={overBudget ? 'warn' : ''}
-             note={b.alerts_per_day ? `on pace for ${b.projected_today} by midnight` : 'no budget set'} />
+             note={b.alerts_per_day ? `on pace for ${b.projected_today} by midnight` : 'no daily limit set'} />
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
@@ -139,12 +140,12 @@ export default function Intake() {
           <h3>Risk level of checked transactions</h3>
           <Bars rows={levels} total={scoredTotal} colour={(r) => LEVEL_COLOR[r.key.toUpperCase()]} />
           <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
-            Medium and above can raise an alert; the budget decides how many do.
+            Medium and above can raise an alert; the daily review limit decides how many reach the team.
           </p>
         </div>
         <div className="card">
           <h3>Why alerts were raised</h3>
-          <Bars rows={data.signals.map((s) => ({ key: s.code, label: s.code.replace(/_/g, ' ').toLowerCase(), n: s.n }))}
+          <Bars rows={data.signals.map((s) => ({ key: s.code, label: say(RULE, s.code), n: s.n }))}
                 colour={(r) => (data.signals.find((s) => s.code === r.key)?.power === 'SUPPRESS' ? 'var(--low)' : 'var(--high)')} />
           <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
             Orange reasons increase concern; green reasons reduce it. Some alerts come from the detection system itself.
@@ -154,7 +155,7 @@ export default function Intake() {
           <h3>Who handles it</h3>
           <Bars rows={Object.entries(data.by_disposition).map(([k, n]) => ({ key: k, label: TIER[k] || k, n }))} />
           <h3 style={{ marginTop: 16 }}>By channel</h3>
-          <Bars rows={data.by_channel.map((c) => ({ key: c.channel, label: `${c.channel.replace(/_/g, ' ').toLowerCase()}${c.alerted ? ` · ${c.alerted} flagged` : ''}`, n: c.n }))} />
+          <Bars rows={data.by_channel.map((c) => ({ key: c.channel, label: `${say(CHANNEL, c.channel)}${c.alerted ? ` · ${c.alerted} flagged` : ''}`, n: c.n }))} />
         </div>
       </div>
 
@@ -186,10 +187,10 @@ export default function Intake() {
                   <td className="mono dim">{new Date(t.ingested_at).toLocaleTimeString('en-GB')}</td>
                   <td>{t.display_name || <span className="dim">…{String(t.transaction_ref).slice(-6)}</span>}</td>
                   <td className="num">{nairaShort(t.amount_minor)}{t.direction === 'INBOUND' && <span className="tag"> in</span>}</td>
-                  <td className="muted">{t.channel.replace(/_/g, ' ').toLowerCase()}</td>
+                  <td className="muted">{say(CHANNEL, t.channel)}</td>
                   <td>{t.risk_level ? <RiskBadge level={t.risk_level} /> : <span className="pill">waiting</span>}</td>
                   <td className="num">{t.score_0_100 ?? '—'}</td>
-                  <td className="dim" style={{ fontSize: 11.5 }}>{(t.signals || []).map((s) => s.replace(/_/g, ' ').toLowerCase()).join(', ') || '—'}</td>
+                  <td className="dim" style={{ fontSize: 11.5 }}>{(t.signals || []).map((s) => say(RULE, s)).join('; ') || '—'}</td>
                   <td>{t.case_id ? <Link to={`/triage?case=${t.case_id}`}>#{t.case_id} →</Link> : <span className="dim">—</span>}</td>
                 </tr>
               ))}

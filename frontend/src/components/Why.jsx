@@ -1,4 +1,5 @@
 import { naira } from '../lib/api'
+import { RULE, sayLower } from '../lib/words'
 
 /**
  * "Why did this alert happen?" — answered in sentences, not codes.
@@ -25,7 +26,7 @@ const READINGS = [
     key: 'beneficiary_distinct_senders_24h',
     unusual: (v) => v >= 2,
     weight: 95,
-    text: (v) => `**${Math.round(v)} other customers paid this destination** in the last day.`,
+    text: (v) => `**${Math.round(v)} other customers paid this recipient** in the last day.`,
     meaning: 'A scam collects from many victims into one account; a school or a levy does too, if the account is not new.',
   },
   {
@@ -76,14 +77,14 @@ const READINGS = [
     key: 'credential_changed_hours',
     unusual: (v) => v < 24,
     weight: 94,
-    text: (v) => `A **PIN, password or MFA method was changed ${Math.round(v)} hours ago**.`,
-    meaning: 'Changing credentials locks the real owner out.',
+    text: (v) => `The **PIN, password or two-step login was changed ${Math.round(v)} hours ago**.`,
+    meaning: 'Changing login details locks the real owner out.',
   },
   {
     key: 'payee_added_minutes',
     unusual: (v) => v >= 0 && v < 60,
     weight: 86,
-    text: (v) => `This destination was **added as a payee ${Math.round(v)} minutes before** being paid.`,
+    text: (v) => `This recipient was **added as a payee ${Math.round(v)} minutes before** being paid.`,
     meaning: 'Enrolled and paid at once is how mule accounts are lined up.',
   },
   // D78: the receiving side.
@@ -126,15 +127,15 @@ const READINGS = [
     key: 'distinct_beneficiaries_1h_account',
     unusual: (v) => v >= 3,
     weight: 92,
-    text: (v) => `Money went to **${Math.round(v)} different destinations within the hour**.`,
-    meaning: 'Paying many separate people in minutes is the shape of a mule fan-out.',
+    text: (v) => `Money went to **${Math.round(v)} different recipients within the hour**.`,
+    meaning: 'Paying many separate people within minutes is how stolen money is spread across mule accounts.',
   },
   {
     key: 'amount_ratio_to_account_p95_30d',
     unusual: (v) => v >= 1.5,
     weight: 90,
     text: (v) => `The amount is **${v.toFixed(1)}× the largest this account normally sends** ` +
-                 '(its 95th percentile over 30 days).',
+                 '(based on its last 30 days).',
     meaning: 'Compared against this customer, not against everybody.',
   },
   {
@@ -171,14 +172,14 @@ const READINGS = [
     // 0 means brand new; -1 means there is no destination at all (card, cash).
     unusual: (v) => v >= 0 && v < 1,
     weight: 70,
-    text: () => 'The destination account **first appeared in the bank\'s traffic within the last day**.',
+    text: () => 'The recipient\'s account **was first seen by the bank within the last day**.',
     meaning: 'Brand-new receiving accounts are what mule networks are built from.',
   },
   {
     key: 'beneficiary_is_new_to_account',
     unusual: (v) => v >= 1,
     weight: 60,
-    text: () => 'This customer has **never paid this destination before**.',
+    text: () => 'This customer has **never paid this recipient before**.',
     meaning: 'Common and usually innocent on its own — it matters alongside the rest.',
   },
   {
@@ -289,7 +290,7 @@ export default function Why({ alerts, features, signals, amountMinor, authResult
 
       {ruleNames.length > 0 && (
         <p className="dim" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-          Written rules that agreed: {ruleNames.join(', ').replace(/_/g, ' ').toLowerCase()}.
+          Warning signs that also matched: {ruleNames.map((r) => sayLower(RULE, r)).join('; ')}.
           {suppressed.length > 0 && (
             <> One of them <strong>reduced</strong> the severity — the system already
             thinks part of this looks legitimate.</>
@@ -334,7 +335,7 @@ export function VersusNormal({ alerts, features, amountMinor }) {
       off: Number(features.txn_count_1h_account) >= 4,
     },
     {
-      label: 'Destinations this hour',
+      label: 'Recipients this hour',
       now: `${Math.round(Number(features.distinct_beneficiaries_1h_account) || 0)}`,
       normal: 'usually 1',
       off: Number(features.distinct_beneficiaries_1h_account) >= 3,

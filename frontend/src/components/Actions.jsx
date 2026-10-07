@@ -17,12 +17,12 @@ const STEPS = {
     'Do not contact the customer. A sanctions hit has reporting rules attached.',
     'Record the outcome as confirmed fraud so the destination is blocked bank-wide.',
   ],
-  'Confirm fraud and recall the funds': [
+  'Confirm fraud and ask the receiving bank to return the money': [
     'Raise a recall on the transfers listed below, newest first — the newest money is the most recoverable.',
     'Call the customer to confirm they did not authorise it.',
     'Record confirmed fraud. The destination is already on the mule list; this adds the rest.',
   ],
-  'Block the card and reissue': [
+  'Block the card and issue a new one': [
     'Block the card immediately. The card is compromised, not the account.',
     'Check whether any large authorisation went through after the small probes.',
     'Call the customer to arrange a reissue, then record the outcome.',
@@ -33,29 +33,29 @@ const STEPS = {
     'If unreachable, escalate to the lead: an unreachable customer during an active drain is the worst case.',
     'Record the outcome either way, so the next model learns from it.',
   ],
-  'Review the destination accounts for a mule network': [
+  'Check the recipient accounts: they may be mule accounts working together': [
     'Open the timeline below and check whether the destinations are all new.',
     'Search each destination in Search to see whether other customers paid it too.',
     'If several customers fed the same new account, escalate to Fraud Ops as a network.',
     'Otherwise call the customer to confirm the payments were theirs.',
   ],
-  'Verify quickly, then clear': [
+  'Check quickly, then close as no fraud': [
     'Check the timeline — is the pattern consistent with what this customer normally does?',
     'No customer call needed unless something else looks wrong.',
     'Record that no fraud was found. This helps improve future alerts.',
   ],
-  'Contact the customer to verify': [
+  'Call the customer to check they made these payments': [
     'Call the number on file and confirm the transactions were theirs.',
     'If confirmed legitimate, record that no fraud was found.',
     'If they did not make them, record confirmed fraud and raise a recall.',
   ],
-  'Review the timeline, then contact the customer if it continues': [
+  'Look through the account\'s recent activity, then call the customer if it continues': [
     'Read the timeline below before doing anything else.',
     'If the activity has stopped and nothing else stands out, monitor rather than call.',
     'If it is still running, call the customer.',
     'Record an outcome either way — leaving it open helps nobody.',
   ],
-  'Monitor — no action needed unless it repeats': [
+  'Keep an eye on it — no action needed unless it happens again': [
     'No customer contact needed.',
     'Record the outcome so the case leaves the queue.',
     'If the same customer reappears within the day, treat the pair together.',

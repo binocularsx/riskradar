@@ -1,4 +1,5 @@
 import { api } from '../lib/api'
+import { ROLE, sayLower } from '../lib/words'
 
 /**
  * Who does what, and what each of them sees.
@@ -93,8 +94,8 @@ const ROLES = [
     cannot: [
       'Open, read, review, decide or close any case',
     ],
-    why: 'This is the sharpest rule in the system. Someone who can loosen a '
-       + 'threshold and then inspect the cases that threshold failed to produce '
+    why: 'This is the strictest rule in the system. Someone who could make the '
+       + 'detection less sensitive and then look at the cases it stopped flagging '
        + 'could quietly tune their own work out of view. So they get neither.',
   },
 ]
@@ -104,7 +105,7 @@ export default function Roles({ user }) {
     <>
       <div className="banner info" style={{ marginBottom: 18 }}>
         You are signed in as <strong>{user.display_name}</strong> —{' '}
-        {user.role.replace(/_/g, ' ').toLowerCase()}. The card for your role is
+        {sayLower(ROLE, user.role)}. The card for your role is
         outlined below.
       </div>
 

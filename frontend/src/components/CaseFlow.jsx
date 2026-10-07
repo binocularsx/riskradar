@@ -4,6 +4,7 @@ import { api, when } from '../lib/api'
 import { Banner } from './ui'
 import { usePolling } from '../lib/usePolling'
 import ReadStatus from './ReadStatus'
+import { OUTCOME, say } from '../lib/words'
 
 const STAGE_NAME = { NEW: 'Not started', IN_REVIEW: 'Being reviewed', ESCALATED: 'With a specialist', AWAITING_APPROVAL: 'Waiting for approval', AWAITING_CLOSE: 'Ready to close', CLOSED: 'Completed' }
 const NEXT_STEP = {
@@ -127,7 +128,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
               </div>
               {recorded.map((a) => (
                 <div key={a.id} className="recorded">
-                  {spec?.results[a.result] || a.result}{a.detail ? ` — ${a.detail}` : ''} · {a.actor}, {when(a.created_at)}
+                  {spec?.results[a.result] || say(OUTCOME, a.result)}{a.detail ? ` — ${a.detail}` : ''} · {a.actor}, {when(a.created_at)}
                 </div>
               ))}
               {open === s.action && spec && (
