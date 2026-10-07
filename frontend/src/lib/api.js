@@ -138,6 +138,8 @@ export const api = {
   budgetMenu: () => get('/v1/metrics/budget-menu'),
   searchTransactions: (params) => get(`/v1/transactions/search?${new URLSearchParams(params)}`),
   paymentCheck: (ref) => get(`/v1/transactions/${encodeURIComponent(ref)}/check`),
+  completedCases: (params) => get(`/v1/completed-cases?${new URLSearchParams(params)}`),
+  decisionRecord: (id) => get(`/v1/completed-cases/${id}/record`),
 
   // administration
   rules: () => get('/v1/admin/rules'),

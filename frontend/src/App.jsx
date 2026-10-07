@@ -12,6 +12,7 @@ import Admin from './pages/Admin'
 import Roles from './pages/Roles'
 import Intake from './pages/Intake'
 import Approvals from './pages/Approvals'
+import CompletedCases from './pages/CompletedCases'
 import Tracker from './pages/Tracker'
 import { ROLE, say } from './lib/words'
 
@@ -30,6 +31,7 @@ const ICONS = {
   '/triage': ['M4 5h16', 'M4 12h16', 'M4 19h10'],
   '/tracker': ['M4 4h5v16H4z', 'M10 4h5v10h-5z', 'M16 4h4v7h-4z'],
   '/approvals': ['M20 6 9 17l-5-5'],
+  '/completed': ['M4 5h16v4H4z', 'M6 9v10h12V9', 'M10 13h4'],
   '/operations': ['M12 3a9 9 0 1 0 9 9', 'M12 12l5-3'],
   '/transactions': ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4'],
   '/analytics': ['M4 20V10', 'M10 20V4', 'M16 20v-7', 'M22 20H2'],
@@ -52,6 +54,7 @@ function nav(permissions) {
     can('cases:read') && { to: '/tracker', label: 'Progress board', section: 'Cases', hint: 'Every open case, laid out by stage' },
     can('cases:read') && { to: '/transactions', label: 'Payment lookup', section: 'Cases', hint: 'Find any payment and see how it was checked' },
     can('cases:approve_fraud') && { to: '/approvals', label: 'Decisions to approve', section: 'Cases', hint: 'Check and approve investigation results' },
+    can('cases:close') && { to: '/completed', label: 'Completed cases', section: 'Cases', hint: 'Every closed case and how it was decided' },
     can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Reports', hint: 'See service readiness, urgent work and team workload' },
     can('metrics:read') && { to: '/analytics', label: 'Performance reports', section: 'Reports', hint: 'See transaction and detection trends' },
     can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
@@ -164,6 +167,7 @@ export default function App() {
             <Route path="/live" element={guard('cases:read', <Intake />)} />
             <Route path="/tracker" element={guard('cases:read', <Tracker />)} />
             <Route path="/approvals" element={guard('cases:approve_fraud', <Approvals />)} />
+            <Route path="/completed" element={guard('cases:close', <CompletedCases />)} />
             <Route path="/triage" element={guard('cases:read', <CaseQueue user={user} />)} />
             <Route path="/cases/:id" element={guard('cases:read', <CaseDetail user={user} />)} />
             <Route path="/operations" element={guard('metrics:read', <Operations user={user} />)} />

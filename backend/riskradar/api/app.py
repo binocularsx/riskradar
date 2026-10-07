@@ -25,6 +25,7 @@ from .routers import (
     auth,
     budget,
     cases,
+    completed,
     directives,
     identity,
     ingest,
@@ -119,6 +120,7 @@ app.include_router(directives.admin_router)
 app.include_router(identity.router)
 app.include_router(auth.router)
 app.include_router(cases.router)
+app.include_router(completed.router)
 app.include_router(triage.router)
 app.include_router(workflow.router)
 app.include_router(links.router)
