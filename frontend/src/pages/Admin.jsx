@@ -6,7 +6,7 @@ import { Banner, Empty, RiskBadge } from '../components/ui'
 import { ALARM, BANK_ACTION, DELIVERY, EVENT, LIST_KIND, ROLE, RULE, RULE_EFFECT, say, sayLower, sayParam, words } from '../lib/words'
 
 const MODE = { SHADOW: 'Trial (not sent to the bank)', LIVE: 'Live (sent to the bank)', OFF: 'Off' }
-const OBJECT = { case: 'Case', alert: 'Alert', user: 'User', decision: 'Payment check', restriction_order: 'Bank instruction', config_change_request: 'Setting change', app_config: 'Setting', api_key: 'Connection key', threshold_set: 'Risk levels', enforcement_policy: 'Automatic-action policy' }
+const OBJECT = { case: 'Case', alert: 'Alert', user: 'User', decision: 'Payment check', restriction_order: 'Action for support', config_change_request: 'Setting change', app_config: 'Setting', api_key: 'Connection key', threshold_set: 'Risk levels', enforcement_policy: 'Automatic-action policy' }
 /** "case 531" -> "Case #531"; a system alarm names the problem. */
 const auditObject = (a) => a.object_type === 'system'
   ? say(ALARM, a.object_id)

@@ -78,10 +78,14 @@ def test_an_analyst_cannot_read_another_analysts_case(somebody_elses_case):
         assert lead.get(path).status_code == 200, path
 
     # And not through any list either.
-    assert case_id not in [c["id"] for c in analyst.get("/v1/cases?limit=200").json()["items"]]
-    assert case_id in [c["id"] for c in lead.get("/v1/cases?limit=200").json()["items"]]
+    # Newest first: the suite shares the demo database, where the live feed can
+    # open more than a page of cases, and this one was opened just now.
+    assert case_id not in [c["id"] for c in analyst.get("/v1/cases?limit=200&sort=opened").json()["items"]]
+    assert case_id in [c["id"] for c in lead.get("/v1/cases?limit=200&sort=opened").json()["items"]]
     assert case_id not in [c["id"] for c in analyst.get("/v1/worklist?scope=all&limit=200").json()["items"]]
-    assert case_id in [c["id"] for c in lead.get("/v1/worklist?scope=all&limit=200").json()["items"]]
+    lead_worklist = lead.get("/v1/worklist?scope=all&limit=200").json()["items"]
+    if len(lead_worklist) < 200:  # a full page may simply rank this case below the cut
+        assert case_id in [c["id"] for c in lead_worklist]
     stages = analyst.get("/v1/workflow/pipeline").json()["stages"]
     assert case_id not in [i["id"] for s in stages for i in s["items"]]
 

@@ -685,9 +685,14 @@ class UserProfileIn(Strict):
 
 
 class ApiKeyCreateIn(Strict):
-    """D87: name a new ingestion key. A body for the same reason as UserCreateIn."""
+    """D87: name a new ingestion key. A body for the same reason as UserCreateIn.
+
+    D109g: and say whose it is. A BANK key calls ingestion, events, directives
+    and the industry watch-list; a SUPPORT key calls only the support team's
+    endpoints and the action feed."""
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
+    scope: Literal["BANK", "SUPPORT"] = "BANK"
 
 
 class RestrictionAckIn(Strict):

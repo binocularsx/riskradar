@@ -25,7 +25,7 @@ from ... import reporting as support_reporting
 from ... import restrictions as delivery
 from ...security import visibility
 from ...security.rbac import Permission
-from ..deps import current_user, get_conn, require_api_key, requires
+from ..deps import current_user, get_conn, require_action_feed_key, requires
 from ..schemas import ConfigDecisionIn, DeliveryPauseIn, ReleaseRequestIn, RestrictionAckIn
 
 # A submission carries at most twenty restrictions; reversals must not crowd
@@ -87,7 +87,7 @@ def restriction_feed(
     after_id: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     conn: Any = Depends(get_conn),
-    api_key: dict = Depends(require_api_key),
+    api_key: dict = Depends(require_action_feed_key),
 ) -> dict[str, Any]:
     """Restrictions issued after ``after_id``, oldest first. Fetching records
     that the bank was told. Poll with the last ``id``."""
@@ -103,7 +103,7 @@ def restriction_feed(
 def get_restriction(
     restriction_ref: UUID,
     conn: Any = Depends(get_conn),
-    api_key: dict = Depends(require_api_key),
+    api_key: dict = Depends(require_action_feed_key),
 ) -> dict[str, Any]:
     order = delivery.by_ref(conn, str(restriction_ref))
     if not order:
@@ -118,7 +118,7 @@ def acknowledge_restriction(
     body: RestrictionAckIn,
     response: Response,
     conn: Any = Depends(get_conn),
-    api_key: dict = Depends(require_api_key),
+    api_key: dict = Depends(require_action_feed_key),
 ) -> dict[str, Any]:
     """The bank reports the outcome. Once; a repeat with the same answer is a
     no-op, a different answer is a 409."""

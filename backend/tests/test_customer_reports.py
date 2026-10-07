@@ -80,12 +80,12 @@ def _scored_payment(client, api_headers, sample_transaction) -> dict:
 
 
 def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
-        client, api_headers, sample_transaction):
+        client, api_headers, support_headers, sample_transaction):
     body = _scored_payment(client, api_headers, sample_transaction)
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
         last_event = c.execute("SELECT coalesce(max(id), 0) AS n FROM stream_events").fetchone()["n"]
 
-    r = client.post("/v1/support/reports", headers=api_headers, json={
+    r = client.post("/v1/support/reports", headers=support_headers, json={
         "support_ticket_ref": "SUP-1001",
         "customer_id": body["customer_id"],
         "transaction_refs": [body["transaction_ref"]],
@@ -109,7 +109,7 @@ def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
         assert ticket["support_ticket_ref"] == "SUP-1001"
 
     # A second report of the same payment does not restart the clocks, or replace the first ticket.
-    again = client.post("/v1/support/reports", headers=api_headers, json={
+    again = client.post("/v1/support/reports", headers=support_headers, json={
         "support_ticket_ref": "SUP-1002", "customer_id": body["customer_id"],
         "transaction_refs": [body["transaction_ref"]],
         "reported_at": datetime.now(timezone.utc).isoformat(), "channel": "BRANCH"})
@@ -125,13 +125,14 @@ def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
         not i["reported"] for i in items) else True
 
 
-def test_unknown_payments_and_a_mismatched_customer_are_refused(client, api_headers, sample_transaction):
+def test_unknown_payments_and_a_mismatched_customer_are_refused(client, api_headers, support_headers,
+                                                               sample_transaction):
     now = datetime.now(timezone.utc).isoformat()
     a = _scored_payment(client, api_headers, sample_transaction)
     b = _scored_payment(client, api_headers, sample_transaction)
 
     def report(refs, customer):
-        return client.post("/v1/support/reports", headers=api_headers, json={
+        return client.post("/v1/support/reports", headers=support_headers, json={
             "support_ticket_ref": "SUP-9", "customer_id": customer, "transaction_refs": refs,
             "reported_at": now, "channel": "WEB"})
 
@@ -159,3 +160,18 @@ def test_the_missed_fraud_figure_answers(client):
     r = client.get("/v1/metrics/missed?days=30")
     assert r.status_code == 200
     assert {"reported_payments", "flagged_before_report", "missed_by_detector", "by_channel"} <= set(r.json())
+
+
+def test_each_key_stays_on_its_own_side(client, api_headers, support_headers, sample_transaction):
+    """D109g: a bank key cannot forward customer reports, and the support
+    team's key cannot post transactions. Both are refused as the wrong door
+    (403), not as a bad key (401)."""
+    now = datetime.now(timezone.utc).isoformat()
+    report = {"support_ticket_ref": "SUP-1", "customer_id": "c", "transaction_refs": ["x"],
+              "reported_at": now, "channel": "WEB"}
+    r = client.post("/v1/support/reports", headers=api_headers, json=report)
+    assert r.status_code == 403 and "bank" in r.text
+    r = client.post("/v1/transactions", headers=support_headers, json=sample_transaction())
+    assert r.status_code == 403 and "support team" in r.text
+    # The action feed is support's to work, so its key reads it.
+    assert client.get("/v1/restrictions?after_id=0&limit=1", headers=support_headers).status_code == 200

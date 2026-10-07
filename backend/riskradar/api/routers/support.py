@@ -26,7 +26,7 @@ from ...clocks import sweep as clock_sweep
 from ...clocks import watchlist
 from ...security.tokens import subject_token
 from ...worker.scoring import system_user_id
-from ..deps import get_conn, require_api_key
+from ..deps import get_conn, require_support_key
 from ..schemas import SupportContactIn, SupportReportIn
 
 router = APIRouter(prefix="/v1/support", tags=["support"])
@@ -42,7 +42,7 @@ def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
 def support_report(
     body: SupportReportIn,
     conn: Any = Depends(get_conn),
-    api_key: dict = Depends(require_api_key),
+    api_key: dict = Depends(require_support_key),
 ) -> dict[str, Any]:
     """A customer's fraud report, forwarded by support with the customer record.
 
@@ -92,7 +92,7 @@ def support_contact(
     case_id: int,
     body: SupportContactIn,
     conn: Any = Depends(get_conn),
-    api_key: dict = Depends(require_api_key),
+    api_key: dict = Depends(require_support_key),
 ) -> dict[str, Any]:
     """Support reached the customer the desk asked them to contact (D109f)."""
     sys_uid = system_user_id(conn)

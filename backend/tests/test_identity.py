@@ -185,6 +185,11 @@ def test_dispatch_waits_sends_and_backs_off(conn, analyst_id):
     _identity(conn, subject, fresh_bvn())
     flag = watchlist.place(conn, case=_case(conn, subject), user_id=analyst_id, reason="to be dispatched", hours=1)
     now = datetime.now(timezone.utc) + timedelta(seconds=1)
+    # The suite shares the demo database. Messages already waiting there would
+    # fill dispatch's batch and leave this flag's message unpicked, so set them
+    # aside for this test; the rolled-back transaction puts them back.
+    conn.execute("UPDATE watchlist_outbox SET next_attempt_at = 'infinity' "
+                 "WHERE status = 'PENDING' AND flag_id <> %s", (flag["id"],))
 
     def row():
         return conn.execute("SELECT * FROM watchlist_outbox WHERE flag_id = %s", (flag["id"],)).fetchone()

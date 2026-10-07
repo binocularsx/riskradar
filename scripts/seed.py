@@ -45,6 +45,8 @@ USERS = [
 ]
 
 SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
+# D109g: the support team's own key, limited to the support endpoints.
+SUPPORT_API_KEY = "rr_dev_support_key_do_not_use_in_production"
 
 # D25: six rules, two of each power; D77, D78 and D79 added three escalating rules. Every rule *power* in D11a is retained,
 # including suppression — the primary false-positive control, which had to be
@@ -193,6 +195,14 @@ def main() -> None:
                 """,
                 (hash_api_key(SIMULATOR_API_KEY),),
             )
+            # D109g: the simulator also plays the support team, with its own key.
+            cur.execute(
+                """
+                INSERT INTO api_keys (name, key_hash, scope) VALUES ('support team (simulated)', %s, 'SUPPORT')
+                ON CONFLICT (key_hash) DO NOTHING
+                """,
+                (hash_api_key(SUPPORT_API_KEY),),
+            )
 
             # --- ruleset v1 -------------------------------------------------
             cur.execute("SELECT id FROM rulesets WHERE is_active")
@@ -272,6 +282,7 @@ def main() -> None:
         print("\n".join(printed))
         print("\n  TOTP is on for every account (D12a). scripts/totp.py prints a current code.")
     print(f"\n  simulator API key: {SIMULATOR_API_KEY}")
+    print(f"  support API key:   {SUPPORT_API_KEY}")
 
 
 if __name__ == "__main__":

@@ -253,8 +253,8 @@ def test_sweep_does_not_reopen_a_closed_case(conn, case_id):
     assert conn.execute("SELECT state FROM cases WHERE id = %s", (case_id,)).fetchone()["state"] == "CLOSED"
 
 
-def test_report_endpoint_refuses_a_naive_timestamp(client, api_headers):
-    r = client.post("/v1/support/reports", headers=api_headers, json={
+def test_report_endpoint_refuses_a_naive_timestamp(client, support_headers):
+    r = client.post("/v1/support/reports", headers=support_headers, json={
         "support_ticket_ref": "SUP-1", "customer_id": "c", "transaction_refs": ["x"],
         "reported_at": "2026-09-14T10:00:00", "channel": "BRANCH"})
     assert r.status_code == 422

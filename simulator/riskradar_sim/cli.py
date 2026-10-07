@@ -37,6 +37,9 @@ from .population import build_population
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
+# D109g: playing the support team uses the support team's own key, which the
+# API accepts only on the support endpoints and the action feed.
+DEFAULT_SUPPORT_KEY = "rr_dev_support_key_do_not_use_in_production"
 
 
 def _client(base_url: str, api_key: str) -> httpx.Client:
@@ -436,7 +439,7 @@ def cmd_industry_flag(args: argparse.Namespace) -> None:
 
 def cmd_support(args: argparse.Namespace) -> None:
     """Play the bank's support team (D109a)."""
-    with _client(args.base_url, args.api_key) as client:
+    with _client(args.base_url, args.support_key) as client:
         support.run(client, args)
 
 
@@ -528,6 +531,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--outcome", default="CUSTOMER_CONFIRMED_GENUINE",
                    choices=["CUSTOMER_CONFIRMED_GENUINE", "CUSTOMER_REPORTED_FRAUD"])
     p.add_argument("--note", default=None)
+    p.add_argument("--support-key", default=DEFAULT_SUPPORT_KEY, help="the support team's API key")
     p.set_defaults(func=cmd_support)
 
     p = sub.add_parser("burst", help="NFR-002 burst test")

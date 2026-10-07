@@ -33,6 +33,8 @@ router = APIRouter(tags=["ops"])
 
 API_VERSION = "1.1.0"
 DEV_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
+# D109g: the seeded support-team key is just as public.
+DEV_SUPPORT_API_KEY = "rr_dev_support_key_do_not_use_in_production"
 
 
 def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
@@ -96,10 +98,10 @@ def readiness(conn: Any) -> dict[str, Any]:
     if s.is_production:
         # The seeded development key is public (it is in this repository). A
         # production service that still accepts it is not ready for traffic.
-        dev_key = _rows(conn, "SELECT count(*) AS n FROM api_keys WHERE key_hash = %s AND active",
-                        (hash_api_key(DEV_API_KEY),))[0]["n"]
+        dev_key = _rows(conn, "SELECT count(*) AS n FROM api_keys WHERE key_hash = ANY(%s) AND active",
+                        ([hash_api_key(DEV_API_KEY), hash_api_key(DEV_SUPPORT_API_KEY)],))[0]["n"]
         checks["dev_credentials"] = {"ok": dev_key == 0,
-                                     "note": None if dev_key == 0 else "revoke the seeded development API key"}
+                                     "note": None if dev_key == 0 else "revoke the seeded development API keys"}
         required.append("dev_credentials")
     ready = all(checks[k]["ok"] for k in required)
     return {"ready": ready, "checks": checks}
