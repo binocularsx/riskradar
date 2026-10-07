@@ -5,6 +5,7 @@ import { api, clock, nairaShort } from '../lib/api'
 import { useAlertStream } from '../lib/useStream'
 import { Banner, RiskBadge } from '../components/ui'
 import CaseView from '../components/CaseView'
+import { ALARM, OUTCOME, say, sayLower } from '../lib/words'
 
 /**
  * The triage workspace — the screen an analyst lives on.
@@ -226,7 +227,7 @@ export default function Triage({ user }) {
           {/* One banner per alarm, not one per worker that raised it. */}
           {[...new Map(alarms.map((a) => [`${a.code}:${a.detail}`, a])).values()].map((a, i) => (
             <Banner key={i} kind="warn">
-              <strong>System alarm — {a.code}.</strong> {a.detail}
+              <strong>System problem: {say(ALARM, a.code)}.</strong> {a.detail}
             </Banner>
           ))}
           {error && <Banner kind="error">{error}</Banner>}
@@ -240,7 +241,7 @@ export default function Triage({ user }) {
               if (result?.outcome) {
                 const id = result.case_id
                 setNotice(result.closed
-                  ? `Case #${id} closed as ${result.outcome.replace(/_/g, ' ').toLowerCase()}.`
+                  ? `Case #${id} closed as ${sayLower(OUTCOME, result.outcome)}.`
                   : `Case #${id}: outcome recorded. It has left your queue and waits for a Fraud Ops lead to close it — follow it in the Case tracker.`)
               }
               if (linked) setParams({})

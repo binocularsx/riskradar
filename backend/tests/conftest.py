@@ -24,6 +24,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 from riskradar.config import settings  # noqa: E402
 
 SIMULATOR_API_KEY = "rr_dev_simulator_key_do_not_use_in_production"
+SUPPORT_API_KEY = "rr_dev_support_key_do_not_use_in_production"
 
 
 @pytest.fixture(scope="session")
@@ -56,6 +57,12 @@ def client():
 @pytest.fixture
 def api_headers() -> dict[str, str]:
     return {"X-API-Key": SIMULATOR_API_KEY}
+
+
+@pytest.fixture
+def support_headers() -> dict[str, str]:
+    """D109g: the support team's key, seeded by scripts/seed.py."""
+    return {"X-API-Key": SUPPORT_API_KEY}
 
 
 def unique_ref(prefix: str = "test") -> str:

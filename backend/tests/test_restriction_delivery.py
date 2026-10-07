@@ -216,3 +216,32 @@ def test_case_restrictions_are_scoped_like_every_case_read(client):
     # A case the analyst does not hold reads as 404, not 403 (D94).
     r = client.get("/v1/cases/999999999/restrictions")
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# D109b: actions the desk used to take itself, now asked of support
+# ---------------------------------------------------------------------------
+
+NOTIFY = [{"action": "NOTIFY_RECEIVING_BANK", "account_token": "acct-tok-1",
+           "beneficiary_token": "ben-tok-1", "channel": None, "reason": "money reached this bank"}]
+
+
+def test_support_telling_the_receiving_bank_stamps_the_cbn_milestone(conn):
+    sub = _seed_submission(conn, NOTIFY)
+    conn.execute("UPDATE cases SET first_reported_at = now() - interval '1 hour', counterparty_notified_at = NULL "
+                 "WHERE id = %s", (sub["case_id"],))
+    order = restrictions.create_orders(conn, sub, sub["lead"])[0]
+    restrictions.acknowledge(conn, restriction_ref=str(order["restriction_ref"]), outcome="APPLIED",
+                             reason=None, taken_at=None)
+    stamped = conn.execute("SELECT counterparty_notified_at FROM cases WHERE id = %s",
+                           (sub["case_id"],)).fetchone()["counterparty_notified_at"]
+    assert stamped is not None
+
+
+def test_a_one_off_request_cannot_be_lifted(conn):
+    sub = _seed_submission(conn, NOTIFY)
+    order = restrictions.create_orders(conn, sub, sub["lead"])[0]
+    restrictions.acknowledge(conn, restriction_ref=str(order["restriction_ref"]), outcome="APPLIED",
+                             reason=None, taken_at=None)
+    full = restrictions.order_by_ref(conn, str(order["restriction_ref"]))
+    assert any("one-off" in b for b in restrictions.release_blockers(conn, full))

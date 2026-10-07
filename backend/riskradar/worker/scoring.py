@@ -322,7 +322,10 @@ def score_transaction(
         except registry.ModelUnavailable as exc:
             # FR-017 / D15d: rule-only mode is never a silent degradation.
             rule_only = True
-            _raise_alarm(conn, sys_uid, "MODEL_UNAVAILABLE", str(exc))
+            log.error("model unavailable: %s", exc)
+            _raise_alarm(conn, sys_uid, "MODEL_UNAVAILABLE",
+                         "The risk model could not be loaded, so payments are being checked by the "
+                         "written rules only. Tell the technology team.")
 
     # --- rules -------------------------------------------------------------
     ruleset_id, rule_configs = ruleset if ruleset else active_ruleset(conn)
@@ -468,8 +471,9 @@ def score_transaction(
     if admission is not None and budget.overrun_needs_alarm(conn, admission):
         _raise_alarm(
             conn, sys_uid, "ALERT_BUDGET_OVERRUN",
-            f"{admission.raised_today} alerts today against a budget of {admission.config.per_day}, from "
-            "veto rules and machine actions the guard may not hold back. Retune those rules.",
+            f"{admission.raised_today} alerts today against a daily review limit of {admission.config.per_day}. "
+            "The extra alerts come from rules that must always be raised and cannot be held back. "
+            "An administrator should review how often those rules fire.",
         )
 
     return outcome
@@ -639,8 +643,9 @@ def release_deferred(conn: Any, sys_uid: int, *, now: datetime | None = None) ->
             taken += 1
     if expired:
         _raise_alarm(conn, sys_uid, "ALERTS_EXPIRED_UNREVIEWED",
-                     f"{len(expired)} alert(s) waited {config.deferral_hours}h behind the budget and were never "
-                     "reviewed. Re-derive thresholds or raise the budget.")
+                     f"{len(expired)} alert(s) were held back for {config.deferral_hours} hours because the daily "
+                     "review limit was full, and expired before anyone looked at them. An administrator should "
+                     "raise the daily limit or adjust the risk levels.")
     return {"released": released, "expired": len(expired), "room_before": room}
 
 

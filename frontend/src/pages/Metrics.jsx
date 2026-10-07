@@ -7,6 +7,7 @@ import {
 import GeoMap from '../components/GeoMap'
 import { api, naira } from '../lib/api'
 import { Banner, Empty, RiskBadge, Stat } from '../components/ui'
+import { OUTCOME, RULE, RULE_EFFECT, STAGE } from '../lib/words'
 
 const LEVEL_COLOUR = {
   LOW: '#3f9f6a', MEDIUM: '#ddc24e', HIGH: '#e2692c', CRITICAL: '#b93b6a',
@@ -23,23 +24,10 @@ function hour(value) {
   return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
-const DRIVER_NAME = {
-  MODEL: 'The model alone',
-  VELOCITY_BURST_1H: 'Burst of payments to a new destination',
-  ACCOUNT_TAKEOVER_SEQUENCE: 'Takeover signs, then a new destination',
-  MULE_INBOUND_FANIN: 'Credits from many senders',
-  CARD_TESTING_PROBES: 'Card-testing probes',
-  SECOND_LEG_ONWARD_PAYMENT: 'Received money moving on',
-  SCAM_BENEFICIARY_FANIN: 'New account many customers paid today',
-  SIM_SWAP_TRANSFER: 'New destination after a SIM change',
-  DORMANT_ACCOUNT_REACTIVATION: 'Dormant account moving money',
-  CARD_PRESENT_NEW_REGION_CASHOUT: 'Card run somewhere new',
-  SANCTIONED_BENEFICIARY: 'Sanctioned destination',
-  KNOWN_MULE_BENEFICIARY: 'Known mule destination',
-}
-const RESULT_NAME = { CONFIRMED_FRAUD: 'Fraud confirmed', FALSE_POSITIVE: 'No fraud found', INCONCLUSIVE: 'More review needed' }
-const STATE_NAME = { NEW: 'Not started', IN_REVIEW: 'Being reviewed', ESCALATED: 'With a specialist', AWAITING_CLOSE: 'Ready to close', CLOSED: 'Completed' }
-const EFFECT_NAME = { ESCALATE: 'Raises risk', SUPPRESS: 'Lowers risk', OVERRIDE: 'Sets the result' }
+const DRIVER_NAME = { ...RULE, MODEL: 'The risk model on its own' }
+const RESULT_NAME = OUTCOME
+const STATE_NAME = STAGE
+const EFFECT_NAME = RULE_EFFECT
 
 /**
  * False alarms per rule and per model, from analyst outcomes (D69d, base PRD
@@ -191,9 +179,9 @@ function Benchmarks({ menu, live }) {
               <th className="num">False alerts / day</th>
               <th className="num">Per incident</th>
               <th className="num">Value detected</th>
-              {TYPES.map((t) => <th key={`s${t}`} className="num">Seen · {TYPE_NAME[t]}</th>)}
-              {TYPES.map((t) => <th key={`h${t}`} className="num">Unseen · {TYPE_NAME[t]}</th>)}
-              <th className="num">Unseen mean</th>
+              {TYPES.map((t) => <th key={`s${t}`} className="num">Known fraud · {TYPE_NAME[t]}</th>)}
+              {TYPES.map((t) => <th key={`h${t}`} className="num">New fraud · {TYPE_NAME[t]}</th>)}
+              <th className="num">New fraud, average</th>
             </tr>
           </thead>
           <tbody>
@@ -221,7 +209,7 @@ function Benchmarks({ menu, live }) {
                   const ho = o.held_out?.per_typology?.[t]
                   return (
                     <td key={`h${t}`} className="num"
-                        title={ho?.ci95 ? `95% range ${ho.ci95.join('–')}` : 'not evaluated held-out'}>
+                        title={ho?.ci95 ? `95% range ${ho.ci95.join('–')}` : 'not tested on fraud types it had not seen'}>
                       {ho?.recall != null ? ho.recall.toFixed(3) : '—'}
                     </td>
                   )
@@ -239,7 +227,7 @@ function Benchmarks({ menu, live }) {
         incident recall with that fraud type hidden from training. Value detected counts money on
         alerted fraud payments only; the live desk cannot measure it, because the fraud it misses
         carries no label. The live ratio is a floor: alerts inside a confirmed case are never counted
-        as false. Every row is a business choice; the desk runs at 75 a day (D76).
+        as false. Every row is a business choice; the desk runs at 75 a day.
       </p>
     </div>
   )

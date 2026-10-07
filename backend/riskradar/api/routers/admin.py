@@ -666,8 +666,8 @@ def create_api_key(
     raw = new_api_key()
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO api_keys (name, key_hash) VALUES (%s, %s) RETURNING id",
-            (body.name, hash_api_key(raw)),
+            "INSERT INTO api_keys (name, key_hash, scope) VALUES (%s, %s, %s) RETURNING id",
+            (body.name, hash_api_key(raw), body.scope),
         )
         row = cur.fetchone()
     chain.append(
@@ -676,9 +676,9 @@ def create_api_key(
         action="API_KEY_CREATED",
         object_type="api_key",
         object_id=row["id"] if isinstance(row, dict) else row[0],
-        payload={"name": body.name},
+        payload={"name": body.name, "scope": body.scope},
     )
-    return {"api_key": raw, "note": "shown once; only its hash is stored"}
+    return {"api_key": raw, "scope": body.scope, "note": "shown once; only its hash is stored"}
 
 
 @router.get("/api-keys")
@@ -687,7 +687,7 @@ def list_api_keys(
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
     """D87: which callers can post transactions, and when each last did."""
-    return {"keys": _rows(conn, "SELECT id, name, active, created_at, last_used_at FROM api_keys ORDER BY id")}
+    return {"keys": _rows(conn, "SELECT id, name, scope, active, created_at, last_used_at FROM api_keys ORDER BY id")}
 
 
 @router.delete("/api-keys/{key_id}")

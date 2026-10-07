@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { api, clock, when } from '../lib/api'
 import { Banner } from './ui'
+import { CHANNEL, sayLower } from '../lib/words'
 
 /**
  * The regulator's clocks on a case (WP-05, D71).
@@ -64,30 +65,10 @@ export default function RegulatoryClocks({ caseRow, clocks, user, onUpdated }) {
       <div className="card" style={{ marginTop: 14 }}>
         <h3>Regulatory clocks</h3>
         <p className="dim" style={{ fontSize: 12.5, marginTop: -4 }}>
-          No customer report on this case, so the CBN scam clocks have not started. When the
-          customer reports being defrauded, record it here: the refund clock counts from that moment.
+          No customer report on this case, so the CBN scam clocks have not started. If the customer
+          reports being defrauded, the support team forwards the report here with their record, and the
+          clocks start from that moment.
         </p>
-        {error && <Banner kind="error">{error}</Banner>}
-        {can('cases:review') && (
-          <div className="row wrap" style={{ gap: 8 }}>
-            <input type="datetime-local" value={reportedAt} max={nowLocal()} style={{ width: 200 }}
-                   aria-label="Reported at" onChange={(e) => setReportedAt(e.target.value)} />
-            <select value={channel} style={{ width: 160 }} aria-label="Reported through"
-                    onChange={(e) => setChannel(e.target.value)}>
-              {CHANNELS.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ').toLowerCase()}</option>)}
-            </select>
-            <input placeholder="Receiving institution (optional)" value={institution} style={{ width: 220 }}
-                   onChange={(e) => setInstitution(e.target.value)} />
-            <button className="primary" disabled={busy || !withOffset(reportedAt)}
-                    onClick={() => run(() => api.recordReport(caseRow.id, {
-                      reported_at: withOffset(reportedAt),
-                      channel,
-                      counterparty_institution: institution.trim() || null,
-                    }))}>
-              Record customer report
-            </button>
-          </div>
-        )}
       </div>
     )
   }
@@ -99,7 +80,8 @@ export default function RegulatoryClocks({ caseRow, clocks, user, onUpdated }) {
       <div className="between">
         <h3 style={{ margin: 0 }}>Regulatory clocks</h3>
         <span className="dim" style={{ fontSize: 11.5 }}>
-          reported {when(caseRow.first_reported_at)} via {String(caseRow.report_channel).replace(/_/g, ' ').toLowerCase()}
+          reported {when(caseRow.first_reported_at)} via {sayLower(CHANNEL, caseRow.report_channel)}
+          {caseRow.support_ticket_ref ? ` · support ticket ${caseRow.support_ticket_ref}` : ''}
           {' '}· policy v{caseRow.clock_policy_version}
         </span>
       </div>

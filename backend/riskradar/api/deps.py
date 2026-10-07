@@ -48,7 +48,10 @@ def get_conn() -> Iterator[Any]:
 # ---------------------------------------------------------------------------
 
 
-def require_api_key(request: Request, conn: Any = Depends(get_conn)) -> dict[str, Any]:
+_SCOPE_NAME = {"BANK": "the bank's systems", "SUPPORT": "the support team"}
+
+
+def _api_key(request: Request, conn: Any, allowed: tuple[str, ...]) -> dict[str, Any]:
     raw = request.headers.get("x-api-key")
     if not raw:
         raise HTTPException(
@@ -56,7 +59,7 @@ def require_api_key(request: Request, conn: Any = Depends(get_conn)) -> dict[str
         )
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name FROM api_keys WHERE key_hash = %s AND active",
+            "SELECT id, name, scope FROM api_keys WHERE key_hash = %s AND active",
             (hash_api_key(raw),),
         )
         row = cur.fetchone()
@@ -65,9 +68,32 @@ def require_api_key(request: Request, conn: Any = Depends(get_conn)) -> dict[str
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid API key"
         )
     row = dict(row) if not isinstance(row, dict) else row
+    if row["scope"] not in allowed:
+        # D109g: a valid key, for somebody else's door. 403, not 401: the key
+        # is genuine, it is the endpoint that is not theirs.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"this API key belongs to {_SCOPE_NAME[row['scope']]} and cannot call this endpoint",
+        )
     with conn.cursor() as cur:
         cur.execute("UPDATE api_keys SET last_used_at = now() WHERE id = %s", (row["id"],))
     return row
+
+
+def require_api_key(request: Request, conn: Any = Depends(get_conn)) -> dict[str, Any]:
+    """A bank key: ingestion, events, directives, the industry watch-list."""
+    return _api_key(request, conn, ("BANK",))
+
+
+def require_support_key(request: Request, conn: Any = Depends(get_conn)) -> dict[str, Any]:
+    """D109g: the support team's key, for the support team's endpoints only."""
+    return _api_key(request, conn, ("SUPPORT",))
+
+
+def require_action_feed_key(request: Request, conn: Any = Depends(get_conn)) -> dict[str, Any]:
+    """The actions a lead approved (D97). Support carries them out (D109b); a
+    bank core connector may also read them, so both scopes are accepted."""
+    return _api_key(request, conn, ("SUPPORT", "BANK"))
 
 
 # ---------------------------------------------------------------------------

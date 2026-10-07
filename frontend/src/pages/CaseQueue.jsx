@@ -5,6 +5,7 @@ import { api, clock, nairaShort } from '../lib/api'
 import { useAlertStream } from '../lib/useStream'
 import { Banner, RiskBadge } from '../components/ui'
 import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
+import { ALARM, say } from '../lib/words'
 
 const SCOPES = [
   { key: 'mine', label: 'My cases' },
@@ -87,7 +88,7 @@ export default function CaseQueue({ user }) {
           <p className="page-sub">A clear view of your queue. Focus on the cases that matter most.</p>
         </div>
         <div className="ops-head-actions">
-          <Link className="ops-action" to="/tracker">View all stages <CaseIcon name="arrow" /></Link>
+          <Link className="ops-action" to="/tracker">Open progress board <CaseIcon name="arrow" /></Link>
           {canReview && !supervises && <button className="primary ops-action" onClick={takeNext} disabled={busy}>
             <span aria-hidden="true">+</span> {busy ? 'Finding a case…' : 'Take next case'}
           </button>}
@@ -95,7 +96,7 @@ export default function CaseQueue({ user }) {
       </div>
 
       {[...new Map(alarms.map((a) => [`${a.code}:${a.detail}`, a])).values()].map((a, i) => (
-        <Banner key={i} kind="warn"><strong>System alarm — {a.code}.</strong> {a.detail}</Banner>
+        <Banner key={i} kind="warn"><strong>System problem: {say(ALARM, a.code)}.</strong> {a.detail}</Banner>
       ))}
       {error && <Banner kind="error">{error} <button className="ghost" onClick={load}>Retry</button></Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}

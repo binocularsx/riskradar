@@ -86,7 +86,8 @@ export const api = {
   // D106: what to block, derived from the case's own alerted transactions, so
   // confirming fraud proposes the restrictions instead of leaving them empty.
   restrictionSuggestions: (id) => get(`/v1/cases/${id}/restriction-suggestions`),
-  caseReports: (id) => get(`/v1/cases/${id}/account-manager-reports`),
+  caseReports: (id) => get(`/v1/cases/${id}/support-reports`),
+  headsUp: (id, message) => post(`/v1/cases/${id}/heads-up`, { message }),
   caseSubmissions: (id) => get(`/v1/cases/${id}/submissions`),
   approvals: () => get('/v1/approvals'),
   decideSubmission: (id, data) => post(`/v1/submissions/${id}/decision`, data),
@@ -115,15 +116,17 @@ export const api = {
   escalate: (id, target, note) => post(`/v1/cases/${id}/escalate`, { target, note: note || null }),
   closeCase: (id) => post(`/v1/cases/${id}/close`),
   // regulatory clocks (WP-05)
-  recordReport: (id, data) => post(`/v1/cases/${id}/report`, data),
   recordMilestone: (id, data) => post(`/v1/cases/${id}/milestones`, data),
   clockPolicy: () => get('/v1/clocks/policy'),
   // the 24-hour watch-list flag (WP-06)
   placeFlag: (caseId, data) => post(`/v1/cases/${caseId}/watchlist`, data),
-  flagContact: (flagId, data) => post(`/v1/watchlist/${flagId}/contact`, data),
   liftFlag: (flagId, data) => post(`/v1/watchlist/${flagId}/lift`, data ?? {}),
   watchlist: (active = true) => get(`/v1/watchlist?active=${active}`),
   integrations: () => get('/v1/admin/integrations'),
+  // D87, D109g: machine keys, each for the bank's systems or for the support team.
+  apiKeys: () => get('/v1/admin/api-keys'),
+  createApiKey: (name, scope) => post('/v1/admin/api-keys', { name, scope }),
+  revokeApiKey: (id) => del(`/v1/admin/api-keys/${id}`),
   industryWatchlist: (active = true) => get(`/v1/industry-watchlist?active=${active}`),
   alerts: (params) => get(`/v1/alerts?${new URLSearchParams(params)}`),
 
@@ -134,6 +137,9 @@ export const api = {
   geography: (hours = 168) => get(`/v1/metrics/geography?hours=${hours}`),
   budgetMenu: () => get('/v1/metrics/budget-menu'),
   searchTransactions: (params) => get(`/v1/transactions/search?${new URLSearchParams(params)}`),
+  paymentCheck: (ref) => get(`/v1/transactions/${encodeURIComponent(ref)}/check`),
+  completedCases: (params) => get(`/v1/completed-cases?${new URLSearchParams(params)}`),
+  decisionRecord: (id) => get(`/v1/completed-cases/${id}/record`),
 
   // administration
   rules: () => get('/v1/admin/rules'),

@@ -25,6 +25,7 @@ from .routers import (
     auth,
     budget,
     cases,
+    completed,
     directives,
     identity,
     ingest,
@@ -34,6 +35,7 @@ from .routers import (
     restrictions,
     stream,
     submissions,
+    support,
     system,
     triage,
     workflow,
@@ -118,6 +120,7 @@ app.include_router(directives.admin_router)
 app.include_router(identity.router)
 app.include_router(auth.router)
 app.include_router(cases.router)
+app.include_router(completed.router)
 app.include_router(triage.router)
 app.include_router(workflow.router)
 app.include_router(links.router)
@@ -126,6 +129,7 @@ app.include_router(stream.router)
 app.include_router(admin.router)
 app.include_router(budget.router)
 app.include_router(reports.router)
+app.include_router(support.router)
 # D103: the desk's routes first. The bank's router owns /v1/restrictions/{ref},
 # which would otherwise swallow /v1/restrictions/release-requests and answer a
 # signed-in lead with "missing X-API-Key".

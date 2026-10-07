@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...cases import performance
 from ...config import settings
@@ -379,6 +379,104 @@ def search_transactions(
         params,
     )
     return {"items": items, "limit": limit, "offset": offset}
+
+
+@router.get("/transactions/{transaction_ref}/check")
+def transaction_check(
+    transaction_ref: str,
+    user: dict = Depends(requires(Permission.CASES_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """One payment's risk check, whether or not it was ever flagged.
+
+    A flagged payment's check is already on its case. This is for the rest:
+    the payment support reports that the detector let through, or one a
+    colleague mentions. It answers "why did it score what it scored?" with the
+    same evidence a case shows — the warning signs, the decision trail, what
+    moved the model — and puts the payment in context.
+
+    Scoped like search (D94): a payment is visible when the caller holds a case
+    for that customer; a lead sees everything; anything else is a 404. The
+    context about the recipient is counts only, never other customers' payments.
+    """
+    scope_sql, scope_params = visibility.subject_predicate(user, "t.subject_token")
+    rows = _rows(
+        conn,
+        f"""
+        SELECT t.id, t.transaction_ref, t.occurred_at, t.amount_minor, t.currency,
+               t.channel, t.instrument, t.rail, t.auth_result, t.decline_reason,
+               t.ip_region, t.merchant_category, t.display_name, t.direction,
+               t.subject_token, t.beneficiary_token,
+               d.score_0_100, d.risk_level, d.p_fraud, d.decision, d.signals, d.attributions,
+               d.policy_trace, d.features, d.rule_only_mode, d.feature_spec_version,
+               mv.name AS model_name, mv.version AS model_version,
+               rs.version AS ruleset_version, ts.version AS threshold_version,
+               a.id AS alert_id, a.case_id, a.source AS alert_source
+          FROM transactions t
+          LEFT JOIN decisions d        ON d.transaction_id = t.id
+          LEFT JOIN model_versions mv  ON mv.id = d.model_version_id
+          LEFT JOIN rulesets rs        ON rs.id = d.ruleset_id
+          LEFT JOIN threshold_sets ts  ON ts.id = d.threshold_set_id
+          LEFT JOIN alerts a           ON a.transaction_id = t.id
+         WHERE t.transaction_ref = %(ref)s AND {scope_sql}
+        """,
+        {"ref": transaction_ref, **scope_params},
+    )
+    if not rows:
+        raise HTTPException(404, "no such payment, or it belongs to a customer outside your cases")
+    tx = rows[0]
+
+    # The customer's own activity either side of it: what else they did then.
+    around = _rows(
+        conn,
+        """
+        SELECT t.transaction_ref, t.occurred_at, t.amount_minor, t.currency, t.channel,
+               t.auth_result, t.direction, d.risk_level, (a.id IS NOT NULL) AS alerted, a.case_id
+          FROM transactions t
+          LEFT JOIN decisions d ON d.transaction_id = t.id
+          LEFT JOIN alerts a    ON a.transaction_id = t.id
+         WHERE t.subject_token = %(subject)s
+           AND t.occurred_at BETWEEN %(at)s - interval '24 hours' AND %(at)s + interval '24 hours'
+         ORDER BY t.occurred_at
+         LIMIT 60
+        """,
+        {"subject": tx["subject_token"], "at": tx["occurred_at"]},
+    )
+
+    recipient = None
+    if tx["beneficiary_token"]:
+        recipient = _rows(
+            conn,
+            """
+            SELECT count(DISTINCT t.subject_token) FILTER (WHERE t.subject_token <> %(subject)s) AS other_customers_24h,
+                   count(*) FILTER (WHERE t.subject_token = %(subject)s
+                                      AND t.occurred_at < %(at)s - interval '24 hours') AS paid_before_by_customer,
+                   EXISTS (SELECT 1 FROM beneficiary_lists b
+                            WHERE b.token = %(ben)s AND b.kind = 'KNOWN_MULE') AS known_mule
+              FROM transactions t
+             WHERE t.beneficiary_token = %(ben)s
+               AND t.occurred_at <= %(at)s
+               AND (t.subject_token = %(subject)s OR t.occurred_at > %(at)s - interval '24 hours')
+            """,
+            {"ben": tx["beneficiary_token"], "subject": tx["subject_token"], "at": tx["occurred_at"]},
+        )[0]
+
+    case = None
+    if tx["case_id"]:
+        case = _rows(conn, "SELECT id, state::text AS state, outcome::text AS outcome, risk_level::text AS risk_level "
+                           "FROM cases WHERE id = %s", (tx["case_id"],))
+        case = case[0] if case else None
+    else:
+        # Not flagged: is this customer already under investigation for something else?
+        open_case = _rows(conn, "SELECT id, state::text AS state, risk_level::text AS risk_level FROM cases "
+                                "WHERE subject_token = %s AND state <> 'CLOSED' ORDER BY opened_at DESC LIMIT 1",
+                          (tx["subject_token"],))
+        case = {**open_case[0], "not_on_this_payment": True} if open_case else None
+
+    for key in ("subject_token", "beneficiary_token"):
+        tx.pop(key)
+    return {"transaction": tx, "around": around, "recipient": recipient, "case": case,
+            "scored": tx["risk_level"] is not None}
 
 
 @router.get("/metrics/drift")

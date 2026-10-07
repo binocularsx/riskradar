@@ -481,7 +481,10 @@ class RestrictionIn(Strict):
                     # D108: containment for a compromised login, so account
                     # takeover has an action on this desk rather than an
                     # escalation to a specialist who is out of scope.
-                    "SESSION_TERMINATION", "CREDENTIAL_RESET", "MFA_REENROLMENT"]
+                    "SESSION_TERMINATION", "CREDENTIAL_RESET", "MFA_REENROLMENT",
+                    # D109b: what the analyst used to do themselves, now asked
+                    # of the support team, who own every customer contact.
+                    "CONTACT_CUSTOMER", "VERIFY_IDENTITY", "NOTIFY_RECEIVING_BANK"]
     account_token: Annotated[str | None, Field(max_length=128)] = None
     beneficiary_token: Annotated[str | None, Field(max_length=128)] = None
     channel: Channel | None = None
@@ -533,6 +536,40 @@ class CustomerReportIn(Strict):
     @classmethod
     def _require_timezone(cls, v: datetime) -> datetime:
         return _aware(v)
+
+
+class SupportReportIn(Strict):
+    """D109e: the support team forwards a customer's fraud report, with the
+    matching customer record. ``customer_id`` is the bank's own identifier,
+    tokenised at this boundary exactly as ingestion does (D9c); every payment
+    named must belong to that customer."""
+
+    support_ticket_ref: Annotated[str, Field(min_length=1, max_length=128)]
+    customer_id: Annotated[str, Field(min_length=1, max_length=128)]
+    transaction_refs: Annotated[list[Annotated[str, Field(min_length=1, max_length=128)]],
+                                Field(min_length=1, max_length=50)]
+    reported_at: IsoDatetime
+    channel: Literal["BRANCH", "CONTACT_CENTRE", "MOBILE_APP", "WEB", "EMAIL", "USSD", "SOCIAL_MEDIA"]
+    counterparty_institution: Annotated[str | None, Field(min_length=2, max_length=128)] = None
+    customer_statement: Annotated[str | None, Field(max_length=4000)] = None
+
+    @field_validator("reported_at")
+    @classmethod
+    def _require_timezone(cls, v: datetime) -> datetime:
+        return _aware(v)
+
+
+class SupportContactIn(Strict):
+    """D109f: support reached the watch-flagged customer."""
+
+    outcome: Literal["CUSTOMER_CONFIRMED_GENUINE", "CUSTOMER_REPORTED_FRAUD"]
+    note: Annotated[str | None, Field(max_length=4000)] = None
+
+
+class HeadsUpIn(Strict):
+    """D109d: the urgent "hold, we are investigating" on a Critical case."""
+
+    message: Annotated[str, Field(min_length=20, max_length=2000)]
 
 
 class MilestoneIn(Strict):
@@ -648,9 +685,14 @@ class UserProfileIn(Strict):
 
 
 class ApiKeyCreateIn(Strict):
-    """D87: name a new ingestion key. A body for the same reason as UserCreateIn."""
+    """D87: name a new ingestion key. A body for the same reason as UserCreateIn.
+
+    D109g: and say whose it is. A BANK key calls ingestion, events, directives
+    and the industry watch-list; a SUPPORT key calls only the support team's
+    endpoints and the action feed."""
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
+    scope: Literal["BANK", "SUPPORT"] = "BANK"
 
 
 class RestrictionAckIn(Strict):

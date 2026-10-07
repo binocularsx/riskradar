@@ -297,9 +297,28 @@ def acknowledge(conn: Any, *, restriction_ref: str, outcome: str, reason: str | 
         object_type="restriction_order", object_id=order["id"], to_state=outcome,
         payload={"restriction_ref": restriction_ref, "case_id": order["case_id"], "reason": reason},
     )
+    if order["action"] == "NOTIFY_RECEIVING_BANK" and outcome == "APPLIED":
+        _stamp_counterparty_notified(conn, order, at=taken)
     publish(conn, "restriction_acknowledged",
             {"case_id": order["case_id"], "outcome": outcome})
     return {"status": "acknowledged", "restriction_ref": restriction_ref, "outcome": outcome}
+
+
+def _stamp_counterparty_notified(conn: Any, order: dict[str, Any], *, at: datetime) -> None:
+    """D109b: support telling the receiving bank is the CBN counterparty-notified
+    milestone (D71), once the customer has reported. Stamped once, never moved."""
+    case = _rows(conn, "SELECT first_reported_at, counterparty_notified_at FROM cases WHERE id = %s FOR UPDATE",
+                 (order["case_id"],))
+    if not case or not case[0]["first_reported_at"] or case[0]["counterparty_notified_at"]:
+        return
+    at = max(at, case[0]["first_reported_at"])
+    with conn.cursor() as cur:
+        cur.execute("UPDATE cases SET counterparty_notified_at = %s, "
+                    "counterparty_institution = COALESCE(counterparty_institution, 'receiving bank') WHERE id = %s",
+                    (at, order["case_id"]))
+    chain.append(conn, actor_user_id=_system_user(conn), action="CLOCK_COUNTERPARTY_NOTIFIED", object_type="case",
+                 object_id=order["case_id"], payload={"via": "support acknowledged NOTIFY_RECEIVING_BANK",
+                                                      "restriction_ref": str(order["restriction_ref"])})
 
 
 def order_by_ref(conn: Any, restriction_ref: str) -> dict[str, Any] | None:
@@ -307,9 +326,18 @@ def order_by_ref(conn: Any, restriction_ref: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+# D109b: requests to the support team that are done once, not a restriction
+# left in place. There is nothing to lift afterwards.
+ONE_OFF_ACTIONS = frozenset({"CONTACT_CUSTOMER", "VERIFY_IDENTITY", "NOTIFY_RECEIVING_BANK",
+                             "TRANSACTION_REVERSAL", "SESSION_TERMINATION", "CREDENTIAL_RESET",
+                             "MFA_REENROLMENT"})
+
+
 def release_blockers(conn: Any, order: dict[str, Any]) -> list[str]:
     """Why this restriction cannot be lifted right now. Empty means it can."""
     blockers = []
+    if order["action"] in ONE_OFF_ACTIONS:
+        blockers.append("this was a one-off request, not a restriction left in place; there is nothing to lift")
     if order["kind"] != "RESTRICT":
         blockers.append("this is already a release, not a restriction")
     if order["acknowledged_at"] is None:

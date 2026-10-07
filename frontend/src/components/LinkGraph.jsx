@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { api, nairaShort, ago, when } from '../lib/api'
+import { OUTCOME, say } from '../lib/words'
 
 /**
  * Who else is connected to this case (D84).
@@ -287,7 +288,7 @@ function NodeDetail({ node, onClose }) {
     rows.push(['Last paid', when(node.last_paid)])
     rows.push(['Other customers who paid it', node.other_customers ?? 0])
     if (node.other_customers_24h) {
-      rows.push(['…within 24 hours', `${node.other_customers_24h} — the fan-in pattern`])
+      rows.push(['…within 24 hours', `${node.other_customers_24h} — how a scam collection account looks`])
     }
     rows.push(['Alerts naming it', node.alerts ?? 0])
     if (node.confirmed_fraud_cases) {
@@ -302,7 +303,7 @@ function NodeDetail({ node, onClose }) {
   } else if (node.kind === 'other_customer') {
     rows.push(['Shares', (node.via || []).join(' and ') || 'an identifier'])
     if (node.case_id) rows.push(['Their case', `#${node.case_id} · ${String(node.case_state || '').toLowerCase()}`])
-    if (node.case_outcome) rows.push(['Outcome', String(node.case_outcome).replace(/_/g, ' ').toLowerCase()])
+    if (node.case_outcome) rows.push(['Outcome', say(OUTCOME, node.case_outcome)])
   } else if (node.detail) {
     rows.push(['Activity', node.detail])
   }

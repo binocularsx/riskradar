@@ -5,6 +5,7 @@ import { api, nairaShort } from '../lib/api'
 import { Banner, RiskBadge } from '../components/ui'
 import CaseView from '../components/CaseView'
 import { CaseIcon } from '../components/CaseWorkspace'
+import { STAGE, say } from '../lib/words'
 
 /**
  * Case detail (Figma "CASE-1042"): the full-page investigation. The queue opens
@@ -72,7 +73,7 @@ export default function CaseDetail({ user }) {
         {summary && <div className="investigation-header-meta">
           <div className="investigation-case-label"><CaseIcon name="cases" /><strong>CASE-{caseId}</strong>
             <RiskBadge level={summary.risk_level} />
-            <span className="pill">{(summary.state || 'open').replace(/_/g, ' ').toLowerCase()}</span>
+            <span className="pill">{say(STAGE, summary.state || 'OPEN')}</span>
             {summary.handling === 'MACHINE' && <span className="pill suppress">System handled</span>}
             {summary.watchlisted && <span className="pill escalate">Watchlisted</span>}
           </div>

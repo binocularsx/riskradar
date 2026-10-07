@@ -1,5 +1,7 @@
 /** Small shared pieces. */
 
+import { DECISION, HOLD_REASON, MEASURE, RULE, RULE_EFFECT, say } from '../lib/words'
+
 export function SegmentedProgress({ value, label, color = 'var(--accent)' }) {
   const percent = Math.min(100, Math.max(0, Number(value) || 0))
   return (
@@ -26,8 +28,8 @@ export function RiskBadge({ level }) {
 export function SignalPill({ signal }) {
   const cls = { ESCALATE: 'escalate', OVERRIDE: 'override', SUPPRESS: 'suppress' }[signal.power] || ''
   return (
-    <span className={`pill ${cls}`} title={JSON.stringify(signal.evidence)}>
-      {signal.code}
+    <span className={`pill ${cls}`} title={say(RULE_EFFECT, signal.power)}>
+      {say(RULE, signal.code)}
     </span>
   )
 }
@@ -65,7 +67,7 @@ export function Attributions({ attributions, limit = 8 }) {
     .slice(0, limit)
 
   if (!entries.length) {
-    return <p className="dim">No feature moved this decision measurably.</p>
+    return <p className="dim">No single measurement made a noticeable difference to this score.</p>
   }
   const max = Math.max(...entries.map(([, v]) => Math.abs(v)))
 
@@ -73,7 +75,7 @@ export function Attributions({ attributions, limit = 8 }) {
     <div>
       {entries.map(([name, value]) => (
         <div className="attribution" key={name}>
-          <span className="mono">{name}</span>
+          <span>{say(MEASURE, name)}</span>
           <div className="attribution-bar">
             <span
               className={value >= 0 ? 'pos' : 'neg'}
@@ -84,9 +86,8 @@ export function Attributions({ attributions, limit = 8 }) {
               }
             />
           </div>
-          <span className="mono num" style={{ minWidth: 62 }}>
-            {value >= 0 ? '+' : ''}
-            {value.toFixed(4)}
+          <span className="num" style={{ minWidth: 62 }}>
+            {value >= 0 ? 'raised' : 'lowered'}
           </span>
         </div>
       ))}
@@ -94,7 +95,11 @@ export function Attributions({ attributions, limit = 8 }) {
   )
 }
 
-/** The policy layer's decision trace, rendered as the sentence it is. */
+/**
+ * How the risk level was reached, step by step, in sentences. The stored trace
+ * keeps the model probability, thresholds and rule evidence for the audit; the
+ * desk is told what each step did to the risk level.
+ */
 export function PolicyTrace({ trace }) {
   if (!trace?.length) return null
   return (
@@ -102,47 +107,45 @@ export function PolicyTrace({ trace }) {
       {trace.map((step, i) => (
         <li key={i} style={{ marginBottom: 6 }}>
           {step.step === 'base' && (
-            <>
-              {step.source === 'rule_only_mode' ? (
-                <>
-                  <strong>Rule-only mode</strong> — the model was unavailable, so no
-                  probability was used. Starting at <RiskBadge level={step.level} />
-                </>
-              ) : (
-                <>
-                  Model probability <span className="mono">{step.p_fraud}</span> against
-                  thresholds <span className="mono">{JSON.stringify(step.thresholds)}</span> →{' '}
-                  <RiskBadge level={step.level} />
-                </>
-              )}
-            </>
+            step.source === 'rule_only_mode' ? (
+              <>The risk model was not available, so the written rules decided on their own,
+                starting from <RiskBadge level={step.level} />.</>
+            ) : step.source === 'receiving_side' ? (
+              <>Money coming in is judged only by the rules for incoming payments,
+                starting from <RiskBadge level={step.level} />.</>
+            ) : (
+              <>The risk model rated this payment <RiskBadge level={step.level} />.</>
+            )
           )}
-          {step.step === 'escalate' && (
-            <>
-              <span className="pill escalate">{step.code}</span> raised {step.from} →{' '}
-              <RiskBadge level={step.to} />{' '}
-              <span className="evidence">{JSON.stringify(step.evidence)}</span>
-            </>
+          {step.step === 'escalate' && (step.from === step.to
+            ? <><strong>{say(RULE, step.code)}</strong> also pointed to fraud; it was already at the
+                highest level, <RiskBadge level={step.to} />.</>
+            : <><strong>{say(RULE, step.code)}</strong> raised it from <RiskBadge level={step.from} /> to{' '}
+                <RiskBadge level={step.to} />.</>
           )}
-          {step.step === 'suppress' && (
-            <>
-              <span className="pill suppress">{step.code}</span> lowered {step.from} →{' '}
-              <RiskBadge level={step.to} />{' '}
-              <span className="evidence">{JSON.stringify(step.evidence)}</span>
-            </>
+          {step.step === 'suppress' && (step.from === step.to
+            ? <><strong>{say(RULE, step.code)}</strong> suggested it may be normal; it was already at the
+                lowest level, <RiskBadge level={step.to} />.</>
+            : <><strong>{say(RULE, step.code)}</strong> lowered it from <RiskBadge level={step.from} /> to{' '}
+                <RiskBadge level={step.to} />.</>
           )}
           {step.step === 'override' && (
-            <>
-              <span className="pill override">{step.code}</span> overrode {step.from} →{' '}
-              <RiskBadge level={step.to} />. {step.note}
-            </>
+            <><strong>{say(RULE, step.code)}</strong> set it straight to <RiskBadge level={step.to} />.
+              This rule always wins, whatever the model or the other rules say.</>
+          )}
+          {step.step === 'budget' && (
+            step.verdict === 'DEFER'
+              ? <>It was held back for later, because {say(HOLD_REASON, step.reason)}.</>
+              : ({
+                  WITHIN_BUDGET: "It went to the team straight away, within today's review limit.",
+                  MANDATORY: 'It went to the team straight away: this kind of alert is always raised, whatever the daily limit.',
+                  MACHINE: 'Risk Radar handled it automatically, so it did not count against the daily review limit.',
+                  NOT_ENFORCED: 'It went to the team straight away (the daily review limit is switched off).',
+                }[step.reason] || 'It went to the team straight away.')
           )}
           {step.step === 'final' && (
-            <>
-              Final <RiskBadge level={step.level} /> → decision{' '}
-              <strong>{step.decision}</strong>
-              {step.actionable ? ' (alert raised)' : ' (below the alert threshold)'}
-            </>
+            <>Final risk <RiskBadge level={step.level} />: {say(DECISION, step.decision).toLowerCase()}
+              {step.actionable ? '. Serious enough to alert the team.' : '. Too low to raise an alert.'}</>
           )}
         </li>
       ))}

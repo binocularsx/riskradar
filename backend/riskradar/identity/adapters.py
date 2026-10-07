@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from .. import words
 from ..config import REPO_ROOT
 
 log = logging.getLogger("riskradar.identity")
@@ -273,41 +274,42 @@ class CoreRestrictionConnector:
 
 _RESOLVERS = {"none": NoCoreResolver, "fixture": FixtureCoreResolver, "finacle": FinacleCoreResolver}
 _REGISTRIES = {"format": FormatRegistry, "nibss": NibssRegistry}
-class AccountManagerConnector(Protocol):
-    """D106: the customer's account manager, reached like any other external
-    party - a message their system accepts, and a reference back."""
+class SupportConnector(Protocol):
+    """D109 (was D106's account manager): the customer-facing support team,
+    reached like any other external party - a message their system accepts,
+    and a reference back. Support has no login (D109a)."""
 
     name: str
 
     def publish(self, message: dict[str, Any]) -> str: ...
 
 
-class NoAccountManagerConnector:
+class NoSupportConnector:
     name = "none"
 
     def publish(self, message: dict[str, Any]) -> str:
-        raise NotConnected(
-            "no account manager connector configured (RISKRADAR_ACCOUNT_MANAGER_CONNECTOR)")
+        raise NotConnected("no support-team connector configured (RISKRADAR_SUPPORT_CONNECTOR)")
 
 
-class LoopbackAccountManagerConnector:
-    """Accepts every report as a relationship-management system would, and
+class LoopbackSupportConnector:
+    """Accepts every message as a support team's ticketing system would, and
     returns a reference. For demonstrating the outbox end to end; it notifies
     nobody, and its reference says so."""
 
     name = "loopback"
 
     def publish(self, message: dict[str, Any]) -> str:
-        return f"loopback-am-{message.get('report_ref', 'unknown')}"
+        return f"loopback-support-{message.get('report_ref', 'unknown')}"
 
 
-class EmailAccountManagerConnector:
-    """D107: deliver the confirmed-fraud report to an account manager's inbox.
+class EmailSupportConnector:
+    """Deliver messages for the support team to one inbox (D107, D109).
 
     Configuration, all from the environment and none of it defaulted to
     anything that could send:
 
-        RISKRADAR_ACCOUNT_MANAGER_EMAIL   where the report goes (required)
+        RISKRADAR_SUPPORT_EMAIL           where messages go (required; the old
+                                          RISKRADAR_ACCOUNT_MANAGER_EMAIL is read too)
         RISKRADAR_SMTP_HOST               the relay (required)
         RISKRADAR_SMTP_PORT               defaults to 587
         RISKRADAR_SMTP_FROM               defaults to the account it signs in as
@@ -315,14 +317,13 @@ class EmailAccountManagerConnector:
         RISKRADAR_SMTP_STARTTLS           "0" to disable; on by default
 
     A missing host or recipient raises ``NotConnected`` rather than failing, so
-    the report waits in the outbox instead of burning its attempts against a
-    relay nobody has configured — and so selecting this connector without
-    finishing the configuration cannot send anything anywhere.
+    the message waits in the outbox instead of burning its attempts against a
+    relay nobody has configured.
 
-    One inbox, not one per customer. Risk Radar holds no directory of which
-    manager owns which account, and inventing one here would be a customer data
-    store that nothing else in the system needs (D9c keeps identifiers one-way).
-    The report names the subject token; the recipient's own systems resolve it.
+    One inbox, not one per customer: Risk Radar holds no directory of which
+    support agent owns which customer (D9c keeps identifiers one-way). The
+    message names the customer reference and support's own ticket; support's
+    systems resolve them.
     """
 
     name = "email"
@@ -333,11 +334,12 @@ class EmailAccountManagerConnector:
         from email.utils import make_msgid
 
         host = os.environ.get("RISKRADAR_SMTP_HOST", "").strip()
-        to = os.environ.get("RISKRADAR_ACCOUNT_MANAGER_EMAIL", "").strip()
+        to = (os.environ.get("RISKRADAR_SUPPORT_EMAIL", "")
+              or os.environ.get("RISKRADAR_ACCOUNT_MANAGER_EMAIL", "")).strip()
         if not host or not to:
             raise NotConnected(
-                "account manager email is selected but not configured "
-                "(RISKRADAR_SMTP_HOST, RISKRADAR_ACCOUNT_MANAGER_EMAIL)")
+                "support email is selected but not configured "
+                "(RISKRADAR_SMTP_HOST, RISKRADAR_SUPPORT_EMAIL)")
 
         port = int(os.environ.get("RISKRADAR_SMTP_PORT", "587"))
         user = os.environ.get("RISKRADAR_SMTP_USER", "")
@@ -349,8 +351,7 @@ class EmailAccountManagerConnector:
         mail["Message-ID"] = message_id
         mail["From"] = sender
         mail["To"] = to
-        mail["Subject"] = (f"Confirmed fraud - case {message.get('case_id')} "
-                           f"- report {str(message.get('report_ref', ''))[:8]}")
+        mail["Subject"] = _subject(message)
         mail.set_content(_report_text(message))
 
         with smtplib.SMTP(host, port, timeout=20) as smtp:
@@ -362,51 +363,79 @@ class EmailAccountManagerConnector:
         return message_id
 
 
+def _subject(m: dict[str, Any]) -> str:
+    ticket = f" - your ticket {m['support_ticket_ref']}" if m.get("support_ticket_ref") else ""
+    kind = m.get("kind", "REPORT")
+    if kind == "HEADS_UP":
+        return f"URGENT: hold, fraud desk investigating - case {m.get('case_id')}{ticket}"
+    if kind == "CONTACT_REQUEST":
+        return f"Please contact this customer within 24 hours - case {m.get('case_id')}"
+    return f"Fraud desk report: {words.outcome(m.get('outcome'))} - case {m.get('case_id')}{ticket}"
+
+
 def _report_text(m: dict[str, Any]) -> str:
-    """The report as an account manager reads it.
+    """The message as a support agent reads it.
 
     Plain text on purpose: it has to survive every mail client, and the person
     reading it needs the facts and the next step, not formatting. Amounts are
     minor units in the payload and naira here, because nobody acts on kobo.
     """
     naira = (m.get("exposure_minor") or 0) / 100
-    lines = [
-        f"Case {m.get('case_id')} has been confirmed as fraud by the fraud operations desk.",
-        "",
+    kind = m.get("kind", "REPORT")
+    head = [
         f"  Customer reference   {m.get('subject_token')}",
-        f"  Exposure             NGN {naira:,.2f} across {m.get('transactions')} transaction(s)",
-        f"  First seen           {m.get('first_seen') or 'unknown'}",
-        f"  Last seen            {m.get('last_seen') or 'unknown'}",
-        f"  Confirmed at         {m.get('confirmed_at')}",
-        f"  Report reference     {m.get('report_ref')}",
-        "",
-        "Why the desk concluded fraud:",
-        f"  {m.get('rationale') or 'no rationale recorded'}",
+        *([f"  Your ticket          {m['support_ticket_ref']}"] if m.get("support_ticket_ref") else []),
+        f"  Money involved       NGN {naira:,.2f} across {m.get('transactions')} payment(s)",
+        f"  Message reference    {m.get('report_ref')}",
         "",
     ]
-    asked = m.get("restrictions_recommended") or []
+    if kind == "HEADS_UP":
+        return "\n".join([
+            f"The fraud desk is investigating case {m.get('case_id')} and it is rated Critical.",
+            "Please hold any further transfers from this customer while we finish.",
+            "A full report with our recommendations will follow once a lead approves it.",
+            "",
+            *head,
+            "Why:",
+            f"  {m.get('message') or ''}",
+        ])
+    if kind == "CONTACT_REQUEST":
+        return "\n".join([
+            "The fraud desk has placed this customer on a 24-hour watch.",
+            f"Please contact them before {m.get('contact_by')} and record the contact against",
+            f"case {m.get('case_id')} so the desk can see it.",
+            "",
+            *head,
+            "Why:",
+            f"  {m.get('reason') or ''}",
+        ])
+    lines = [
+        f"Case {m.get('case_id')}: {words.outcome(m.get('outcome'))}.",
+        f"Reviewed by the fraud desk and approved by a lead on {m.get('decided_at')}.",
+        "",
+        *head,
+        "Why:",
+        f"  {m.get('rationale') or 'no reason recorded'}",
+        "",
+    ]
+    asked = m.get("actions_recommended") or []
     if asked:
-        lines.append("The bank has been asked to:")
+        lines.append("We recommend you:")
         for r in asked:
-            target = (r.get("transaction_ref") or r.get("account_token")
-                      or r.get("beneficiary_token") or "")
-            lines.append(f"  - {r.get('action', '').replace('_', ' ').lower()}  {target}")
+            payment = f"  (payment {r['transaction_ref']})" if r.get("transaction_ref") else ""
+            lines.append(f"  - {words.action(r.get('action'))}{payment}"
+                         f"   [ref {str(r.get('restriction_ref', ''))[:8]}]")
+        lines += ["", "Please confirm each one as done or not done, quoting its ref."]
     else:
-        lines.append("No restriction was requested on this case.")
-    lines += [
-        "",
-        "Over to you: contact and follow-up with the customer are yours. This desk",
-        "works transactions and does not contact customers.",
-        "",
-        m.get("advisory", ""),
-    ]
+        lines.append("No action on the customer is recommended.")
+    lines += ["", m.get("advisory", "")]
     return "\n".join(lines)
 
 
-_ACCOUNT_MANAGER_CONNECTORS = {
-    "none": NoAccountManagerConnector,
-    "loopback": LoopbackAccountManagerConnector,
-    "email": EmailAccountManagerConnector,
+_SUPPORT_CONNECTORS = {
+    "none": NoSupportConnector,
+    "loopback": LoopbackSupportConnector,
+    "email": EmailSupportConnector,
 }
 
 
@@ -445,9 +474,14 @@ def restriction_connector() -> RestrictionConnector:
     return _choose("restriction", "RISKRADAR_RESTRICTION_CONNECTOR", "none", _RESTRICTION_CONNECTORS)
 
 
-def account_manager_connector() -> AccountManagerConnector:
-    return _choose("account_manager", "RISKRADAR_ACCOUNT_MANAGER_CONNECTOR", "none",
-                   _ACCOUNT_MANAGER_CONNECTORS)
+def support_connector() -> SupportConnector:
+    # D109: the support team replaces the account manager; the old variable is
+    # still read so an existing deployment keeps delivering.
+    env = ("RISKRADAR_ACCOUNT_MANAGER_CONNECTOR"
+           if os.environ.get("RISKRADAR_ACCOUNT_MANAGER_CONNECTOR")
+           and not os.environ.get("RISKRADAR_SUPPORT_CONNECTOR")
+           else "RISKRADAR_SUPPORT_CONNECTOR")
+    return _choose("support", env, "none", _SUPPORT_CONNECTORS)
 
 
 def institution_code() -> str:

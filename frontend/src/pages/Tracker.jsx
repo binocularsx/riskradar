@@ -57,8 +57,8 @@ export default function Tracker() {
   return (
     <div className="page ops-dashboard cases-workspace cases-tracker">
       <div className="page-head ops-page-head">
-        <div><div className="ops-eyebrow">Case management</div><h1>All cases</h1>
-          <p className="page-sub">Every investigation, from first review to final resolution.</p></div>
+        <div><div className="ops-eyebrow">Case management</div><h1>Progress board</h1>
+          <p className="page-sub">Where every investigation stands, from first review to final resolution.</p></div>
         <Link className="ops-action" to="/triage">Review queue <CaseIcon name="arrow" /></Link>
       </div>
       {error && <Banner kind="error">{error}</Banner>}

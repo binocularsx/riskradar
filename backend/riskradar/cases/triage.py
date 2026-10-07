@@ -96,17 +96,17 @@ def recommend(
     # A deterministic veto fired. Nothing about this is probabilistic.
     if "SANCTIONED_BENEFICIARY" in signals:
         return Recommendation(
-            action="Escalate to InfoSec and hold the beneficiary",
-            because="The destination is on the sanctions list. This is not a "
-                    "probability — it is a match.",
+            action="Recommend support blocks payments to this recipient",
+            because="The recipient is on the sanctions list. This is an exact match, "
+                    "not a judgement call.",
             urgency="now",
             disposition_hint="CONFIRMED_FRAUD",
         )
     if "KNOWN_MULE_BENEFICIARY" in signals:
         return Recommendation(
-            action="Confirm fraud and recall the funds",
-            because="The destination was confirmed fraudulent on an earlier case, "
-                    "so this is a repeat to a known mule account.",
+            action="Confirm fraud and recommend support asks the receiving bank to return the money",
+            because="This recipient was confirmed as fraudulent on an earlier case. "
+                    "Money is going to an account already known to be used for fraud.",
             urgency="now",
             disposition_hint="CONFIRMED_FRAUD",
         )
@@ -114,10 +114,9 @@ def recommend(
     # Card testing: the card is compromised, and the card is the thing to kill.
     if "CARD_TESTING_PROBES" in signals:
         return Recommendation(
-            action="Block the card and reissue",
-            because=f"{declined_count} declined low-value authorisations in a short "
-                    "window — the pattern of somebody testing a stolen card before "
-                    "using it.",
+            action="Recommend support blocks the card and issues a new one",
+            because=f"{declined_count} small card payments were declined in a short time. "
+                    "That is what somebody does to test a stolen card before using it.",
             urgency="now",
             disposition_hint="CONFIRMED_FRAUD",
         )
@@ -125,44 +124,44 @@ def recommend(
     # D82: the four added fraud types, each with the step that saves the money.
     if "SIM_SWAP_TRANSFER" in signals:
         return Recommendation(
-            action="Hold further transfers and reach the customer on a second channel",
-            because=f"₦{naira:,.0f} left for a new destination hours after the customer's SIM "
-                    "changed. Whoever holds the new SIM receives the OTPs, so do not call the "
-                    "number on file: use email, the branch or a registered alternative number.",
+            action="Recommend support holds further transfers and contacts the customer another way, not on the phone number on file",
+            because=f"₦{naira:,.0f} was sent to a new recipient hours after the customer's SIM "
+                    "card was changed. Whoever holds the new SIM receives the OTPs, so support should not "
+                    "call the number on file: email, the branch or a registered alternative number instead.",
             urgency="now",
         )
     if "CARD_PRESENT_NEW_REGION_CASHOUT" in signals:
         return Recommendation(
-            action="Block the card and confirm where the customer is",
-            because=f"The card was used at terminal after terminal ({declined_count} declined) in a "
-                    "region this customer has not used this month. A cloned card is cashed out "
-                    "like this before the owner notices; a traveller rarely is.",
+            action="Recommend support blocks the card and confirms where the customer is",
+            because=f"The card was used at one card machine after another ({declined_count} declined) "
+                    "in a part of the country this customer has not used this month. A copied card "
+                    "is emptied like this before the owner notices; a traveller rarely behaves this way.",
             urgency="now",
         )
     if "SCAM_BENEFICIARY_FANIN" in signals:
         return Recommendation(
-            action="Call the customer before paying out, and ask who asked them to pay",
+            action="Recommend support contacts the customer before paying out, and asks who asked them to pay",
             because=f"₦{naira:,.0f} went to a new account that several other customers also paid "
-                    "today. That is how a scam's collection account looks. The customer made the "
-                    "payment themselves, so ask about the call or message that prompted it, then "
-                    "notify the receiving bank to place a hold.",
+                    "today. Scammers collect money from many victims into one account like this. The customer made the "
+                    "payment themselves, so support should ask about the call or message that prompted "
+                    "it, and ask the receiving bank to place a hold.",
             urgency="now",
         )
     if "DORMANT_ACCOUNT_REACTIVATION" in signals:
         return Recommendation(
-            action="Verify the owner in person or by video before releasing more",
-            because=f"An account dormant for months moved ₦{naira:,.0f} to a new destination. "
-                    "Check whether its phone number or email was changed recently, and by whom.",
+            action="Recommend support confirms it is really the owner, in person or by video call, before letting more money go",
+            because=f"An account unused for months suddenly sent ₦{naira:,.0f} to a new recipient. "
+                    "Check the customer's record for a recent change to the phone number or email, and how it was made.",
             urgency="now",
         )
 
     # Account takeover shape: new device plus rapid outbound movement.
     if new_device and "VELOCITY_BURST_1H" in signals:
         return Recommendation(
-            action="Call the customer before any further transfer clears",
-            because=f"A device never seen on this customer moved ₦{naira:,.0f} across "
-                    f"{alert_count} transactions to {distinct_beneficiaries} "
-                    "destinations. That is the shape of a taken-over account.",
+            action="Recommend support holds further transfers and calls the customer",
+            because=f"A phone or computer this customer has never used before sent ₦{naira:,.0f} "
+                    f"in {alert_count} payments to {distinct_beneficiaries} recipients. "
+                    "That is what it looks like when someone else has taken over the account.",
             urgency="now",
             disposition_hint=None,
         )
@@ -170,10 +169,10 @@ def recommend(
     # Fan-out: one account, many fresh destinations, fast.
     if distinct_beneficiaries >= 4 and "VELOCITY_BURST_1H" in signals:
         return Recommendation(
-            action="Review the destination accounts for a mule network",
-            because=f"₦{naira:,.0f} pushed to {distinct_beneficiaries} different "
-                    "destinations in under an hour. Individually unremarkable; "
-                    "together, a fan-out.",
+            action="Check the recipient accounts: they may be mule accounts working together",
+            because=f"₦{naira:,.0f} was split across {distinct_beneficiaries} different "
+                    "recipients in under an hour. Each payment looks normal on its own; "
+                    "together they look like money being spread out to hide it.",
             urgency="now",
             disposition_hint=None,
         )
@@ -181,33 +180,34 @@ def recommend(
     # Suppression fired — the system already thinks this is probably fine.
     if any(s in signals for s in ("PRE_REGISTERED_BENEFICIARY", "ESTABLISHED_PAYEE_NORMAL")):
         return Recommendation(
-            action="Verify quickly, then clear",
-            because="The destination is one this customer has paid before, and the "
-                    "amount is inside their normal range. The suppression rules "
-                    "already pulled this down a level.",
+            action="Check quickly, then close as no fraud",
+            because="The customer has paid this recipient before, and the amount is "
+                    "normal for them. Risk Radar has already lowered the risk level "
+                    "for that reason.",
             urgency="routine",
             disposition_hint="FALSE_POSITIVE",
         )
 
     if risk_level == "CRITICAL":
         return Recommendation(
-            action="Contact the customer to verify",
-            because=f"₦{naira:,.0f} across {alert_count} transactions scored in the "
-                    "top band with no suppressing evidence.",
+            action="Send support a heads-up, then recommend they confirm the payments with the customer",
+            because=f"₦{naira:,.0f} in {alert_count} payments is rated Critical, the highest "
+                    "risk level, and nothing suggests it is normal for this customer "
+                    "(no regular recipient, no usual amount).",
             urgency="now",
         )
     if risk_level == "HIGH":
         return Recommendation(
-            action="Review the timeline, then contact the customer if it continues",
-            because=f"₦{naira:,.0f} at risk. Unusual for this account, but no single "
-                    "rule fired hard enough to be conclusive.",
+            action="Look through the account's recent activity; if it continues, recommend support calls the customer",
+            because=f"₦{naira:,.0f} at risk. This is unusual for the account, but no single "
+                    "warning sign is strong enough to be sure.",
             urgency="soon",
         )
 
     return Recommendation(
-        action="Monitor — no action needed unless it repeats",
-        because=f"₦{naira:,.0f} at risk. Above the noise floor, below anything that "
-                "warrants interrupting the customer.",
+        action="Keep an eye on it — no action needed unless it happens again",
+        because=f"₦{naira:,.0f} at risk. Slightly unusual, but not enough to "
+                "involve support or the customer.",
         urgency="routine",
     )
 

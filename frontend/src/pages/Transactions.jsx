@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 
 import { api, when } from '../lib/api'
 import { Banner, RiskBadge } from '../components/ui'
-import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
+import { CaseIcon } from '../components/CaseWorkspace'
+import { DECLINE_REASON, say } from '../lib/words'
+import PaymentCheck from '../components/PaymentCheck'
 
 const CHANNELS = { MOBILE_APP: 'Mobile app', WEB: 'Web', USSD: 'USSD', POS: 'POS', ATM: 'ATM', AGENT: 'Agent', BRANCH: 'Branch', API: 'API' }
 const RESULTS = [
@@ -25,6 +27,7 @@ export default function Transactions() {
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [searchTerm, setSearchTerm] = useState('')
   const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState(null)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -61,9 +64,10 @@ export default function Transactions() {
   const items = data?.items ?? []
   const updating = loading || filters.q.trim() !== searchTerm
   const filtered = Object.values(filters).some(Boolean)
-  const approved = items.filter((t) => t.auth_result === 'APPROVED').length
-  const declined = items.filter((t) => ['DECLINED', 'FAILED'].includes(t.auth_result)).length
-  const reversed = items.filter((t) => t.auth_result === 'REVERSED').length
+  const open = (ref) => {
+    setSelected(ref)
+    setTimeout(() => document.getElementById('payment-check')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
   const shownPage = data?.page ?? page
   const start = (shownPage - 1) * PAGE_SIZE
 
@@ -71,9 +75,9 @@ export default function Transactions() {
     <div className="page ops-dashboard cases-workspace transactions-workspace">
       <div className="page-head ops-page-head">
         <div>
-          <div className="ops-eyebrow">Transaction monitoring</div>
-          <h1>Transactions</h1>
-          <p className="page-sub">Trace every payment. Find the activity behind each investigation.</p>
+          <div className="ops-eyebrow">Case work</div>
+          <h1>Payment lookup</h1>
+          <p className="page-sub">Find any payment, flagged or not, and open it to see how Risk Radar checked it.</p>
         </div>
         <div className="ops-head-actions">
           <Link className="ops-action" to="/triage">Review cases <CaseIcon name="arrow" /></Link>
@@ -87,20 +91,11 @@ export default function Transactions() {
         <button className="ghost" onClick={search} disabled={updating}>Retry</button>
       </Banner>}
 
-      <div className="statrow">
-        <CaseMetric label="Transactions in view" value={data ? items.length.toLocaleString() : null}
-          note="Current page · newest first" icon="transfer" featured />
-        <CaseMetric label="Approved" value={data ? approved.toLocaleString() : null}
-          note="Successful authorisations on this page" icon="check" tone="transaction-success" />
-        <CaseMetric label="Declined / failed" value={data ? declined.toLocaleString() : null}
-          note="Unsuccessful attempts on this page" icon="declined" tone={declined ? 'danger' : ''} />
-        <CaseMetric label="Reversed" value={data ? reversed.toLocaleString() : null}
-          note="Reversed transactions on this page" icon="reversed" />
-      </div>
+      {selected && <PaymentCheck key={selected} transactionRef={selected} onClose={() => setSelected(null)} />}
 
       <section className="card cases-panel" aria-labelledby="transactions-title">
         <div className="cases-panel-head">
-          <div><h2 id="transactions-title">Transaction history</h2><p>Search across customers, channels and payment outcomes.</p></div>
+          <div><h2 id="transactions-title">Payments</h2><p>Search by reference or customer name. Open a payment to see its check.</p></div>
           <span className="transaction-load-status" role="status"><CaseIcon name="clock" />
             {updating ? 'Updating results…' : error ? 'Update unavailable' : 'Newest first'}
           </span>
@@ -112,7 +107,7 @@ export default function Transactions() {
         <div className="cases-filterbar transaction-filterbar">
           <div className="searchbar cases-search">
             <CaseIcon name="search" />
-            <input type="search" aria-label="Search transactions" placeholder="Search reference or customer…"
+            <input type="search" aria-label="Search payments" placeholder="Search payment reference or customer name…"
               value={filters.q} onChange={(e) => setFilters((previous) => ({ ...previous, q: e.target.value }))} />
           </div>
           <div className="cases-filter-actions">
@@ -142,7 +137,10 @@ export default function Transactions() {
               <th scope="col">Channel</th><th scope="col">Result</th><th scope="col">Risk / Score</th><th scope="col">Linked case</th>
             </tr></thead>
             <tbody>
-              {items.map((t) => <tr key={t.id}>
+              {items.map((t) => <tr key={t.id} className={`clickable ${selected === t.transaction_ref ? 'selected' : ''}`}
+                tabIndex={0} title="Open this payment's check"
+                onClick={(e) => { if (!e.target.closest('a')) open(t.transaction_ref) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') open(t.transaction_ref) }}>
                 <td><div className="case-customer">
                   <span className={`case-customer-icon transaction-direction ${t.direction === 'INBOUND' ? 'inbound' : 'outbound'}`} aria-hidden="true"><CaseIcon name="arrow" /></span>
                   <div className="transaction-identity">
@@ -158,7 +156,7 @@ export default function Transactions() {
                   <span className="case-cell-sub transaction-amount-note">{t.direction === 'INBOUND' ? 'Incoming' : t.direction === 'OUTBOUND' ? 'Outgoing' : '—'}</span></td>
                 <td><span className="transaction-channel">{CHANNELS[t.channel] || t.channel || '—'}</span></td>
                 <td><span className="authdot"><span className={`live-dot ${resultTone(t.auth_result)}`} />{label(t.auth_result)}</span>
-                  {t.decline_reason && <span className="transaction-decline-reason" title={t.decline_reason}>{t.decline_reason.replace(/_/g, ' ').toLowerCase()}</span>}</td>
+                  {t.decline_reason && <span className="transaction-decline-reason" title={t.decline_reason}>{say(DECLINE_REASON, t.decline_reason)}</span>}</td>
                 <td><RiskBadge level={t.risk_level} /><span className="case-cell-sub">{t.score_0_100 == null ? 'Not scored' : `Score ${t.score_0_100} / 100`}</span></td>
                 <td>{t.case_id ? <Link className="transaction-case-link" to={`/cases/${t.case_id}`}>CASE-{t.case_id}<CaseIcon name="arrow" /></Link>
                   : <span className="transaction-no-case">No linked case</span>}</td>
@@ -181,7 +179,7 @@ export default function Transactions() {
           </div>
         </div>
       </section>
-      <p className="cases-footnote"><CaseIcon name="transfer" /> Summary counts reflect the current page. Approved, declined, failed and reversed activity is included.</p>
+      <p className="cases-footnote"><CaseIcon name="search" /> You see payments for customers whose case you hold; a lead sees every payment.</p>
     </div>
   )
 }

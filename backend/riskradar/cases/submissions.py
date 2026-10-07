@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .. import reporting as account_manager_reporting
+from .. import reporting as support_reporting
 from .. import restrictions as restriction_delivery
 from ..audit import chain
 from ..events import publish
@@ -239,10 +239,10 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
             effective["restrictions"] = restrictions
         orders = restriction_delivery.create_orders(conn, effective, user["id"])
         restrictions_issued = [str(o["restriction_ref"]) for o in orders]
-        # D106: and the person who owns the customer relationship is told, in
-        # this same transaction. Confirmed fraud only — reporting false
-        # positives would train the account manager to ignore the channel.
-        report = account_manager_reporting.create_report(conn, submission, case, user["id"], orders)
+        # D109c: and the support team is told, in this same transaction:
+        # confirmed fraud always, anything support reported always, and
+        # a detector-raised case cleared by the desk never.
+        report = support_reporting.create_report(conn, submission, case, user["id"], orders)
         if report:
             reported_ref = str(report["report_ref"])
     elif state == RETURNED:
@@ -260,7 +260,7 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
                  "known_mule_tokens_added": promoted, "case_version": version,
                  "restrictions": effective["restrictions"] if state == APPROVED else submission["restrictions"],
                  "restrictions_set_by_lead": restrictions is not None,
-                 "account_manager_report": reported_ref,
+                 "support_report": reported_ref,
                  "restrictions_issued": restrictions_issued},
     )
     publish(conn, "fraud_decided", {"case_id": case["id"], "submission_id": submission_id, "decision": state,

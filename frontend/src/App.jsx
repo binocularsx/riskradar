@@ -12,7 +12,9 @@ import Admin from './pages/Admin'
 import Roles from './pages/Roles'
 import Intake from './pages/Intake'
 import Approvals from './pages/Approvals'
+import CompletedCases from './pages/CompletedCases'
 import Tracker from './pages/Tracker'
+import { ROLE, say } from './lib/words'
 
 /* Line icons for the nav, inline so they inherit currentColor and need no
  * fetch. Generic UI glyphs, not brand marks. */
@@ -29,6 +31,7 @@ const ICONS = {
   '/triage': ['M4 5h16', 'M4 12h16', 'M4 19h10'],
   '/tracker': ['M4 4h5v16H4z', 'M10 4h5v10h-5z', 'M16 4h4v7h-4z'],
   '/approvals': ['M20 6 9 17l-5-5'],
+  '/completed': ['M4 5h16v4H4z', 'M6 9v10h12V9', 'M10 13h4'],
   '/operations': ['M12 3a9 9 0 1 0 9 9', 'M12 12l5-3'],
   '/transactions': ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4'],
   '/analytics': ['M4 20V10', 'M10 20V4', 'M16 20v-7', 'M22 20H2'],
@@ -48,10 +51,11 @@ function nav(permissions) {
   return [
     can('cases:read') && { to: '/live', label: 'New activity', section: 'Cases', hint: 'See new transactions and alerts' },
     can('cases:read') && { to: '/triage', label: 'Cases to review', section: 'Cases', hint: 'Review cases that need attention' },
-    can('cases:read') && { to: '/tracker', label: 'All cases', section: 'Cases', hint: 'See every case and its current stage' },
+    can('cases:read') && { to: '/tracker', label: 'Progress board', section: 'Cases', hint: 'Every open case, laid out by stage' },
+    can('cases:read') && { to: '/transactions', label: 'Payment lookup', section: 'Cases', hint: 'Find any payment and see how it was checked' },
     can('cases:approve_fraud') && { to: '/approvals', label: 'Decisions to approve', section: 'Cases', hint: 'Check and approve investigation results' },
+    can('cases:close') && { to: '/completed', label: 'Completed cases', section: 'Cases', hint: 'Every closed case and how it was decided' },
     can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Reports', hint: 'See service readiness, urgent work and team workload' },
-    can('cases:read') && { to: '/transactions', label: 'Find a transaction', section: 'Reports', hint: 'Search transaction records' },
     can('metrics:read') && { to: '/analytics', label: 'Performance reports', section: 'Reports', hint: 'See transaction and detection trends' },
     can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
     { to: '/roles', label: 'Access and roles', section: 'Settings', hint: 'See what each team member can do' },
@@ -129,7 +133,7 @@ export default function App() {
             <span className="avatar">{initials(user.display_name)}</span>
             <span className="profile-text">
               <span className="profile-name">{user.display_name}</span>
-              <span className="profile-role">{user.role.replace(/_/g, ' ').toLowerCase()}</span>
+              <span className="profile-role">{say(ROLE, user.role)}</span>
             </span>
             <button className="ghost icon-btn" title="Sign out"
                     onClick={async () => { try { await api.logout(); setUser(null); setLogoutError('') } catch (e) { setLogoutError(e.message) } }} aria-label="Sign out">
@@ -142,7 +146,7 @@ export default function App() {
       <main className="main">
         <header className="topbar">
           {user.permissions.includes('cases:read') ? <Link className="topbar-workspace-link" to="/transactions">
-            <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} /> Find a transaction
+            <Icon paths={['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4']} /> Look up a payment
           </Link> : <span className="muted">Technology operations</span>}
           <div className="topbar-right">
             {user.permissions.includes('cases:approve_fraud') && <Link to="/approvals">Pending decisions</Link>}
@@ -150,7 +154,7 @@ export default function App() {
               <span className="avatar">{initials(user.display_name)}</span>
               <span className="topbar-profile-copy">
                 <strong>{user.display_name}</strong>
-                <small>{user.role.replace(/_/g, ' ').toLowerCase()}</small>
+                <small>{say(ROLE, user.role)}</small>
               </span>
             </div>
           </div>
@@ -163,6 +167,7 @@ export default function App() {
             <Route path="/live" element={guard('cases:read', <Intake />)} />
             <Route path="/tracker" element={guard('cases:read', <Tracker />)} />
             <Route path="/approvals" element={guard('cases:approve_fraud', <Approvals />)} />
+            <Route path="/completed" element={guard('cases:close', <CompletedCases />)} />
             <Route path="/triage" element={guard('cases:read', <CaseQueue user={user} />)} />
             <Route path="/cases/:id" element={guard('cases:read', <CaseDetail user={user} />)} />
             <Route path="/operations" element={guard('metrics:read', <Operations user={user} />)} />

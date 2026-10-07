@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { api, clock, when } from '../lib/api'
 import { Banner } from './ui'
+import { sayLower } from '../lib/words'
 
 /**
  * The twenty-four hour flag (WP-06, D73).
@@ -14,10 +15,10 @@ import { Banner } from './ui'
  */
 
 const CONTACT_LABEL = {
-  PENDING: { text: 'contact the customer', cls: 'sla-OK' },
-  DUE: { text: 'contact due', cls: 'sla-DUE' },
-  CONTACTED: { text: 'customer contacted', cls: 'sla-OK' },
-  MISSED: { text: 'contact missed', cls: 'sla-BREACHED' },
+  PENDING: { text: 'waiting for support to contact the customer', cls: 'sla-OK' },
+  DUE: { text: 'support contact due soon', cls: 'sla-DUE' },
+  CONTACTED: { text: 'support reached the customer', cls: 'sla-OK' },
+  MISSED: { text: 'support did not reach the customer in time', cls: 'sla-BREACHED' },
   NOT_NEEDED: { text: 'cleared before contact', cls: '' },
 }
 
@@ -69,7 +70,7 @@ function Elsewhere({ identity, industryFlags }) {
       </div>
       {industryFlags.map((f) => (
         <div key={f.external_ref} className="dim" style={{ fontSize: 11.5, padding: '2px 0' }}>
-          {f.institution_code} · {f.reason_code.replace(/_/g, ' ').toLowerCase()} · {when(f.flagged_at)} to {when(f.expires_at)}
+          {f.institution_code} · {sayLower({}, f.reason_code)} · {when(f.flagged_at)} to {when(f.expires_at)}
           {f.active ? '' : ' (ended)'}
         </div>
       ))}
@@ -120,15 +121,13 @@ export default function WatchlistFlag({ caseRow, flags, identity, industryFlags 
               </span>
             )}
           </div>
+          <p className="dim" style={{ fontSize: 12, margin: '8px 0 0' }}>
+            The support team has been asked to contact the customer before the flag ends, and records the
+            contact here. The fraud desk does not contact customers.
+          </p>
           <textarea style={{ marginTop: 10, minHeight: 44 }} placeholder="Note (optional, saved to the case)"
                     value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
-            {!current.customer_contacted_at && can('cases:review') && Object.entries(OUTCOME_LABEL).map(([key, label]) => (
-              <button key={key} disabled={busy}
-                      onClick={() => run(() => api.flagContact(current.id, { outcome: key, note: note.trim() || null }))}>
-                Reached: {label}
-              </button>
-            ))}
             {can('cases:escalate') && (
               <button className="ghost" disabled={busy}
                       onClick={() => run(() => api.liftFlag(current.id, { note: note.trim() || null }))}>
@@ -140,8 +139,8 @@ export default function WatchlistFlag({ caseRow, flags, identity, industryFlags 
       ) : (
         <>
           <p className="dim" style={{ fontSize: 12.5, marginTop: 6 }}>
-            No flag in force. A flag lasts at most 24 hours, ends on its own, and obliges the bank to contact
-            the customer before it does. It does not change any score.
+            No flag in force. A flag lasts at most 24 hours and ends on its own. Placing one asks the support
+            team to contact the customer before it ends. It does not change any score.
           </p>
           {caseRow.state !== 'CLOSED' && can('cases:escalate') && (
             <div className="row wrap" style={{ gap: 8 }}>

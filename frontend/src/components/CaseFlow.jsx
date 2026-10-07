@@ -4,6 +4,7 @@ import { api, when } from '../lib/api'
 import { Banner } from './ui'
 import { usePolling } from '../lib/usePolling'
 import ReadStatus from './ReadStatus'
+import { OUTCOME, say } from '../lib/words'
 
 const STAGE_NAME = { NEW: 'Not started', IN_REVIEW: 'Being reviewed', ESCALATED: 'With a specialist', AWAITING_APPROVAL: 'Waiting for approval', AWAITING_CLOSE: 'Ready to close', CLOSED: 'Completed' }
 const NEXT_STEP = {
@@ -112,7 +113,11 @@ export default function CaseFlow({ caseId, user, onChanged }) {
                 </span>
                 {!closedOrWaiting && s.status !== 'info' && (
                   s.action === 'OUTCOME' ? (
-                    <span className="dim" style={{ fontSize: 12 }}>{s.status === 'done' ? 'recorded' : 'use the buttons at the bottom'}</span>
+                    <span className="dim" style={{ fontSize: 12 }}>{s.status === 'done' ? 'proposed' : 'use the buttons at the bottom'}</span>
+                  ) : s.action === 'HEADS_UP' ? (
+                    <span className="dim" style={{ fontSize: 12 }}>
+                      {s.status === 'done' ? 'sent to support' : <a href="#case-support">in the Support team panel</a>}
+                    </span>
                   ) : s.action === 'ESCALATE' ? (
                     s.status === 'done' ? <span className="dim" style={{ fontSize: 12 }}>sent for help</span> :
                       can('cases:escalate') && <button onClick={() => { setEscalating(true); setTarget('FRAUD_OPS') }} disabled={!mine || busy}
@@ -127,7 +132,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
               </div>
               {recorded.map((a) => (
                 <div key={a.id} className="recorded">
-                  {spec?.results[a.result] || a.result}{a.detail ? ` — ${a.detail}` : ''} · {a.actor}, {when(a.created_at)}
+                  {spec?.results[a.result] || say(OUTCOME, a.result)}{a.detail ? ` — ${a.detail}` : ''} · {a.actor}, {when(a.created_at)}
                 </div>
               ))}
               {open === s.action && spec && (

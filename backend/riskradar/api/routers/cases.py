@@ -23,6 +23,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ... import reporting
 from ...audit import chain
 from ...clocks import sweep as clock_sweep
 from ...clocks import watchlist
@@ -33,6 +34,7 @@ from ..deps import get_conn, requires
 from ..schemas import (
     AssignIn,
     EscalateIn,
+    HeadsUpIn,
     MilestoneIn,
     NoteIn,
     OutcomeIn,
@@ -526,15 +528,37 @@ def record_report(
     moment the bank's obligations began, and belongs in a note, not an update.
     The case is pinned to the clock policy in force now.
     """
-    from ...cases import reports
+    # D109e: the desk no longer records customer reports; they arrive from the
+    # support team, with the customer record, on POST /v1/support/reports.
+    raise HTTPException(410, "Customer reports now come from the support team "
+                             "(POST /v1/support/reports, with the customer record). "
+                             "The fraud desk does not record them itself.")
 
+
+@router.post("/cases/{case_id}/heads-up")
+def send_heads_up(
+    case_id: int,
+    body: HeadsUpIn,
+    user: dict = Depends(requires(Permission.CASES_REVIEW)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """D109d: tell support at once, on a Critical case, to hold while we investigate.
+
+    The analyst working the case, or a lead. It recommends nothing final and
+    changes nothing on the case; the report with the recommendations still
+    waits for a lead's approval. Once per case.
+    """
+    case = _fetch_case(conn, case_id, user)
+    if case.get("assignee_id") != user["id"] and user["role"] != "FRAUD_OPS_LEAD":
+        raise HTTPException(403, "only the analyst working this case, or a lead, can send support a heads-up")
     try:
-        # D90: the same path as POST /v1/reports: clocks, the stream, the audit record.
-        reports.start_clocks(conn, case_id=case_id, user=user, reported_at=body.reported_at, channel=body.channel,
-                             counterparty_institution=body.counterparty_institution, note=body.note)
-    except reports.ReportError as exc:
+        sent = reporting.create_heads_up(conn, case, sent_by=user, message=body.message)
+    except reporting.SupportMessageError as exc:
         raise HTTPException(exc.status, exc.detail) from exc
-    return {"case": _fetch_case(conn, case_id, user), "clocks": clock_sweep.clocks_for_case(conn, case_id)}
+    chain.append(conn, actor_user_id=user["id"], action="SUPPORT_HEADS_UP_SENT", object_type="case",
+                 object_id=case_id, payload={"report_ref": str(sent["report_ref"]), "message": body.message})
+    publish(conn, "support_heads_up", {"case_id": case_id, "assignee_id": case.get("assignee_id")})
+    return {"report_ref": str(sent["report_ref"]), "status": sent["status"]}
 
 
 @router.post("/cases/{case_id}/milestones")
@@ -646,12 +670,9 @@ def record_watchlist_contact(
     user: dict = Depends(requires(Permission.CASES_REVIEW)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    """The customer was reached. Recorded once, while the flag is active."""
-    flag = _watchlist_call(watchlist.record_contact, conn, flag_id=flag_id, user_id=user["id"],
-                           outcome=body.outcome)
-    if flag["case_id"]:
-        _note(conn, flag["case_id"], user, body.note)
-    return {"flag": flag}
+    """Retired (D109f): support contacts the customer and records it."""
+    raise HTTPException(410, "The support team contacts watch-flagged customers and records the contact "
+                             "(POST /v1/support/watchlist/{case_id}/contact). The fraud desk does not.")
 
 
 @router.post("/watchlist/{flag_id}/lift")

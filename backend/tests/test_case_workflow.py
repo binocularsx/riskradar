@@ -77,7 +77,10 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
 
     # A step, recorded with its result, marks the recommended step done.
     catalog = analyst.get("/v1/workflow/catalog").json()
-    assert "CUSTOMER_CONTACTED" in catalog["actions"]
+    # D109: investigation steps only; contacting the customer is support's.
+    assert "DESTINATIONS_CHECKED" in catalog["actions"]
+    assert "CUSTOMER_CONTACTED" not in catalog["actions"]
+    assert "CUSTOMER_CONTACTED" in catalog["retired_actions"]
     # D108: InfoSec is retired at the owner's direction. It is no longer offered
     # as a destination, but it is still labelled, because cases escalated there
     # before the change still name it and their history has to keep rendering —
@@ -85,11 +88,15 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert "FRAUD_OPS" in catalog["escalation"]
     assert "INFOSEC" not in catalog["escalation"]
     assert "INFOSEC" in catalog["retired_escalation"]
-    bad = analyst.post(f"/v1/cases/{case_id}/actions", json={"action_code": "CUSTOMER_CONTACTED", "result": "MAYBE"})
+    retired = analyst.post(f"/v1/cases/{case_id}/actions",
+                           json={"action_code": "CUSTOMER_CONTACTED", "result": "NOT_REACHED"})
+    assert retired.status_code == 410 and "support" in retired.text
+    bad = analyst.post(f"/v1/cases/{case_id}/actions", json={"action_code": "DESTINATIONS_CHECKED", "result": "MAYBE"})
     assert bad.status_code == 422
-    ok = analyst.post(f"/v1/cases/{case_id}/actions", json={"action_code": "CUSTOMER_CONTACTED", "result": "NOT_REACHED"})
+    ok = analyst.post(f"/v1/cases/{case_id}/actions",
+                      json={"action_code": "DESTINATIONS_CHECKED", "result": "NOTHING_FOUND"})
     assert ok.status_code == 200, ok.text
-    assert any(a["action_code"] == "CUSTOMER_CONTACTED" for a in ok.json()["workflow"]["actions"])
+    assert any(a["action_code"] == "DESTINATIONS_CHECKED" for a in ok.json()["workflow"]["actions"])
     # Somebody not working the case cannot record steps on it.
     assert (infosec.post(f"/v1/cases/{case_id}/actions",
                         json={"action_code": "TIMELINE_REVIEWED", "result": "UNUSUAL"}).status_code == 404,
