@@ -145,6 +145,98 @@ function useAsync(fn, deps = []) {
  * D75: the three outside systems identity depends on, and what is waiting on
  * them. A message that cannot be sent yet is shown with its reason, not hidden.
  */
+const KEY_SCOPE = {
+  BANK: { label: "Bank's systems", can: 'Sends payments and account events, reads payment checks, shares watch-list flags.' },
+  SUPPORT: { label: 'Support team', can: 'Forwards customer reports, records customer contacts, confirms the actions it was asked to take.' },
+}
+
+/**
+ * Connection keys (D87, D109g): the machine keys other systems use to reach
+ * Risk Radar. Each belongs to the bank's systems or to the support team and
+ * works only on that side's endpoints. A new key is shown once; only its hash
+ * is kept. Revoking keeps the key's history, and takes effect on its next use.
+ */
+function ConnectionKeys() {
+  const { data, error, reload } = useAsync(api.apiKeys)
+  const [name, setName] = useState('')
+  const [scope, setScope] = useState('SUPPORT')
+  const [issued, setIssued] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState(null)
+  const [copied, setCopied] = useState(false)
+
+  async function act(fn) {
+    setBusy(true); setProblem(null)
+    try { await fn(); await reload() } catch (e) { setProblem(e.message) } finally { setBusy(false) }
+  }
+
+  const create = () => act(async () => {
+    const res = await api.createApiKey(name.trim(), scope)
+    setIssued({ ...res, name: name.trim() }); setName(''); setCopied(false)
+  })
+  const revoke = (k) => {
+    if (!window.confirm(`Revoke "${k.name}"? Whatever uses it stops working on its next request. This cannot be undone; issue a new key instead.`)) return
+    act(() => api.revokeApiKey(k.id))
+  }
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(issued.api_key); setCopied(true) } catch { setCopied(false) }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <h2>Connection keys</h2>
+      <p className="dim" style={{ fontSize: 12.5, marginTop: -6 }}>
+        Keys other systems use to reach Risk Radar. A key for the bank's systems cannot reach the support team's
+        endpoints, and a support team key can reach nothing else.
+      </p>
+      {problem && <Banner kind="error">{problem}</Banner>}
+      {issued && (
+        <Banner kind="warn">
+          <strong>New {KEY_SCOPE[issued.scope].label.toLowerCase()} key "{issued.name}".</strong> Copy it now: it will
+          not be shown again.
+          <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
+            <span className="mono" style={{ wordBreak: 'break-all' }}>{issued.api_key}</span>
+            <button onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+            <button className="ghost" onClick={() => setIssued(null)}>Done</button>
+          </div>
+        </Banner>
+      )}
+
+      <div className="row wrap" style={{ gap: 8, margin: '10px 0 14px' }}>
+        <input style={{ flex: 1, minWidth: 220 }} placeholder="What will use it, e.g. Support ticketing system"
+               value={name} maxLength={120} onChange={(e) => setName(e.target.value)} aria-label="Key name" />
+        <select style={{ width: 200 }} value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Who the key is for">
+          {Object.entries(KEY_SCOPE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <button className="primary" disabled={busy || !name.trim()} onClick={create}>Issue key</button>
+      </div>
+      <p className="dim" style={{ fontSize: 12, marginTop: -6 }}>{KEY_SCOPE[scope].can}</p>
+
+      {error ? <Banner kind="error">{error} <button onClick={reload}>Retry</button></Banner>
+        : !data ? <p className="muted">Loading…</p>
+          : data.keys.length ? (
+            <div className="table-scroll">
+              <table>
+                <thead><tr><th>Name</th><th>For</th><th>Status</th><th>Issued</th><th>Last used</th><th></th></tr></thead>
+                <tbody>
+                  {data.keys.map((k) => (
+                    <tr key={k.id}>
+                      <td>{k.name}</td>
+                      <td>{KEY_SCOPE[k.scope]?.label || k.scope}</td>
+                      <td><span className={`pill ${k.active ? 'suppress' : ''}`}>{k.active ? 'Active' : 'Revoked'}</span></td>
+                      <td className="dim">{when(k.created_at)}</td>
+                      <td className="dim">{k.last_used_at ? when(k.last_used_at) : 'Never'}</td>
+                      <td>{k.active && <button className="ghost" disabled={busy} onClick={() => revoke(k)}>Revoke</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <Empty>No keys issued yet.</Empty>}
+    </div>
+  )
+}
+
 function Integrations() {
   const { data, error, reload } = useAsync(api.integrations)
   if (error) return <Banner kind="error">{error} <button onClick={reload}>Retry</button></Banner>
@@ -197,6 +289,7 @@ function Integrations() {
           {integrations.inbound.last_received ? `, last ${when(integrations.inbound.last_received)}` : ''}.
         </p>
       </div>
+      <ConnectionKeys />
       <p className="dim">Bank action delivery is monitored by case-authorised staff in Operations.</p>
     </>
   )

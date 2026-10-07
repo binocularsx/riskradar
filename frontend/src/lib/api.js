@@ -123,6 +123,10 @@ export const api = {
   liftFlag: (flagId, data) => post(`/v1/watchlist/${flagId}/lift`, data ?? {}),
   watchlist: (active = true) => get(`/v1/watchlist?active=${active}`),
   integrations: () => get('/v1/admin/integrations'),
+  // D87, D109g: machine keys, each for the bank's systems or for the support team.
+  apiKeys: () => get('/v1/admin/api-keys'),
+  createApiKey: (name, scope) => post('/v1/admin/api-keys', { name, scope }),
+  revokeApiKey: (id) => del(`/v1/admin/api-keys/${id}`),
   industryWatchlist: (active = true) => get(`/v1/industry-watchlist?active=${active}`),
   alerts: (params) => get(`/v1/alerts?${new URLSearchParams(params)}`),
 
