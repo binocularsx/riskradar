@@ -35,9 +35,8 @@ from riskradar.security.tokens import hash_api_key  # noqa: E402
 # Development credentials. Real deployments create users through the admin API;
 # these exist so a fresh clone can be logged into in one command.
 USERS = [
-    ("analyst@riskradar.local", "Amaka Analyst", "ANALYST", "Analyst#2026"),
+    ("analyst@riskradar.local", "Amina Analyst", "ANALYST", "Analyst#2026"),
     ("lead@riskradar.local", "Femi Fraud-Ops", "FRAUD_OPS_LEAD", "OpsLead#2026"),
-    ("infosec@riskradar.local", "Ngozi InfoSec", "INFOSEC_ANALYST", "InfoSec#2026"),
     ("admin@riskradar.local", "Tunde Admin", "ADMIN", "Admin#2026"),
     # D96: detection tuning is maker-checker, so one administrator is not enough
     # — a second proposes-or-approves the other's changes.

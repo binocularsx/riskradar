@@ -28,7 +28,7 @@ from conftest import login
 
 
 def test_mfa_is_mandatory_for_every_human_role():
-    for role in ("ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"):
+    for role in ("ANALYST", "FRAUD_OPS_LEAD", "ADMIN"):
         assert mfa_required(role), f"{role} works cases or tunes detection; MFA is not optional"
     # The one principal that never logs in holds no factor and is not required to.
     assert not mfa_required("SYSTEM")
@@ -54,7 +54,10 @@ def test_analyst_password_alone_yields_no_session(client):
 
 def _login_without_default_csrf_header(client):
     """Log in so the client holds the session and CSRF cookies, but do NOT set
-    the header — so a following POST is exactly a request that omits it."""
+    the CSRF header — so a following POST is exactly a request that omits it.
+
+    The tab key *is* set: without it the request is not authenticated at all
+    (D112), and these tests are about CSRF, not about authentication."""
     import pyotp
     import psycopg
 
@@ -72,6 +75,7 @@ def _login_without_default_csrf_header(client):
         },
     )
     assert r.json()["status"] == "ok"
+    client.headers[settings().tab_header] = r.json()["tab_key"]
 
 
 def test_unsafe_request_without_csrf_token_is_refused(client):
@@ -122,7 +126,7 @@ def _backdate_rotation(conn, raw: str, minutes: int) -> None:
 
 
 def test_a_fresh_session_does_not_rotate(conn):
-    raw, csrf = sessions.create(conn, _analyst_id(conn), mfa_satisfied=True)
+    raw, csrf, _tab = sessions.create(conn, _analyst_id(conn), mfa_satisfied=True)
     resolved = sessions.resolve(conn, raw)
     assert resolved is not None
     assert resolved["rotated_token"] is None
@@ -131,7 +135,7 @@ def test_a_fresh_session_does_not_rotate(conn):
 
 def test_session_rotates_past_the_interval_and_survives(conn):
     uid = _analyst_id(conn)
-    raw, _ = sessions.create(conn, uid, mfa_satisfied=True)
+    raw, _, _tab = sessions.create(conn, uid, mfa_satisfied=True)
     _backdate_rotation(conn, raw, settings().session_rotate_minutes + 5)
 
     rotated = sessions.resolve(conn, raw)
@@ -148,7 +152,7 @@ def test_session_rotates_past_the_interval_and_survives(conn):
 
 def test_the_superseded_identifier_works_within_grace_then_dies(conn):
     uid = _analyst_id(conn)
-    raw, _ = sessions.create(conn, uid, mfa_satisfied=True)
+    raw, _, _tab = sessions.create(conn, uid, mfa_satisfied=True)
     _backdate_rotation(conn, raw, settings().session_rotate_minutes + 5)
     rotated = sessions.resolve(conn, raw)
     assert rotated["rotated_token"], "precondition: it rotated"
@@ -172,7 +176,7 @@ def test_the_superseded_identifier_works_within_grace_then_dies(conn):
 
 def test_logout_still_ends_a_rotated_session(conn):
     uid = _analyst_id(conn)
-    raw, _ = sessions.create(conn, uid, mfa_satisfied=True)
+    raw, _, _tab = sessions.create(conn, uid, mfa_satisfied=True)
     _backdate_rotation(conn, raw, settings().session_rotate_minutes + 5)
     rotated = sessions.resolve(conn, raw)
     new_raw = rotated["rotated_token"]

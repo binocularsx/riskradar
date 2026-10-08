@@ -418,19 +418,27 @@ def _user_id(conn, email: str) -> int:
 def test_a_role_change_takes_two_administrators(conn):
     maker = _actor(conn, "admin@riskradar.local")
     checker = _actor(conn, "admin2@riskradar.local")
-    uid = _user_id(conn, "infosec@riskradar.local")
+    # D111 removed InfoSec, which this test used as the "before" role. The point
+    # is two signatures, not which pair of roles: an account made for this test
+    # moves from analyst to lead. It is created **inactive** so that routing
+    # (D94) cannot hand it a case while the suite is running.
+    email = f"rolechange-{uuid.uuid4().hex[:8]}@riskradar.local"
+    uid = conn.execute(
+        "INSERT INTO users (email, display_name, role, active, password_hash) "
+        "VALUES (%s, 'Role Change', 'ANALYST', false, 'x') RETURNING id", (email,)
+    ).fetchone()["id"]
 
     res = governance.propose(
         conn, maker, change_type="USER_ROLE_CHANGE", target=str(uid),
-        summary="infosec to analyst",
-        payload={"user_id": uid, "email": "infosec@riskradar.local", "role": "ANALYST"},
-        before_snapshot={"role": "INFOSEC_ANALYST"},
+        summary="analyst to fraud ops lead",
+        payload={"user_id": uid, "email": email, "role": "FRAUD_OPS_LEAD"},
+        before_snapshot={"role": "ANALYST"},
         rationale="moving them onto the fraud desk for the test",
     )
     request_id = res["request"]["id"]
     # Nothing moves on proposal.
     assert conn.execute("SELECT role::text AS r FROM users WHERE id = %s",
-                        (uid,)).fetchone()["r"] == "INFOSEC_ANALYST"
+                        (uid,)).fetchone()["r"] == "ANALYST"
 
     with pytest.raises(governance.MakerCheckerError) as exc:
         governance.decide(conn, maker, request_id=request_id, action="APPROVE")
@@ -439,7 +447,7 @@ def test_a_role_change_takes_two_administrators(conn):
     out = governance.decide(conn, checker, request_id=request_id, action="APPROVE")
     assert out["status"] == "approved"
     assert conn.execute("SELECT role::text AS r FROM users WHERE id = %s",
-                        (uid,)).fetchone()["r"] == "ANALYST"
+                        (uid,)).fetchone()["r"] == "FRAUD_OPS_LEAD"
 
 
 def test_an_admin_cannot_propose_a_change_to_their_own_access(client):
@@ -612,6 +620,9 @@ def test_the_code_prompt_switch_is_the_one_login_reads(client):
                         json={"email": "analyst@riskradar.local", "password": "Analyst#2026"})
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "ok", "turning the prompt off must actually stop it"
+        # D112: this login was made by hand, so the tab key has to be carried by
+        # hand too — without it the request is a new tab and is not signed in.
+        client.headers[settings().tab_header] = r.json()["tab_key"]
         # And the session works on every subsequent request, which is the gate
         # in api.deps that used to reject a session with no factor.
         me = client.get("/v1/auth/me")
@@ -619,6 +630,7 @@ def test_the_code_prompt_switch_is_the_one_login_reads(client):
     finally:
         set_prompt(True)
         client.post("/v1/auth/logout")
+        client.headers.pop(settings().tab_header, None)
 
 
 def test_a_password_reset_takes_two_and_replaces_the_hash(conn):

@@ -316,6 +316,11 @@ class LoginIn(Strict):
 class LoginOut(BaseModel):
     status: Literal["ok", "mfa_required"]
     user: dict | None = None
+    # D112: this tab's name for the session it just created, and the CSRF token
+    # bound to it. The tab keeps both for its own lifetime only, so another tab
+    # — which never sees them — starts without a session of its own.
+    tab_key: str | None = None
+    csrf_token: str | None = None
 
 
 class MeOut(BaseModel):
@@ -360,7 +365,7 @@ class DispositionIn(Strict):
 
 
 class EscalateIn(Strict):
-    target: Literal["INFOSEC", "FRAUD_OPS"]
+    target: Literal["FRAUD_OPS"]
     note: Annotated[str | None, Field(max_length=4000)] = None
 
 
@@ -619,7 +624,7 @@ class ConfigDecisionIn(Strict):
     reason: Annotated[str | None, Field(max_length=2000)] = None
 
 
-ROLES = Literal["ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"]
+ROLES = Literal["ANALYST", "FRAUD_OPS_LEAD", "ADMIN"]
 
 
 class UserCreateIn(Strict):

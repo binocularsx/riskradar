@@ -5,19 +5,49 @@
  * session in an httpOnly cookie (D12), not a token this code could read. There is
  * deliberately no place in this file where a credential is stored — an XSS on
  * this page cannot lift a session, and logging out actually ends it.
+ *
+ * D112: the cookie can hold several sessions, one per tab, so each tab has to
+ * say which one is its own. That name lives in `sessionStorage`, which is
+ * per-tab and is not shared with another tab or window — which is what makes a
+ * new tab start signed out, and what lets this tab sign out without disturbing
+ * the others. It is a selector and not a credential: on its own it authenticates
+ * nothing, because the session identifier is still the httpOnly cookie.
  */
+
+const TAB_KEY = 'rr_tab'
+const CSRF_KEY = 'rr_csrf_token'
+
+// sessionStorage throws in some privacy modes; a tab that cannot keep its key
+// simply behaves like a signed-out one rather than breaking.
+function remembered(key) {
+  try { return window.sessionStorage.getItem(key) } catch { return null }
+}
+function remember(key, value) {
+  try {
+    if (value === null) window.sessionStorage.removeItem(key)
+    else window.sessionStorage.setItem(key, value)
+  } catch { /* nothing to do: the tab just will not persist across a reload */ }
+}
+
+export function tabKey() {
+  return remembered(TAB_KEY)
+}
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 /**
- * The CSRF token (D95). The server mirrors it into a readable `rr_csrf` cookie
- * at login; the double-submit defence is echoing it back in a header on every
- * unsafe request. A cross-origin page can set neither this cookie nor this
- * header, which is exactly what makes the pair unforgeable.
+ * The CSRF token (D95). The server binds one to each session and checks the
+ * header against the session's own copy, so the token is kept per tab beside
+ * the tab key (D112) — one readable cookie cannot carry a different token for
+ * each of several sessions. The cookie is still read as a fallback for a tab
+ * that was signed in before this change. A cross-origin page can neither read
+ * this value nor set the header, which is what makes it unforgeable.
  */
 function csrfToken() {
+  const kept = remembered(CSRF_KEY)
+  if (kept) return kept
   const match = document.cookie.match(/(?:^|;\s*)rr_csrf=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : null
 }
@@ -25,6 +55,9 @@ function csrfToken() {
 async function request(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
   const headers = { ...(options.headers || {}) }
+  // D112: every request says which of the browser's sessions this tab is using.
+  const tab = remembered(TAB_KEY)
+  if (tab) headers['X-Session-Key'] = tab
   if (UNSAFE_METHODS.has(method)) {
     const token = csrfToken()
     if (token) headers['X-CSRF-Token'] = token
@@ -72,9 +105,23 @@ const del = (path) => request(path, { method: 'DELETE' })
 
 export const api = {
   // auth
-  login: (email, password, totp_code) =>
-    post('/v1/auth/login', { email, password, totp_code: totp_code || null }),
-  logout: () => post('/v1/auth/logout'),
+  login: async (email, password, totp_code) => {
+    const body = await post('/v1/auth/login', { email, password, totp_code: totp_code || null })
+    // D112: keep this tab's session key and CSRF token for this tab only.
+    if (body?.tab_key) remember(TAB_KEY, body.tab_key)
+    if (body?.csrf_token) remember(CSRF_KEY, body.csrf_token)
+    return body
+  },
+  logout: async () => {
+    try {
+      return await post('/v1/auth/logout')
+    } finally {
+      // Forget this tab's session whatever the server said: a failed logout
+      // must not leave the tab believing it is still signed in.
+      remember(TAB_KEY, null)
+      remember(CSRF_KEY, null)
+    }
+  },
   me: () => get('/v1/auth/me'),
 
   // the worklist — what to work next, with exposure, clock and recommendation

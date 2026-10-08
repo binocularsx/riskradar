@@ -54,28 +54,6 @@ const ROLES = [
        + 'why they get the operations view and nobody else on the floor does.',
   },
   {
-    id: 'INFOSEC_ANALYST',
-    title: 'Information Security Analyst',
-    who: 'Handles suspected account compromise rather than commercial loss.',
-    sees: [
-      'Cases to review and Payment lookup',
-      'Dashboard',
-    ],
-    can: [
-      'Read and investigate any case',
-      'Send a case for specialist help',
-      'Add notes',
-    ],
-    cannot: [
-      'Declare something commercial fraud',
-      'Close cases',
-      'Touch detection settings',
-    ],
-    why: '"Was this account taken over" and "did this customer lose money" are '
-       + 'different questions. Case outcomes are ML training labels, so they '
-       + 'belong to the team that owns the fraud definition.',
-  },
-  {
     id: 'ADMIN',
     title: 'Administrator',
     who: 'Tunes the system. Never touches a case.',

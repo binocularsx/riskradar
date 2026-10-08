@@ -10,8 +10,8 @@ Five things the desk could not do from the dashboard:
   happened to it and by whom, and which recommended steps are done.
 * ``POST /v1/cases/{id}/actions`` — "I blocked the card", "customer reached,
   denied it": a step done in the bank's systems, recorded here with its result.
-* ``POST /v1/cases/{id}/return`` — InfoSec or a lead hands an escalated case back
-  to the analyst who raised it, with findings.
+* ``POST /v1/cases/{id}/return`` — a lead hands an escalated case back to the
+  analyst who raised it, with findings.
 * ``GET /v1/workflow/pipeline`` and ``GET /v1/metrics/intake`` — the desk as a
   pipeline (how many cases in each stage, how long they have waited) and the
   stream as it arrives (payments a minute, what is waiting to be scored, what was
@@ -309,7 +309,7 @@ def pipeline(
             "exposure_minor": sum(int(r["exposure_minor"]) for r in items),
             "by_outcome": ({o: sum(1 for r in items if r["outcome"] == o)
                             for o in ("CONFIRMED_FRAUD", "FALSE_POSITIVE", "INCONCLUSIVE")} if s in ("AWAITING_CLOSE", "CLOSED") else None),
-            "by_team": ({t: sum(1 for r in items if r["escalated_to"] == t) for t in ("INFOSEC", "FRAUD_OPS")}
+            "by_team": ({t: sum(1 for r in items if r["escalated_to"] == t) for t in ("FRAUD_OPS",)}
                         if s == "ESCALATED" else None),
             "items": items[:limit],
         })

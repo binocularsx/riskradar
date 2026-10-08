@@ -120,11 +120,19 @@ def login(client, email: str, password: str) -> None:
         json={"email": email, "password": password, "totp_code": code},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "ok", response.text
+    body = response.json()
+    assert body["status"] == "ok", response.text
 
-    # D95: mirror the browser — read the readable CSRF cookie the login set and
-    # send it back on every unsafe request for the rest of this client's life.
-    csrf = client.cookies.get(settings().csrf_cookie)
+    # D112: mirror a browser tab — keep this session's key and send it on every
+    # request, because the cookie may carry several sessions and the tab is what
+    # says which one is ours. A client that does not send it is a fresh tab and
+    # gets the login page, which is the point.
+    client.headers[settings().tab_header] = body["tab_key"]
+
+    # D95: echo the CSRF token on every unsafe request for the rest of this
+    # client's life. It comes back in the login body now rather than only in the
+    # readable cookie, since one cookie cannot carry one token per session.
+    csrf = body.get("csrf_token") or client.cookies.get(settings().csrf_cookie)
     if csrf:
         client.headers[settings().csrf_header] = csrf
 

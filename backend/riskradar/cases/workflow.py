@@ -206,19 +206,9 @@ FALLBACK_STEPS = [
     _PROPOSE,
 ]
 
-# D108: InfoSec is out of scope at the owner's direction — there is no such
-# specialist on this desk — so it is no longer offered as a destination. The
-# entry stays defined, unlisted, because cases escalated to it before the change
-# still name it and their history has to keep rendering.
-RETIRED_ESCALATION = {
-    "INFOSEC": {
-        "label": "InfoSec (retired)",
-        "when": [],
-        "what_happens": ["This destination is no longer in use. Account takeover, login abuse "
-                         "and MFA problems are actioned on this desk: propose the containment "
-                         "the bank should apply, and a lead approves it."],
-    },
-}
+# D111: InfoSec is gone from the system, enum values included, so there is no
+# retired destination left to render. D108 had kept one defined-but-unlisted for
+# cases escalated before it was retired; no case was ever escalated to it.
 
 ESCALATION = {
     "FRAUD_OPS": {
@@ -274,4 +264,4 @@ def label_for(code: str) -> str | None:
 def catalog() -> dict[str, Any]:
     # `escalation` is what may be chosen now; `retired` only labels what a
     # past case already carries, so old history still reads correctly.
-    return {"actions": ACTIONS, "retired_actions": RETIRED_ACTIONS, "escalation": ESCALATION, "retired_escalation": RETIRED_ESCALATION, "stages": [{"key": s, "label": STAGE_LABEL[s]} for s in STAGES]}
+    return {"actions": ACTIONS, "retired_actions": RETIRED_ACTIONS, "escalation": ESCALATION, "stages": [{"key": s, "label": STAGE_LABEL[s]} for s in STAGES]}

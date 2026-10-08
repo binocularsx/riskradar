@@ -219,7 +219,7 @@ def worklist(
         where.append("c.handling = 'MACHINE'")
     elif scope == "escalated":
         # D83: the receiving team sees what was sent to it; an analyst sees what they sent.
-        team = {"INFOSEC_ANALYST": "INFOSEC", "FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
+        team = {"FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
         if team:
             where.append("c.state = 'ESCALATED' AND c.escalated_to = %(team)s")
             params["team"] = team
@@ -288,9 +288,9 @@ def next_case(
     I do next? Highest priority first, and a case I had already started before
     anything new.
 
-    A lead or InfoSec, who are handed escalations rather than routed cases,
-    still take from their own team's escalation pool — that is a hand-off
-    between teams, not a claim on the general queue.
+    A lead, who is handed escalations rather than routed cases, still takes
+    from the team's escalation pool — that is a hand-off between teams, not a
+    claim on the general queue.
     """
     context = _clock_context(conn)
     scope_sql, scope_params = visibility.predicate(user)
@@ -318,7 +318,7 @@ def next_case(
 
     # A team's escalation pool: still taken, because handing work between teams
     # is a decision a person makes, not one the router can make for them.
-    team = {"INFOSEC_ANALYST": "INFOSEC", "FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
+    team = {"FRAUD_OPS_LEAD": "FRAUD_OPS"}.get(user["role"])
     if team:
         waiting = pool("c.state = 'ESCALATED' AND c.assignee_id IS NULL AND c.escalated_to = %(team)s",
                        {"team": team})

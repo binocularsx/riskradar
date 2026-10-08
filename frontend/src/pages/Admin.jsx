@@ -806,7 +806,7 @@ function Lists() {
 /* ------------------------------------------------------------------ audit */
 
 const roleLabel = (r) => ({ ANALYST: 'Fraud Analyst', FRAUD_OPS_LEAD: 'Fraud Ops Lead',
-  INFOSEC_ANALYST: 'InfoSec Analyst', ADMIN: 'Administrator' }[r] || r)
+  ADMIN: 'Administrator' }[r] || r)
 const roleInitials = (name) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0].toUpperCase()).join('')
 
 function Audit() {
@@ -823,7 +823,7 @@ function Audit() {
   )
 }
 
-const ROLES = ['ANALYST', 'FRAUD_OPS_LEAD', 'INFOSEC_ANALYST', 'ADMIN']
+const ROLES = ['ANALYST', 'FRAUD_OPS_LEAD', 'ADMIN']
 
 /**
  * Users and access (D99, D104, D105).

@@ -82,7 +82,6 @@ export const PROPOSAL_STATE = {
 export const ROLE = {
   ANALYST: 'Fraud analyst',
   FRAUD_OPS_LEAD: 'Fraud operations lead',
-  INFOSEC_ANALYST: 'Information security analyst',
   ADMIN: 'Administrator',
   SYSTEM: 'Risk Radar (automatic)',
 }

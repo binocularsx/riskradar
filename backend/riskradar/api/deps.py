@@ -106,7 +106,11 @@ def current_user(
     response: Response,
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
-    raw = request.cookies.get(settings().session_cookie)
+    # D112: the cookie carries every session this browser holds for the host;
+    # the tab names the one it is using. No name, no session — which is how a
+    # newly opened tab reaches the login page instead of someone else's desk.
+    tokens = cookies.read_session_tokens(request)
+    raw = sessions.token_for_tab(conn, tokens, request.headers.get(settings().tab_header))
     if not raw:
         raise HTTPException(status_code=401, detail="not authenticated")
     session = sessions.resolve(conn, raw)
@@ -126,7 +130,10 @@ def current_user(
     # rotated, so the browser carries the new value on its next request.
     _enforce_csrf(request, session)
     if session.get("rotated_token"):
-        cookies.set_session_cookie(response, session["rotated_token"])
+        # Replace only this tab's identifier; the others in the cookie belong to
+        # other tabs and must survive (D112).
+        rotated = [session["rotated_token"] if t == raw else t for t in tokens]
+        cookies.set_session_cookie(response, rotated)
 
     return {
         "id": session["user_id"],
@@ -151,13 +158,19 @@ def current_user_short(request: Request) -> dict[str, Any]:
     So streaming routes authenticate through this instead. It borrows a
     connection, resolves the session, and gives it straight back.
     """
-    raw = request.cookies.get(settings().session_cookie)
-    if not raw:
-        raise HTTPException(status_code=401, detail="not authenticated")
+    # D112: an EventSource cannot send a header, so the stream takes the tab key
+    # as `?tab=`. It is a selector and not a credential — it names a session but
+    # proves nothing; the httpOnly cookie is still what authenticates. It does
+    # reach the access log, which is why it is a key and never the token.
+    tokens = cookies.read_session_tokens(request)
+    tab_key = request.query_params.get("tab") or request.headers.get(settings().tab_header)
 
     # rotate=False: a streaming response cannot re-set a cookie mid stream, and
     # its GET mutates nothing (D95).
     with pool().connection() as conn:
+        raw = sessions.token_for_tab(conn, tokens, tab_key)
+        if not raw:
+            raise HTTPException(status_code=401, detail="not authenticated")
         session = sessions.resolve(conn, raw, rotate=False)
 
     if not session:

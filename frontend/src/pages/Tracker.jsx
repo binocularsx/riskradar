@@ -7,8 +7,8 @@ import { CaseIcon, CaseMetric } from '../components/CaseWorkspace'
 
 /**
  * The case tracker (D83): every open case in the stage it is in, and how long
- * it has waited there, so nothing stalls unseen between an analyst, InfoSec
- * and the lead who closes it.
+ * it has waited there, so nothing stalls unseen between an analyst and the
+ * lead who closes it.
  *
  * NEW → IN REVIEW → (ESCALATED) → AWAITING CLOSE → CLOSED. The oldest case in
  * each column is at the top: that is the one to chase.
@@ -92,7 +92,7 @@ export default function Tracker() {
                 {s.exposure_minor > 0 && <span className="tag">{nairaShort(s.exposure_minor)} under review</span>}
                 {s.oldest_minutes != null && s.count > 0 && <span className="tag">oldest {age(s.oldest_minutes)}</span>}
                 {s.by_team && Object.entries(s.by_team).filter(([, n]) => n).map(([t, n]) => (
-                  <span className="pill" key={t}>{n} with {t === 'INFOSEC' ? 'InfoSec' : 'Fraud Ops'}</span>))}
+                  <span className="pill" key={t}>{n} with the Fraud team</span>))}
                 {s.by_outcome && Object.entries(s.by_outcome).filter(([, n]) => n).map(([o, n]) => (
                   <span className="pill" key={o}>{n} {OUTCOME[o]}</span>))}
               </div>
@@ -110,7 +110,7 @@ export default function Tracker() {
                     <span>{s.key === 'CLOSED' ? `closed ${age(c.minutes_in_stage)} ago` : `${age(c.minutes_in_stage)} here`}</span>
                   </div>
                   <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>
-                    {c.assignee_name ? `with ${c.assignee_name}` : c.escalated_to ? `waiting for ${c.escalated_to === 'INFOSEC' ? 'Security team' : 'Fraud team'}` : 'not assigned yet'}
+                    {c.assignee_name ? `with ${c.assignee_name}` : c.escalated_to ? 'waiting for the Fraud team' : 'not assigned yet'}
                     {c.actions_recorded ? ` · ${c.actions_recorded} step${c.actions_recorded === 1 ? '' : 's'} recorded` : ''}
                     {c.outcome ? ` · ${OUTCOME[c.outcome]}` : ''}
                   </div>

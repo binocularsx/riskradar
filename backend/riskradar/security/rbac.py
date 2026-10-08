@@ -23,9 +23,9 @@ threshold produced can quietly tune their own work out of view. They keep
 ``metrics:read``, which is what threshold tuning against an alert budget (D11d)
 actually requires.
 
-INFOSEC_ANALYST can investigate and escalate but cannot set a commercial fraud
-outcome, because those outcomes are ML training labels (D13c) and the security
-view is a different question from "was this customer defrauded".
+D111 removed INFOSEC_ANALYST. D108 had already retired it as an escalation
+target; the role itself, its permissions and its account are gone, so the desk
+is three human roles and SYSTEM.
 """
 
 from __future__ import annotations
@@ -73,14 +73,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             Permission.METRICS_READ,
         }
     ),
-    "INFOSEC_ANALYST": frozenset(
-        {
-            Permission.CASES_READ,
-            Permission.CASES_REVIEW,
-            Permission.CASES_ESCALATE,
-            Permission.METRICS_READ,
-        }
-    ),
     "ADMIN": frozenset(
         {
             Permission.METRICS_READ,
@@ -108,7 +100,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
 # wanted is kept where it counts: the column can no longer be changed quietly,
 # because changing it takes two administrators and leaves a record.
 # SYSTEM never logs in and holds no factor.
-MFA_REQUIRED_ROLES = frozenset({"ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"})
+MFA_REQUIRED_ROLES = frozenset({"ANALYST", "FRAUD_OPS_LEAD", "ADMIN"})
 
 
 def permissions_for(role: str) -> frozenset[Permission]:

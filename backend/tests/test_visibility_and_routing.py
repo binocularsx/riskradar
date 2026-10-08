@@ -25,7 +25,6 @@ from conftest import login
 PASSWORDS = {
     "analyst@riskradar.local": "Analyst#2026",
     "lead@riskradar.local": "OpsLead#2026",
-    "infosec@riskradar.local": "InfoSec#2026",
 }
 
 
@@ -91,19 +90,6 @@ def test_an_analyst_cannot_read_another_analysts_case(somebody_elses_case):
 
     # Writing is refused for the same reason.
     assert analyst.post(f"/v1/cases/{case_id}/notes", json={"body": "not mine"}).status_code == 404
-
-
-def test_infosec_sees_escalations_to_infosec_and_not_the_rest(somebody_elses_case):
-    case_id = somebody_elses_case["case_id"]
-    infosec = as_user("infosec@riskradar.local")
-    assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
-    with _db() as c:
-        c.execute("UPDATE cases SET state = 'ESCALATED', escalated_to = 'INFOSEC', assignee_id = NULL "
-                  "WHERE id = %s", (case_id,))
-        c.commit()
-    assert infosec.get(f"/v1/cases/{case_id}").status_code == 200
-    # The analyst who did not escalate it still cannot.
-    assert as_user("analyst@riskradar.local").get(f"/v1/cases/{case_id}").status_code == 404
 
 
 def test_search_is_scoped_to_what_the_caller_holds(somebody_elses_case):

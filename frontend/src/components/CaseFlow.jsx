@@ -93,7 +93,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
         {flow.assignee && <span className="dim"> · with {flow.assignee}</span>}</p>
       {flow.escalation && (
         <div className="escalation-note">
-          Sent to <strong>{flow.escalation.to === 'INFOSEC' ? 'the Security team' : flow.escalation.to === 'FRAUD_OPS' ? 'the Fraud team' : 'a specialist team'}</strong> by{' '}
+          Sent to <strong>{flow.escalation.to === 'FRAUD_OPS' ? 'the Fraud team' : 'a specialist team'}</strong> by{' '}
           {flow.escalation.by} · {when(flow.escalation.at)}
           <div className="muted">“{flow.escalation.reason}”</div>
         </div>
@@ -181,7 +181,7 @@ export default function CaseFlow({ caseId, user, onChanged }) {
         <div className="dialog">
           <h3>Send this case for specialist help</h3>
           <div className="segmented" style={{ marginBottom: 10 }}>
-            {Object.entries(catalog.escalation).filter(([k]) => k !== 'INFOSEC').map(([k, v]) => (
+            {Object.entries(catalog.escalation).map(([k, v]) => (
               <button key={k} className={target === k ? 'on' : ''} onClick={() => setTarget(k)}>{v.label}</button>
             ))}
           </div>
