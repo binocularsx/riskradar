@@ -116,8 +116,11 @@ def test_reporting_a_payment_nobody_alerted_on_opens_a_case_and_tells_the_desk(
     assert again.status_code == 200 and again.json()["clocks_started"] == []
     assert again.json()["already_alerted"] == [body["transaction_ref"]]
 
-    # It is at the top of the worklist.
-    login(client, "analyst@riskradar.local", "Analyst#2026")
+    # It is at the top of the worklist. Read as the lead, who sees the whole
+    # desk (D94): an analyst sees only their own cases, and routing hands this
+    # one to whichever analyst carries the least open work, so asking one named
+    # analyst would be asking whether routing happened to pick them.
+    login(client, "lead@riskradar.local", "OpsLead#2026")
     items = client.get("/v1/worklist?scope=all&limit=200").json()["items"]
     ours = next(i for i in items if i["id"] == case_id)
     assert ours["reported"] and ours["missed_by_detector"] == 1

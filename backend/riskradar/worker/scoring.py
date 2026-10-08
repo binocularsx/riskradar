@@ -511,10 +511,17 @@ def raise_alert(
             cur.execute("UPDATE cases SET handling = 'HUMAN' WHERE id = %s AND handling <> 'HUMAN'", (case_id,))
     if disposition == tiers.MACHINE_ACTION:
         _machine_action(conn, sys_uid, case_id, signal_codes, transaction_ref)
-    elif created:
+    else:
         # D94: work reaches an analyst rather than waiting to be claimed. Same
         # transaction as the alert that opened the case, so a case never exists
         # unrouted because something failed in between.
+        #
+        # Not only when the case is new. The update above may have just turned a
+        # machine-handled case into human work (D80), and that case has never
+        # been routed — routing skipped it while it was the machine's. Asking
+        # every time is what makes "a case never exists unrouted" true: route()
+        # leaves a case that already has an owner, or is still machine-handled,
+        # exactly as it found it.
         assignment.route(conn, case_id, sys_uid=sys_uid)
     with conn.cursor() as cur:
         cur.execute(
