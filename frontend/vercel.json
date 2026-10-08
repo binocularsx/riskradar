@@ -4,8 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/v1/:path*", "destination": "https://withdrawal-society-spots-region.trycloudflare.com/v1/:path*" },
-    { "source": "/health", "destination": "https://withdrawal-society-spots-region.trycloudflare.com/health" },
+    { "source": "/v1/:path*", "destination": "https://miss-hindu-explicit-set.trycloudflare.com/v1/:path*" },
+    { "source": "/health", "destination": "https://miss-hindu-explicit-set.trycloudflare.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
