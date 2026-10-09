@@ -39,11 +39,18 @@ STEP = 30  # seconds; pyotp's default and what the server verifies against
 
 
 def accounts() -> list[dict]:
+    """The accounts a code can actually sign in to.
+
+    Deactivated accounts are left out deliberately. Their secrets still work
+    arithmetically, so enrolling one gives a six-digit code that looks right
+    and is refused every time — and the leftovers of crashed test runs, plus
+    the InfoSec account D111 retired, outnumber the real desk here.
+    """
     with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as conn:
         return conn.execute(
             """SELECT email, role, totp_secret, totp_enabled
                  FROM users
-                WHERE NOT is_system
+                WHERE NOT is_system AND active
              ORDER BY role, email"""
         ).fetchall()
 
