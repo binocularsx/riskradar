@@ -38,6 +38,13 @@ def get_conn() -> Iterator[Any]:
 
     Committed by the pool on clean exit, rolled back on exception — so a handler
     that raises cannot leave a half-written case behind.
+
+    Note the timing: FastAPI runs this teardown *after* the response has been
+    handed to the client, so the commit lands slightly after the client can see
+    the answer. Harmless for a handler whose answer merely describes what it
+    wrote; not harmless for one whose answer is a credential the client uses
+    immediately. Such a handler calls `conn.commit()` itself as its last act —
+    see `routers/auth.py:login`.
     """
     with pool().connection() as conn:
         yield conn

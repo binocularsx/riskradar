@@ -91,6 +91,22 @@ def login(
         payload={"role": role, "mfa": bool(needs_mfa)},
     )
 
+    # Commit before the response leaves, not at dependency teardown.
+    #
+    # `get_conn` is a `yield` dependency, so its connection commits when the
+    # block exits — and FastAPI runs that teardown *after* the response has been
+    # handed off. The client could therefore receive this body, with a working
+    # tab_key, microseconds before the `sessions` row existed to anyone else: a
+    # request arriving in that window found no session and got a 401. Measured
+    # at roughly one immediate follow-up call in ten.
+    #
+    # The commit goes here rather than in `get_conn` so that only this path's
+    # semantics change. Everything above is still one transaction that rolls
+    # back as a unit, and there is no database work after this point, so the
+    # guarantee `get_conn` documents — a handler that raises cannot leave half a
+    # write behind — holds exactly as before.
+    conn.commit()
+
     return LoginOut(
         status="ok",
         tab_key=tab_key,
