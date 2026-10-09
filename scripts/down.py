@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -63,7 +64,17 @@ if __name__ == "__main__":
     ap.add_argument("--postgres", action="store_true", help="stop the database server too")
     args = ap.parse_args()
     print("\nRisk Radar - stopping\n")
-    stop_matching()
+    # The tunnel is cloudflared.exe, which is neither this repo's Python nor
+    # its Node, so stop_matching() never sees it. Closing it here means one
+    # stop command rather than two, and no tunnel left on after the API goes.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import share
+
+    if share.STATE.exists():
+        share.stop()
+    # Spare this process: it is itself this repo's Python, so an unguarded
+    # sweep kills the sweeper before it can report what it stopped.
+    stop_matching(exclude_like="down.py")
     if args.postgres:
         stop_postgres()
     print()

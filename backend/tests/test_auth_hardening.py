@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import psycopg
 import pytest
 
 from riskradar.config import settings
@@ -28,7 +29,7 @@ from conftest import login
 
 
 def test_mfa_is_mandatory_for_every_human_role():
-    for role in ("ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST", "ADMIN"):
+    for role in ("ANALYST", "FRAUD_OPS_LEAD", "ADMIN"):
         assert mfa_required(role), f"{role} works cases or tunes detection; MFA is not optional"
     # The one principal that never logs in holds no factor and is not required to.
     assert not mfa_required("SYSTEM")
@@ -54,7 +55,10 @@ def test_analyst_password_alone_yields_no_session(client):
 
 def _login_without_default_csrf_header(client):
     """Log in so the client holds the session and CSRF cookies, but do NOT set
-    the header — so a following POST is exactly a request that omits it."""
+    the CSRF header — so a following POST is exactly a request that omits it.
+
+    The tab key *is* set: without it the request is not authenticated at all
+    (D112), and these tests are about CSRF, not about authentication."""
     import pyotp
     import psycopg
 
@@ -72,6 +76,7 @@ def _login_without_default_csrf_header(client):
         },
     )
     assert r.json()["status"] == "ok"
+    client.headers[settings().tab_header] = r.json()["tab_key"]
 
 
 def test_unsafe_request_without_csrf_token_is_refused(client):
@@ -122,7 +127,7 @@ def _backdate_rotation(conn, raw: str, minutes: int) -> None:
 
 
 def test_a_fresh_session_does_not_rotate(conn):
-    raw, csrf = sessions.create(conn, _analyst_id(conn), mfa_satisfied=True)
+    raw, csrf, _tab = sessions.create(conn, _analyst_id(conn), mfa_satisfied=True)
     resolved = sessions.resolve(conn, raw)
     assert resolved is not None
     assert resolved["rotated_token"] is None
@@ -131,7 +136,7 @@ def test_a_fresh_session_does_not_rotate(conn):
 
 def test_session_rotates_past_the_interval_and_survives(conn):
     uid = _analyst_id(conn)
-    raw, _ = sessions.create(conn, uid, mfa_satisfied=True)
+    raw, _, _tab = sessions.create(conn, uid, mfa_satisfied=True)
     _backdate_rotation(conn, raw, settings().session_rotate_minutes + 5)
 
     rotated = sessions.resolve(conn, raw)
@@ -148,7 +153,7 @@ def test_session_rotates_past_the_interval_and_survives(conn):
 
 def test_the_superseded_identifier_works_within_grace_then_dies(conn):
     uid = _analyst_id(conn)
-    raw, _ = sessions.create(conn, uid, mfa_satisfied=True)
+    raw, _, _tab = sessions.create(conn, uid, mfa_satisfied=True)
     _backdate_rotation(conn, raw, settings().session_rotate_minutes + 5)
     rotated = sessions.resolve(conn, raw)
     assert rotated["rotated_token"], "precondition: it rotated"
@@ -172,7 +177,7 @@ def test_the_superseded_identifier_works_within_grace_then_dies(conn):
 
 def test_logout_still_ends_a_rotated_session(conn):
     uid = _analyst_id(conn)
-    raw, _ = sessions.create(conn, uid, mfa_satisfied=True)
+    raw, _, _tab = sessions.create(conn, uid, mfa_satisfied=True)
     _backdate_rotation(conn, raw, settings().session_rotate_minutes + 5)
     rotated = sessions.resolve(conn, raw)
     new_raw = rotated["rotated_token"]
@@ -180,3 +185,71 @@ def test_logout_still_ends_a_rotated_session(conn):
     # Revoking with the *old* cookie must still delete the session.
     sessions.revoke(conn, raw)
     assert sessions.resolve(conn, new_raw) is None
+
+
+# ---------------------------------------------------------------------------
+# The session is committed before the login answers
+# ---------------------------------------------------------------------------
+
+
+def _session_ids_for(dsn: str, email: str) -> set[str]:
+    """Which sessions exist for this user, seen from outside any request."""
+    with psycopg.connect(dsn, row_factory=psycopg.rows.dict_row) as other:
+        rows = other.execute(
+            """
+            SELECT s.id FROM sessions s
+              JOIN users u ON u.id = s.user_id
+             WHERE lower(u.email) = lower(%s)
+            """,
+            (email,),
+        ).fetchall()
+    return {r["id"] for r in rows}
+
+
+def test_login_commits_the_session_before_it_answers(client, dsn):
+    """A session the client has been told about must already exist to everybody.
+
+    ``get_conn`` commits at dependency teardown, and FastAPI runs that teardown
+    after the response has been handed off — so a login that left its commit to
+    the pool could deliver a working tab key microseconds before the ``sessions``
+    row was visible to any other connection. The request the console fires next
+    found no session and answered 401; measured at roughly one immediate
+    follow-up call in ten.
+
+    The probe below is not timing-sensitive. It runs after the handler has
+    returned and *while still inside* the pool's block, so the pool has not
+    committed anything yet. A row visible to an independent connection at that
+    point can only have been committed by the handler itself, before it answered.
+    """
+    from riskradar.api.app import app
+    from riskradar.api.deps import get_conn
+    from riskradar.db import pool
+
+    email = "analyst@riskradar.local"
+    before = _session_ids_for(dsn, email)
+    seen: list[set[str]] = []
+
+    def probing_conn():
+        with pool().connection() as conn:
+            yield conn
+            seen.append(_session_ids_for(dsn, email))
+
+    app.dependency_overrides[get_conn] = probing_conn
+    try:
+        login(client, email, "Analyst#2026")
+    finally:
+        app.dependency_overrides.pop(get_conn, None)
+
+    assert seen, "the probe never ran, so this test proves nothing"
+    created = seen[-1] - before
+    assert created, (
+        "the login response was ready while its session row was still "
+        "uncommitted — the next request would have been refused"
+    )
+
+    # This one did commit, so clear it up rather than leaving it to expire.
+    with psycopg.connect(dsn) as other:
+        other.execute(
+            "DELETE FROM sessions WHERE id = ANY(%s)", (list(created),)
+        )
+        other.commit()

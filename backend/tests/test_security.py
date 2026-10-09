@@ -14,7 +14,7 @@ import pytest
 
 from riskradar.audit import chain
 from riskradar.config import settings
-from riskradar.security.rbac import Permission, has
+from riskradar.security.rbac import Permission, has, permissions_for
 
 from conftest import login
 
@@ -47,13 +47,13 @@ def test_analyst_cannot_close_or_administer():
     assert not has("ANALYST", Permission.ADMIN_RULES)
 
 
-def test_infosec_investigates_but_does_not_set_commercial_outcomes():
-    """Outcomes are ML training labels (D13c), not a status field — so the role
-    that answers a security question does not get to answer a fraud one."""
-    assert has("INFOSEC_ANALYST", Permission.CASES_READ)
-    assert has("INFOSEC_ANALYST", Permission.CASES_ESCALATE)
-    assert not has("INFOSEC_ANALYST", Permission.CASES_SUBMIT_OUTCOME)
-    assert not has("INFOSEC_ANALYST", Permission.CASES_APPROVE_FRAUD)
+def test_the_infosec_role_no_longer_exists():
+    """D111 removed it. An unknown role holds no permission at all, so a session
+    that somehow named it could still reach nothing."""
+    assert permissions_for("INFOSEC_ANALYST") == frozenset()
+    for permission in (Permission.CASES_READ, Permission.CASES_ESCALATE,
+                       Permission.CASES_SUBMIT_OUTCOME, Permission.CASES_APPROVE_FRAUD):
+        assert not has("INFOSEC_ANALYST", permission)
 
 
 def test_lead_can_close_but_not_administer():

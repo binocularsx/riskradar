@@ -129,6 +129,23 @@ alert budget (D86), drift monitoring (D88), retraining on the desk's own
 outcomes (D89), backups and upgrades. `docs/api/openapi.json` is the full API
 description; `docs/dashboard-api-contract.html` maps it to screens.
 
+### Sharing it from this PC (Cloudflare Tunnel)
+
+With the stack running, `python scripts/share.py` builds the console, serves it
+on 127.0.0.1:4173 and opens a Cloudflare quick tunnel to it, then prints a public
+`https://….trycloudflare.com` address. `python scripts/share.py --stop` closes it.
+It needs `cloudflared` (`winget install --id Cloudflare.cloudflared`) and no
+Cloudflare account.
+
+- One address serves the console and its API, so login and the live alert feed
+  work (D101b).
+- Only browsers get through: any request carrying an `X-API-Key` is refused at
+  the public address (`frontend/vite.config.js`), because the development keys
+  are in this repository. The simulator still reaches the API on 127.0.0.1:8000.
+- A quick tunnel gets a new address every time it starts. A fixed address needs
+  a named tunnel on a domain you own; add its hostname to `RISKRADAR_SHARE_HOSTS`.
+- It is up only while this PC is on, awake and online. Synthetic data only (D101a).
+
 ### 6. Test it on somebody else's transactions (D81)
 
 Any transaction file (CSV, TSV, JSON lines; Parquet or Excel with pyarrow or

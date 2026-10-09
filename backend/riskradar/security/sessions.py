@@ -32,6 +32,18 @@ from .passwords import new_csrf_token, new_session_token
 from .tokens import hash_session_id
 
 
+def new_tab_key() -> str:
+    """A tab's name for its own session (D112).
+
+    Not a credential: it selects which of the cookie's sessions a tab is using
+    and authenticates nothing on its own. The credential is still the cookie
+    value, which no script can read.
+    """
+    import secrets
+
+    return secrets.token_urlsafe(18)
+
+
 def create(
     conn: Any,
     user_id: int,
@@ -39,8 +51,8 @@ def create(
     mfa_satisfied: bool,
     user_agent: str | None = None,
     ip_region: str | None = None,
-) -> tuple[str, str]:
-    """Create a session and return ``(raw_session_token, csrf_token)``.
+) -> tuple[str, str, str]:
+    """Create a session and return ``(raw_session_token, csrf_token, tab_key)``.
 
     Only the session hash is persisted, so a database read cannot be replayed as
     a login. The CSRF token is stored in plaintext — it is not a credential (see
@@ -49,14 +61,16 @@ def create(
     s = settings()
     raw = new_session_token()
     csrf = new_csrf_token()
+    tab_key = new_tab_key()
     now = datetime.now(timezone.utc)
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO sessions
                 (id, user_id, idle_expires_at, absolute_expires_at,
-                 mfa_satisfied, user_agent, ip_region, csrf_token, rotated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 mfa_satisfied, user_agent, ip_region, csrf_token, rotated_at,
+                 tab_key)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 hash_session_id(raw),
@@ -68,9 +82,36 @@ def create(
                 ip_region,
                 csrf,
                 now,
+                tab_key,
             ),
         )
-    return raw, csrf
+    return raw, csrf, tab_key
+
+
+def token_for_tab(conn: Any, raw_tokens: list[str], tab_key: str | None) -> str | None:
+    """Which of the cookie's identifiers belongs to this tab (D112).
+
+    The browser presents every session it holds for this host; the tab says
+    which one is its own. A tab that names a session the cookie does not carry
+    gets nothing — the key selects, the cookie proves. A tab that names nothing
+    gets nothing either, which is what makes a newly opened tab ask for a login
+    rather than inheriting whatever session the browser already had.
+    """
+    if not tab_key or not raw_tokens:
+        return None
+    by_hash = {hash_session_id(t): t for t in raw_tokens}
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, previous_id FROM sessions WHERE tab_key = %s", (tab_key,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    row = dict(row)
+    # The current identifier, or the just-superseded one inside D95's grace
+    # window — a request that raced a rotation still resolves to its own tab.
+    for candidate in (row["id"], row["previous_id"]):
+        if candidate and candidate in by_hash:
+            return by_hash[candidate]
+    return None
 
 
 def resolve(conn: Any, raw_token: str, *, rotate: bool = True) -> dict[str, Any] | None:
@@ -94,7 +135,7 @@ def resolve(conn: Any, raw_token: str, *, rotate: bool = True) -> dict[str, Any]
         cur.execute(
             """
             SELECT s.id, s.user_id, s.mfa_satisfied, s.idle_expires_at,
-                   s.absolute_expires_at, s.csrf_token, s.rotated_at,
+                   s.absolute_expires_at, s.csrf_token, s.rotated_at, s.tab_key,
                    (s.id = %(sid)s) AS matched_current,
                    u.email, u.display_name, u.role, u.active, u.is_system,
                    u.totp_enabled

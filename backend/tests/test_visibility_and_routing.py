@@ -25,7 +25,6 @@ from conftest import login
 PASSWORDS = {
     "analyst@riskradar.local": "Analyst#2026",
     "lead@riskradar.local": "OpsLead#2026",
-    "infosec@riskradar.local": "InfoSec#2026",
 }
 
 
@@ -91,19 +90,6 @@ def test_an_analyst_cannot_read_another_analysts_case(somebody_elses_case):
 
     # Writing is refused for the same reason.
     assert analyst.post(f"/v1/cases/{case_id}/notes", json={"body": "not mine"}).status_code == 404
-
-
-def test_infosec_sees_escalations_to_infosec_and_not_the_rest(somebody_elses_case):
-    case_id = somebody_elses_case["case_id"]
-    infosec = as_user("infosec@riskradar.local")
-    assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
-    with _db() as c:
-        c.execute("UPDATE cases SET state = 'ESCALATED', escalated_to = 'INFOSEC', assignee_id = NULL "
-                  "WHERE id = %s", (case_id,))
-        c.commit()
-    assert infosec.get(f"/v1/cases/{case_id}").status_code == 200
-    # The analyst who did not escalate it still cannot.
-    assert as_user("analyst@riskradar.local").get(f"/v1/cases/{case_id}").status_code == 404
 
 
 def test_search_is_scoped_to_what_the_caller_holds(somebody_elses_case):
@@ -173,6 +159,65 @@ def test_a_machine_handled_case_is_not_routed():
         out = assignment.route(c, case_id, sys_uid=sys_uid)
         assert not out["assigned"] and "machine-handled" in out["why"]
         c.rollback()
+
+
+def test_a_machine_case_that_becomes_human_work_is_routed(client, api_headers, sample_transaction):
+    """D94 + D80: the alert that makes a machine-handled case human work must route it.
+
+    Routing deliberately skips a case while the machine is handling it, so such
+    a case has never had an owner. The alert that turns it into human work is
+    therefore the first moment it needs one. Guarding that on "did this alert
+    open the case?" misses it entirely: the case already existed, so nothing
+    routed it, and D94 shows an analyst only their own cases — the work is not
+    in anyone's queue to find.
+    """
+    from riskradar.policy import disposition as tiers
+    from riskradar.security.tokens import subject_token
+    from riskradar.worker import scoring
+
+    payment = sample_transaction()
+    # raise_alerts off: this leaves a scored payment with no alert and no case,
+    # so the only case in play is the machine-handled one set up below.
+    r = client.post("/v1/transactions/batch", headers=api_headers,
+                    json={"transactions": [payment], "is_replay": False, "raise_alerts": False})
+    assert r.status_code == 202, r.text
+    tx_id = r.json()["results"][0]["transaction_id"]
+    subject = subject_token(payment["customer_id"])
+    now = datetime.now(timezone.utc)
+
+    with _db() as c:
+        try:
+            sys_uid = scoring.system_user_id(c)
+            if not c.execute("SELECT 1 FROM decisions WHERE transaction_id = %s", (tx_id,)).fetchone():
+                scoring.score_transaction(c, tx_id, sys_uid=sys_uid)
+            decision_id = c.execute("SELECT id FROM decisions WHERE transaction_id = %s",
+                                    (tx_id,)).fetchone()["id"]
+            # The customer already has an open case the machine is handling, and
+            # so nobody owns it: exactly what D80 leaves behind.
+            case_id = c.execute(
+                "INSERT INTO cases (subject_token, state, risk_level, opened_at, last_alert_at, "
+                "correlation_expires_at, handling) VALUES (%s, 'OPEN', 'HIGH', %s, %s, %s, 'MACHINE') "
+                "RETURNING id",
+                (subject, now, now, now + timedelta(hours=24)),
+            ).fetchone()["id"]
+
+            _, joined = scoring.raise_alert(
+                c, sys_uid, decision_id=decision_id, transaction_id=tx_id,
+                transaction_ref=payment["transaction_ref"], subject_token=subject, occurred_at=now,
+                risk_level="HIGH", score=80, signal_codes=["VELOCITY_SPIKE"],
+                disposition=tiers.HUMAN_REVIEW, rule_only=False,
+            )
+            assert joined == case_id, "the alert joined the case that was already open"
+            case = c.execute("SELECT handling, assignee_id, assignment_reason FROM cases WHERE id = %s",
+                             (case_id,)).fetchone()
+            assert case["handling"] == "HUMAN", "a review alert makes it human work (D80)"
+            assert case["assignee_id"] is not None, "and human work has an owner (D94)"
+            assert "least open work" in case["assignment_reason"]
+        finally:
+            c.rollback()
+            c.execute("DELETE FROM scoring_queue WHERE transaction_id = %s", (tx_id,))
+            c.execute("DELETE FROM transactions WHERE id = %s", (tx_id,))
+            c.commit()
 
 
 def test_next_case_hands_back_your_own_work_not_someone_elses(somebody_elses_case):

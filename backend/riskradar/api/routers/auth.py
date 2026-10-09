@@ -65,13 +65,21 @@ def login(
         if not verify_totp(user["totp_secret"], body.totp_code):
             raise invalid
 
-    raw, csrf = sessions.create(
+    raw, csrf, tab_key = sessions.create(
         conn,
         user["id"],
         mfa_satisfied=bool(needs_mfa),
         user_agent=request.headers.get("user-agent"),
     )
-    cookies.set_session_cookie(response, raw)
+    # D112: add this session to the ones the browser already holds rather than
+    # replacing them, so signing in as a second role in another tab does not
+    # sign the first one out.
+    cookies.set_session_cookie(
+        response, cookies.add_session_token(cookies.read_session_tokens(request), raw)
+    )
+    # The CSRF token still goes in its readable cookie for anything reading it
+    # that way, but the authoritative copy for this tab is the one returned
+    # below: one cookie cannot carry a different token per session (D112).
     cookies.set_csrf_cookie(response, csrf)
 
     chain.append(
@@ -83,8 +91,26 @@ def login(
         payload={"role": role, "mfa": bool(needs_mfa)},
     )
 
+    # Commit before the response leaves, not at dependency teardown.
+    #
+    # `get_conn` is a `yield` dependency, so its connection commits when the
+    # block exits — and FastAPI runs that teardown *after* the response has been
+    # handed off. The client could therefore receive this body, with a working
+    # tab_key, microseconds before the `sessions` row existed to anyone else: a
+    # request arriving in that window found no session and got a 401. Measured
+    # at roughly one immediate follow-up call in ten.
+    #
+    # The commit goes here rather than in `get_conn` so that only this path's
+    # semantics change. Everything above is still one transaction that rolls
+    # back as a unit, and there is no database work after this point, so the
+    # guarantee `get_conn` documents — a handler that raises cannot leave half a
+    # write behind — holds exactly as before.
+    conn.commit()
+
     return LoginOut(
         status="ok",
+        tab_key=tab_key,
+        csrf_token=csrf,
         user={
             "id": user["id"],
             "email": user["email"],
@@ -103,7 +129,10 @@ def logout(
 ) -> dict[str, str]:
     """Revocation is a DELETE (D12). That sentence is the whole argument against
     a JWT here."""
-    raw = request.cookies.get(settings().session_cookie)
+    # D112: end only the session this tab is using. Clearing the cookie outright
+    # was what signed every other tab out.
+    tokens = cookies.read_session_tokens(request)
+    raw = sessions.token_for_tab(conn, tokens, request.headers.get(settings().tab_header))
     if raw:
         session = sessions.resolve(conn, raw, rotate=False)
         if session:
@@ -121,7 +150,9 @@ def logout(
                 object_id=session["user_id"],
             )
         sessions.revoke(conn, raw)
-    cookies.clear_session_cookies(response)
+        cookies.write_remaining(response, [t for t in tokens if t != raw])
+    else:
+        cookies.clear_session_cookies(response)
     return {"status": "ok"}
 
 

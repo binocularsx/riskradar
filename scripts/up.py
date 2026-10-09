@@ -120,6 +120,10 @@ def main() -> None:
     ap.add_argument("--no-feed", action="store_true", help="do not start the live transaction feed")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--rate", type=float, default=3.0, help="feed rate, payments a second")
+    ap.add_argument("--share", action="store_true",
+                    help="also publish it, so the demo can be reached from another machine")
+    ap.add_argument("--vercel", action="store_true",
+                    help="with --share, also repoint the shared Vercel site at this tunnel")
     args = ap.parse_args()
 
     s = settings()
@@ -186,8 +190,17 @@ def main() -> None:
     PIDFILE.write_text(json.dumps(pids), encoding="utf-8")
 
     print(f"\n  ready in {time.time() - started:.0f}s      http://localhost:5173\n")
+    if args.share:
+        # share.py refuses to start until the API answers, which it now does.
+        # It prints its own progress and the public address, so let it write
+        # to this console rather than being captured and reprinted.
+        share_cmd = [str(PYTHON), "-u", "scripts/share.py"]
+        if args.vercel:
+            share_cmd.append("--vercel")
+        subprocess.run(share_cmd, cwd=str(REPO_ROOT))
+
     print("  logs      scripts/../logs/*.log")
-    print("  stop      python scripts/down.py")
+    print("  stop      python scripts/down.py        (closes the public address too)")
     print("  codes     python scripts/codes.py        (live MFA codes)\n")
 
 

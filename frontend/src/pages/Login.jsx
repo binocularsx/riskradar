@@ -34,6 +34,19 @@ function Signal({ tone, icon, title, detail, status }) {
   )
 }
 
+// Telling the two apart matters: when the service cannot be reached, saying
+// "check your details" sends somebody off to re-type a password that was
+// never wrong. A 401 is the server deliberately refusing the credentials;
+// anything else here means it never gave a real answer at all — it is down,
+// unreachable, or something in front of it replied with a page instead.
+function unreachable(error) {
+  if (error?.unauthenticated) return false
+  if (typeof error?.status === 'number' && error.status < 500) return false
+  return true
+}
+
+const OFFLINE = 'We could not reach Risk Radar. The service may not be running — try again in a moment.'
+
 export default function Login({ onSignedIn }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -53,8 +66,8 @@ export default function Login({ onSignedIn }) {
       const result = await api.login(email, password, null)
       if (result.status === 'mfa_required') setNeedsTotp(true)
       else onSignedIn()
-    } catch {
-      setError('Sign-in failed. Check your details and try again.')
+    } catch (error) {
+      setError(unreachable(error) ? OFFLINE : 'Sign-in failed. Check your details and try again.')
     } finally { setBusy(false) }
   }
 
@@ -65,8 +78,8 @@ export default function Login({ onSignedIn }) {
       const result = await api.login(email, password, code.join(''))
       if (result.status === 'mfa_required') setError('That code was not accepted. Try the next one.')
       else onSignedIn()
-    } catch {
-      setError('That code was not accepted. Try the next one.')
+    } catch (error) {
+      setError(unreachable(error) ? OFFLINE : 'That code was not accepted. Try the next one.')
     } finally { setBusy(false) }
   }
 

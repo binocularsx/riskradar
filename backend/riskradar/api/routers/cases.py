@@ -4,7 +4,7 @@ The state machine (D13b)::
 
     OPEN --> UNDER_REVIEW --> {CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE} --> CLOSED
                   |
-                  +--> ESCALATED --> (INFOSEC | FRAUD_OPS) --> back to review, or CLOSED
+                  +--> ESCALATED --> FRAUD_OPS --> back to review, or CLOSED
 
 ``INCONCLUSIVE`` is mandatory and is offered with equal weight in the UI.
 Forcing a binary under time pressure produces analysts who pick whichever option
@@ -451,17 +451,6 @@ def escalate(
     case = _fetch_case(conn, case_id, user)
     if case["state"] == "CLOSED":
         raise HTTPException(400, "cannot escalate a closed case")
-    # D108: InfoSec is retired. The target stays in the schema so that cases
-    # escalated there before the change still read back, but nothing new may go
-    # to a queue nobody works — account takeover, login abuse and MFA problems
-    # are actioned on this desk by proposing the containment the bank applies.
-    if body.target == "INFOSEC":
-        raise HTTPException(
-            400,
-            "InfoSec is retired: escalate to the Fraud Ops lead. For a suspected account "
-            "takeover, propose session termination, a credential reset or MFA re-enrolment "
-            "on the finding instead.",
-        )
     # D83: a reason is required. The team receiving it has to know why without
     # calling the analyst, and the record has to say why it moved.
     if not (body.note or "").strip():
@@ -741,7 +730,7 @@ def assign(
         holder = _rows(conn, "SELECT id, role::text AS role, active FROM users WHERE id = %s", (body.assignee_id,))
         if not holder or not holder[0]["active"]:
             raise HTTPException(422, "that account cannot hold a case: unknown or deactivated")
-        if holder[0]["role"] not in ("ANALYST", "FRAUD_OPS_LEAD", "INFOSEC_ANALYST"):
+        if holder[0]["role"] not in ("ANALYST", "FRAUD_OPS_LEAD"):
             raise HTTPException(422, f"a {holder[0]['role']} does not work cases (D12b)")
     with conn.cursor() as cur:
         cur.execute(

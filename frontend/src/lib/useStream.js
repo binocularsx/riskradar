@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { tabKey } from './api'
+
 /**
  * Live alert stream (FR-030, FR-031).
  *
@@ -11,6 +13,11 @@ import { useEffect, useRef, useState } from 'react'
  * There is no polling fallback here and none is needed: the browser's own
  * reconnect logic is the fallback, and the durable `stream_events` table means
  * a reconnect never misses anything.
+ *
+ * D112: an `EventSource` cannot send a header, so this tab names its session in
+ * the query string instead. The key selects which of the browser's sessions to
+ * stream; it authenticates nothing on its own, because the httpOnly session
+ * cookie still has to carry that session for it to resolve.
  */
 export function useAlertStream({ enabled = true, onAlert, onAlarm, onCaseNews } = {}) {
   const [connected, setConnected] = useState(false)
@@ -21,7 +28,10 @@ export function useAlertStream({ enabled = true, onAlert, onAlarm, onCaseNews } 
   useEffect(() => {
     if (!enabled) return undefined
 
-    const source = new EventSource('/v1/stream', { withCredentials: true })
+    const tab = tabKey()
+    if (!tab) return undefined
+    const source = new EventSource(`/v1/stream?tab=${encodeURIComponent(tab)}`,
+                                   { withCredentials: true })
 
     source.onopen = () => setConnected(true)
     source.onerror = () => setConnected(false)

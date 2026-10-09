@@ -14,8 +14,6 @@ Who sees what:
   what happened to their own work.
 * **Fraud Ops lead** — everything: they carry the desk, approve other people's
   findings and own the unassigned exception queue.
-* **InfoSec** — escalations sent to InfoSec, and anything they are holding.
-  Not the commercial fraud desk's other work.
 * **Administrator** — nothing. They hold no case permission at all (D12b), so
   they never reach these checks.
 
@@ -36,10 +34,6 @@ def predicate(user: dict[str, Any], alias: str = "c") -> tuple[str, dict[str, An
     role = user["role"]
     if role == "FRAUD_OPS_LEAD":
         return ALL_CASES, {}
-    if role == "INFOSEC_ANALYST":
-        return (f"({alias}.assignee_id = %(vis_uid)s OR "
-                f"({alias}.state = 'ESCALATED' AND {alias}.escalated_to = 'INFOSEC'))",
-                {"vis_uid": user["id"]})
     if role == "ANALYST":
         return (f"({alias}.assignee_id = %(vis_uid)s OR {alias}.escalated_by = %(vis_uid)s)",
                 {"vis_uid": user["id"]})

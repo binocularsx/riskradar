@@ -23,7 +23,6 @@ from conftest import login
 
 PASSWORDS = {
     "analyst@riskradar.local": "Analyst#2026",
-    "infosec@riskradar.local": "InfoSec#2026",
     "lead@riskradar.local": "OpsLead#2026",
 }
 
@@ -35,6 +34,40 @@ def as_user(email: str) -> TestClient:
     c.__enter__()
     login(c, email, PASSWORDS[email])
     return c
+
+
+@pytest.fixture
+def outsider():
+    """A case-working account that is not on this case.
+
+    D111 removed InfoSec, which this test used as the role outside the case's
+    scope. The part it played is not about InfoSec: D94 says anyone who is not
+    on a case is not told it exists, so a second analyst plays it instead.
+    """
+    import pyotp
+    from riskradar.security.passwords import hash_password
+    from riskradar.api.app import app
+
+    email = f"outsider-{uuid.uuid4().hex[:8]}@riskradar.local"
+    password, secret = "Outsider#2026", pyotp.random_base32()
+    with psycopg.connect(settings().app_dsn, row_factory=psycopg.rows.dict_row) as c:
+        uid = c.execute(
+            "INSERT INTO users (email, display_name, password_hash, role, totp_secret, totp_enabled) "
+            "VALUES (%s, 'Outside Analyst', %s, 'ANALYST', %s, true) RETURNING id",
+            (email, hash_password(password), secret),
+        ).fetchone()["id"]
+        c.commit()
+    client = TestClient(app)
+    client.__enter__()
+    login(client, email, password)
+    yield client
+    # Not deleted: logging in wrote an audit row, and audit_log has a foreign key
+    # to users.id. The audit log is append-only and hash-chained, so tidying a
+    # test account out of it is not an option — the account is retired instead.
+    with psycopg.connect(settings().migrate_dsn) as c:
+        c.execute("DELETE FROM sessions WHERE user_id = %s", (uid,))
+        c.execute("UPDATE users SET active = false WHERE id = %s", (uid,))
+        c.commit()
 
 
 @pytest.fixture
@@ -66,8 +99,8 @@ def stage(client: TestClient, cid: int) -> str:
     return r.json()["stage"]
 
 
-def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
-    analyst, infosec, lead = (as_user(e) for e in PASSWORDS)
+def test_a_case_goes_from_alert_through_escalation_to_closed(case_id, outsider):
+    analyst, lead = (as_user(e) for e in PASSWORDS)
     me = analyst.get("/v1/auth/me").json()["id"]
 
     # D94: the case was routed to this analyst, so it is already theirs.
@@ -81,13 +114,10 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert "DESTINATIONS_CHECKED" in catalog["actions"]
     assert "CUSTOMER_CONTACTED" not in catalog["actions"]
     assert "CUSTOMER_CONTACTED" in catalog["retired_actions"]
-    # D108: InfoSec is retired at the owner's direction. It is no longer offered
-    # as a destination, but it is still labelled, because cases escalated there
-    # before the change still name it and their history has to keep rendering —
-    # which the rest of this test goes on to exercise.
-    assert "FRAUD_OPS" in catalog["escalation"]
-    assert "INFOSEC" not in catalog["escalation"]
-    assert "INFOSEC" in catalog["retired_escalation"]
+    # D111: InfoSec is gone from the system entirely — not offered, not retired,
+    # not in the schema. Fraud Ops is the only destination left.
+    assert list(catalog["escalation"]) == ["FRAUD_OPS"]
+    assert "retired_escalation" not in catalog
     retired = analyst.post(f"/v1/cases/{case_id}/actions",
                            json={"action_code": "CUSTOMER_CONTACTED", "result": "NOT_REACHED"})
     assert retired.status_code == 410 and "support" in retired.text
@@ -98,15 +128,14 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert ok.status_code == 200, ok.text
     assert any(a["action_code"] == "DESTINATIONS_CHECKED" for a in ok.json()["workflow"]["actions"])
     # Somebody not working the case cannot record steps on it.
-    assert (infosec.post(f"/v1/cases/{case_id}/actions",
-                        json={"action_code": "TIMELINE_REVIEWED", "result": "UNUSUAL"}).status_code == 404,
-            "D94: outside their scope InfoSec is not told the case exists")
+    assert outsider.post(f"/v1/cases/{case_id}/actions",
+                         json={"action_code": "TIMELINE_REVIEWED", "result": "UNUSUAL"}
+                         ).status_code == 404,         "D94: outside their scope a case-working account is not told the case exists"
 
-    # D108: InfoSec is retired, so it can no longer be escalated to at all.
-    refused = analyst.post(f"/v1/cases/{case_id}/escalate",
-                           json={"target": "INFOSEC", "note": "a SIM change is recent"})
-    assert refused.status_code == 400
-    assert "retired" in refused.json()["detail"]
+    # D111: INFOSEC is no longer a value the schema accepts at all.
+    gone = analyst.post(f"/v1/cases/{case_id}/escalate",
+                        json={"target": "INFOSEC", "note": "a SIM change is recent"})
+    assert gone.status_code == 422, "the escalation target is a closed set of one"
 
     # Escalation needs a reason, then leaves the analyst's queue for the lead's.
     assert analyst.post(f"/v1/cases/{case_id}/escalate", json={"target": "FRAUD_OPS"}).status_code == 400
@@ -120,9 +149,8 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     assert case_id in [c["id"] for c in sent]
     theirs = lead.get("/v1/worklist", params={"scope": "escalated", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in theirs]
-    # D94 still holds for the retired role: it was never escalated to InfoSec,
-    # so InfoSec is not told the case exists.
-    assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
+    # D94: an account that is not on the case is not told it exists.
+    assert outsider.get(f"/v1/cases/{case_id}").status_code == 404
     wf = analyst.get(f"/v1/cases/{case_id}/workflow").json()
     assert wf["escalation"]["by_id"] == me and "unreachable" in wf["escalation"]["reason"]
 
@@ -135,8 +163,8 @@ def test_a_case_goes_from_alert_through_escalation_to_closed(case_id):
     # itself rather than the confirmation stub a role that loses sight gets (D94).
     assert back.json()["assignee_id"] == me
     assert stage(analyst, case_id) == "IN_REVIEW"
-    # D94: InfoSec never saw it and still does not.
-    assert infosec.get(f"/v1/cases/{case_id}").status_code == 404
+    # D94: the outsider never saw it and still does not.
+    assert outsider.get(f"/v1/cases/{case_id}").status_code == 404
     mine = analyst.get("/v1/worklist", params={"scope": "mine", "limit": 200}).json()["items"]
     assert case_id in [c["id"] for c in mine], "handed back to the analyst who escalated"
 
