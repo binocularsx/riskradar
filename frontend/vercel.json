@@ -4,8 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/v1/:path*", "destination": "https://antonio-recognition-supplies-times.trycloudflare.com/v1/:path*" },
-    { "source": "/health", "destination": "https://antonio-recognition-supplies-times.trycloudflare.com/health" },
+    { "source": "/v1/:path*", "destination": "https://shakespeare-lookup-repository-kid.trycloudflare.com/v1/:path*" },
+    { "source": "/health", "destination": "https://shakespeare-lookup-repository-kid.trycloudflare.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
