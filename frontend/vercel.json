@@ -4,8 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/v1/:path*", "destination": "https://amongst-bios-enforcement-officers.trycloudflare.com/v1/:path*" },
-    { "source": "/health", "destination": "https://amongst-bios-enforcement-officers.trycloudflare.com/health" },
+    { "source": "/v1/:path*", "destination": "https://call-producer-determining-santa.trycloudflare.com/v1/:path*" },
+    { "source": "/health", "destination": "https://call-producer-determining-santa.trycloudflare.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
