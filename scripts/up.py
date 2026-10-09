@@ -122,6 +122,8 @@ def main() -> None:
     ap.add_argument("--rate", type=float, default=3.0, help="feed rate, payments a second")
     ap.add_argument("--share", action="store_true",
                     help="also publish it, so the demo can be reached from another machine")
+    ap.add_argument("--vercel", action="store_true",
+                    help="with --share, also repoint the shared Vercel site at this tunnel")
     args = ap.parse_args()
 
     s = settings()
@@ -192,7 +194,10 @@ def main() -> None:
         # share.py refuses to start until the API answers, which it now does.
         # It prints its own progress and the public address, so let it write
         # to this console rather than being captured and reprinted.
-        subprocess.run([str(PYTHON), "-u", "scripts/share.py"], cwd=str(REPO_ROOT))
+        share_cmd = [str(PYTHON), "-u", "scripts/share.py"]
+        if args.vercel:
+            share_cmd.append("--vercel")
+        subprocess.run(share_cmd, cwd=str(REPO_ROOT))
 
     print("  logs      scripts/../logs/*.log")
     print("  stop      python scripts/down.py        (closes the public address too)")

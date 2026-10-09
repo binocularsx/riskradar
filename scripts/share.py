@@ -8,7 +8,10 @@ People open the console on Vercel (riskradar-ml.vercel.app); Vercel forwards
 its API calls to this PC through the tunnel. Each start writes the tunnel's new
 address into frontend/vercel.json on the branch Vercel deploys from (through
 the GitHub API, as whoever `gh` is logged in as) and Vercel redeploys; pass
---no-vercel to skip that and use the tunnel address directly.
+--vercel to also repoint the shared riskradar-ml.vercel.app at this tunnel.
+Without it the tunnel address is yours alone, so several people can demo at
+the same time: the Vercel site holds one pointer for the whole team, and
+repointing it takes the live link away from whoever else is using it.
 
 This PC becomes the server. The built console is served by `vite preview` on
 port 4173, which forwards the console's own calls to the API on port 8000, and
@@ -160,8 +163,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--stop", action="store_true", help="close the tunnel and stop serving the console")
     parser.add_argument("--no-build", action="store_true", help="serve the last build as it is")
-    parser.add_argument("--no-vercel", action="store_true",
-                        help="open the tunnel but leave the Vercel site pointing where it was")
+    parser.add_argument("--vercel", action="store_true",
+                        help="also repoint the shared Vercel site at this tunnel, taking the live link from anyone else using it")
+    parser.add_argument("--no-vercel", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     print("\nRisk Radar - sharing from this PC\n")
     if args.stop:
@@ -208,7 +212,7 @@ def main() -> None:
     STATE.write_text(json.dumps({"pids": pids, "url": address}), encoding="utf-8")
     say("tunnel", address)
 
-    if not args.no_vercel:
+    if args.vercel:
         for _ in range(30):  # a new quick tunnel takes a few seconds to answer
             if http_ok(f"{address}/health"):
                 break
@@ -218,8 +222,17 @@ def main() -> None:
             ready = wait_for_vercel(address)
             say("vercel", "live" if ready else f"not answering yet; check {VERCEL_URL} in a minute")
 
-    print(f"\n  open the console  {VERCEL_URL}")
-    print("  (Vercel serves the console and forwards its API calls to this PC)\n")
+    # The tunnel address is a complete demo on its own: the preview server it
+    # points at proxies /v1 and /health to this machine's API, so the console and
+    # the API share one origin (D101b) without Vercel in the picture at all.
+    if args.vercel:
+        print(f"\n  open the console  {VERCEL_URL}")
+        print("  (Vercel serves the console and forwards its API calls to this PC)")
+        print("  the shared link now points here, so nobody else's demo is live\n")
+    else:
+        print(f"\n  open the console  {address}")
+        print("  (this address is yours alone - the shared Vercel link is untouched,")
+        print("   so somebody else can demo at the same time; --vercel repoints it)\n")
     print("  who gets in      anyone with the address reaches the login page; every")
     print("                   account needs its password and MFA code (python scripts/codes.py)")
     print("  stays up while   this PC is on, awake and online")
