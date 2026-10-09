@@ -4,8 +4,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/v1/:path*", "destination": "https://recreation-deny-greatly-want.trycloudflare.com/v1/:path*" },
-    { "source": "/health", "destination": "https://recreation-deny-greatly-want.trycloudflare.com/health" },
+    { "source": "/v1/:path*", "destination": "https://processors-enquiry-demo-jeremy.trycloudflare.com/v1/:path*" },
+    { "source": "/health", "destination": "https://processors-enquiry-demo-jeremy.trycloudflare.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
