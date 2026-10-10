@@ -78,7 +78,7 @@ def save(path: Path) -> None:
     print("\n  restore it any time with:  python scripts/snapshot.py --restore")
 
 
-def restore(path: Path, jobs: int) -> None:
+def restore(path: Path, jobs: int, stop_services: bool = True) -> None:
     if not path.exists():
         raise SystemExit(f"no snapshot at {path} — run --save after a good rebuild")
     s = settings()
@@ -86,11 +86,15 @@ def restore(path: Path, jobs: int) -> None:
     # Clear the services first. `dropdb --force` terminates the connections it
     # finds, but the API pool reconnects immediately, so the drop can lose that
     # race and block indefinitely against a database that looks idle.
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import down
+    # `stop_services=False` is for callers that are themselves this repo's Python
+    # (scripts/setup.py): the sweep matches on the virtualenv path, so it would stop
+    # the caller too. On a machine being set up there is nothing to stop anyway.
+    if stop_services:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import down
 
-    print("  stopping services that hold connections")
-    down.stop_matching(exclude_like="snapshot.py")
+        print("  stopping services that hold connections")
+        down.stop_matching(exclude_like="snapshot.py")
     print(f"  restoring {path.name} -> {s.db_name}")
     # Drop and recreate rather than restore over the top: a partial overlay
     # leaves rows from two different runs in the same tables, which is worse
