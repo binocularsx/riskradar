@@ -29,6 +29,32 @@ enforcement belongs to the caller.
 Requires **Python 3.12+**, **Node 20+**, and **PostgreSQL 16**. There is no
 Docker requirement — the demo is local by decision (D26).
 
+### On a fresh machine
+
+Pulling the repository is not enough. The virtualenv, `.env`, PostgreSQL, the
+database and the trained model are all outside git, so `scripts\demo.cmd` stops
+with a path error. One command puts them in place:
+
+```bash
+scripts\setup.cmd             # once; safe to run again
+scripts\setup.cmd --check     # report what is missing, change nothing
+```
+
+It needs Python 3.12+ and Node 20+ already installed, and says which is missing.
+To bring a working desk across rather than start empty, copy these from the
+machine that has one, to the same places:
+
+| What | Why |
+|---|---|
+| `.env` | Holds the tokenisation pepper. Every token in the snapshot was made with it (D9c), so a new one orphans every baseline. Setup refuses to invent one when it restores a snapshot. |
+| `fixtures\handover.dump` | Made there with `python scripts\snapshot.py --save --file fixtures\handover.dump` |
+| `fixtures\core_identities.csv` | The simulated core's customer file (D75) |
+| `ml\artifacts\riskradar-gbm-*.joblib` | The trained model; without it scoring runs on rules only |
+
+Setup restores the dump only into an empty database, so running it again never
+replaces data. Then `scripts\demo.cmd`. Keep the repository path short (under
+about 120 characters): Windows can fail to unpack Python packages in a deep folder.
+
 ### The short way, once it is set up
 
 ```bash

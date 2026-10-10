@@ -33,6 +33,11 @@ def stop_matching(exclude_like: str | None = None) -> int:
     venv = str(REPO_ROOT / ".venv")
     frontend = str(REPO_ROOT / "frontend")
     spare = f" -and $_.CommandLine -notlike '*{exclude_like}*'" if exclude_like else ""
+    # Kill the whole tree (`taskkill /T`), not just the process that matched. With
+    # more than one API worker uvicorn starts them through multiprocessing, and each
+    # runs on the base interpreter, so its command line names neither the virtualenv
+    # nor the frontend and the match never sees it. Stopping only the parent left the
+    # workers alive, holding port 8000, and the next start could not bind it.
     script = (
         "$killed = 0; "
         "Get-CimInstance Win32_Process -Filter \"Name='python.exe' OR Name='node.exe'\" | "
@@ -40,7 +45,7 @@ def stop_matching(exclude_like: str | None = None) -> int:
         f"$_.CommandLine -like '*{frontend}*'){spare} }} | "
         "ForEach-Object { Write-Output ('  stopped ' + $_.ProcessId + '  ' + "
         "$_.CommandLine.Substring(0, [Math]::Min(70, $_.CommandLine.Length))); "
-        "Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $killed++ }; "
+        "& taskkill /PID $_.ProcessId /T /F *> $null; $killed++ }; "
         "Write-Output ('  total ' + $killed)"
     )
     result = subprocess.run(["powershell", "-NoProfile", "-Command", script],
