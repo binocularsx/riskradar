@@ -1,0 +1,194 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IEEE-CIS Fraud Detection (Vesta) evaluation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root { --ink:#16202c; --ink-2:#4a5667; --line:#d9dee6; --bg:#fbfcfd; --surface:#fff; --accent:#1f5fa8;
+        --ok:#1d7a4f; --ok-bg:#e3f3ea; --no:#9a3b21; --no-bg:#f8e7e0; --warn-bg:#fff5da; }
+@media (prefers-color-scheme: dark) { :root { --ink:#e6ebf2; --ink-2:#a6b1c0; --line:#2c3644; --bg:#0f141b;
+        --surface:#161d27; --accent:#7fb0ea; --ok:#7fd3a5; --ok-bg:#15301f; --no:#f0a58c; --no-bg:#3a1d14; --warn-bg:#3a3014; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Libre Franklin", system-ui, sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding-block: 28px 60px; padding-inline: 20px; }
+h1 { font-size: 30px; margin: 4px 0 8px; text-wrap: balance; } h2 { font-size: 19px; margin: 34px 0 8px; }
+.kicker { font: 12px "IBM Plex Mono", monospace; letter-spacing: .06em; color: var(--ink-2); margin: 0; }
+.lede { color: var(--ink-2); max-width: 70ch; }
+.note, .sub { color: var(--ink-2); font-size: 13px; } .sub { margin-top: 2px; }
+.warn { background: var(--warn-bg); border: 1px solid var(--line); padding: 10px 14px; border-radius: 4px; margin: 10px 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.tile .v { font: 600 32px "IBM Plex Mono", monospace; color: var(--accent); } .tile .k { font-size: 13px; color: var(--ink-2); }
+.scroll { overflow-x: auto; } table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--ink-2); font-weight: 600; } td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+code, pre { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+pre { background: var(--surface); border: 1px solid var(--line); padding: 12px; overflow-x: auto; }
+.chip { font: 11px "IBM Plex Mono", monospace; padding: 1px 7px; border-radius: 10px; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.no { background: var(--no-bg); color: var(--no); }
+footer { margin-top: 40px; color: var(--ink-2); font-size: 12.5px; }
+</style></head><body><main>
+<header><p class='kicker'>Risk Radar · dataset evaluation (D81) · feature spec 1.4.1</p><h1>IEEE-CIS Fraud Detection (Vesta)</h1><p class='lede'>590,540 transactions evaluated of 590,540 in the file. Test period 2018-03-30 to 2018-05-31 (62.19 days), budget 15.3 alerts a day (the shipped operating point, 0.536% of traffic (75 a day, D76)).</p></header>
+<div class='warn'>there are 98.5 fraud rows a day against a budget of 15 alerts a day: row recall is capped well below 1 by the budget, not by detection. Incident recall is the fairer figure.</div>
+<div class='warn'>the rules alone raise 20 alerts a day, over the 15-a-day budget (VELOCITY_BURST_1H 20/day). Rules spend the budget first, so every arm with rules is the rules; compare the model-alone arms and the ranking column instead, and retune those rules for this bank before relying on them.</div>
+<section class='tiles'><div class='tile'><div class='v'>0.00</div><div class='k'>Switched on as it ships: incidents caught (shipped model + rules)<br>0 of 4024 · 95% 0.00–0.00 · money 0.0% · — false alerts per incident</div></div><div class='tile'><div class='v'>0.00</div><div class='k'>After learning this data: incidents caught (retrained model + rules)<br>0 of 4024 · 95% 0.00–0.00 · money 0.0% · — false alerts per incident</div></div><div class='tile'><div class='v'>0.04</div><div class='k'>Best arm: incidents caught (retrained model alone)<br>160 of 4024 · 95% 0.03–0.05 · money 6.6% · 4.7 false alerts per incident</div></div></section>
+<p class='note'>20,663 fraud rows (3.5% of rows) in 13,169 incidents; 4,024 incidents fall in the test period.</p>
+<h2>What this data can feed</h2><p>2 of 26 measurements carry information on this data. A measurement that cannot work here is not a detection failure; it is a fact about the file.</p>
+<div class='scroll'><table><thead><tr><th>Measurement</th><th>Works here</th><th>Why not</th><th>Share “does not apply”</th></tr></thead><tbody>
+<tr><td><code>amount_log10</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>amount_ratio_to_account_p95_30d</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>txn_count_1h_account</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>approved_value_ratio_24h_vs_daily_mean_30d</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>failed_attempts_1h_account</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>decline_rate_24h_account</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>distinct_beneficiaries_1h_account</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>beneficiary_is_new_to_account</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>100.0%</td></tr>
+<tr><td><code>beneficiary_first_seen_days</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>device_is_new_to_subject</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>account_age_days</code></td><td><span class='chip no'>no</span></td><td>no `account_opened_at` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>days_since_account_activity</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>47.1%</td></tr>
+<tr><td><code>failed_logins_1h_subject</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>device_bound_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>79.9%</td></tr>
+<tr><td><code>credential_changed_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>sim_changed_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>payee_added_minutes</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>100.0%</td></tr>
+<tr><td><code>credits_24h_account</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>distinct_remitters_24h_account</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>inbound_count_ratio_24h_vs_daily_mean_30d</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>minutes_since_last_credit</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>pass_through_ratio_24h</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0.0%</td></tr>
+<tr><td><code>region_is_new_to_subject</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>69.1%</td></tr>
+<tr><td><code>card_present_count_1h_account</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0.0%</td></tr>
+<tr><td><code>beneficiary_distinct_senders_24h</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>hour_of_day_local</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+</tbody></table></div>
+<div class='scroll'><table><thead><tr><th>Rule</th><th>Can fire</th><th>Why not</th><th>Fired in test</th></tr></thead><tbody>
+<tr><td><code>VELOCITY_BURST_1H</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything; no `beneficiary` column mapped</td><td class='n'>1,219</td></tr>
+<tr><td><code>ACCOUNT_TAKEOVER_SEQUENCE</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one; no `beneficiary` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>MULE_INBOUND_FANIN</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0</td></tr>
+<tr><td><code>SECOND_LEG_ONWARD_PAYMENT</code></td><td><span class='chip no'>no</span></td><td>no incoming transactions, so the receiving side cannot be seen</td><td class='n'>0</td></tr>
+<tr><td><code>CARD_TESTING_PROBES</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>SCAM_BENEFICIARY_FANIN</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+<tr><td><code>SIM_SWAP_TRANSFER</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one; no `beneficiary` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>DORMANT_ACCOUNT_REACTIVATION</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+<tr><td><code>CARD_PRESENT_NEW_REGION_CASHOUT</code></td><td><span class='chip no'>no</span></td><td>each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+<tr><td><code>SANCTIONED_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>KNOWN_MULE_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>PRE_REGISTERED_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>ESTABLISHED_PAYEE_NORMAL</code></td><td><span class='chip no'>no</span></td><td>no `beneficiary` column mapped; each account appears too rarely for &#x27;unusual for this customer&#x27; to mean anything</td><td class='n'>0</td></tr>
+</tbody></table></div>
+<h2>Each layer, same rows, same budget</h2>
+<div class='scroll'><table><thead><tr><th>Arm</th><th>Alerts a day</th><th>Incidents caught</th><th>95% range</th><th>Money caught</th><th>False alerts per incident</th><th>Precision</th><th>Ranking (PR-AUC)</th></tr></thead><tbody>
+<tr><td>rules only<div class='sub'>no model</div></td><td class='n'>19.6</td><td class='n'>0 / 4024 = 0.000</td><td class='n'>0.00–0.00</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td><td>—</td></tr>
+<tr><td>shipped model + rules<div class='sub'>as it ships, never shown this data</div></td><td class='n'>19.6</td><td class='n'>0 / 4024 = 0.000</td><td class='n'>0.00–0.00</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td><td class='n'>0.034<div class='sub'>0.97× random</div></td></tr>
+<tr><td>shipped model alone<div class='sub'>as it ships, no rules</div></td><td class='n'>15.3</td><td class='n'>6 / 4024 = 0.002</td><td class='n'>0.00–0.00</td><td class='n'>0.1%</td><td class='n'>156.3</td><td class='n'>1.3%</td><td class='n'>0.034<div class='sub'>0.97× random</div></td></tr>
+<tr><td>retrained model + rules<div class='sub'>trained on the older part of this file</div></td><td class='n'>19.6</td><td class='n'>0 / 4024 = 0.000</td><td class='n'>0.00–0.00</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td><td class='n'>0.104<div class='sub'>3.02× random</div></td></tr>
+<tr><td>retrained model alone<div class='sub'>trained on this file, no rules</div></td><td class='n'>15.3</td><td class='n'>160 / 4024 = 0.040</td><td class='n'>0.03–0.05</td><td class='n'>6.6%</td><td class='n'>4.7</td><td class='n'>20.8%</td><td class='n'>0.104<div class='sub'>3.02× random</div></td></tr>
+<tr><td>retrained with the dataset&#x27;s own columns + rules<div class='sub'>a ceiling: uses columns a bank feed would not have</div></td><td class='n'>19.6</td><td class='n'>0 / 4024 = 0.000</td><td class='n'>0.00–0.00</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td><td class='n'>0.458<div class='sub'>13.24× random</div></td></tr>
+<tr><td>anomaly score (no labels) + rules<div class='sub'>never sees a label</div></td><td class='n'>19.6</td><td class='n'>0 / 4024 = 0.000</td><td class='n'>0.00–0.00</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td><td class='n'>0.048<div class='sub'>1.4× random</div></td></tr>
+<tr><td>amount alone<div class='sub'>the floor</div></td><td class='n'>15.3</td><td class='n'>18 / 4024 = 0.004</td><td class='n'>0.00–0.01</td><td class='n'>5.6%</td><td class='n'>51.7</td><td class='n'>2.1%</td><td class='n'>0.039<div class='sub'>1.12× random</div></td></tr>
+</tbody></table></div>
+<p class='note'>Ranking is budget-free: how well the arm's score puts fraud above everything else, against a random order. A good ranking caught little only when the budget is far below the fraud volume.</p>
+<h2>By fraud type</h2><div class='scroll'><table><thead><tr><th>Arm</th><th>UNSPECIFIED</th></tr></thead><tbody>
+<tr><td>rules only</td><td class='n'>0/4024 = 0.00</td></tr>
+<tr><td>shipped model + rules</td><td class='n'>0/4024 = 0.00</td></tr>
+<tr><td>shipped model alone</td><td class='n'>6/4024 = 0.00</td></tr>
+<tr><td>retrained model + rules</td><td class='n'>0/4024 = 0.00</td></tr>
+<tr><td>retrained model alone</td><td class='n'>160/4024 = 0.04</td></tr>
+<tr><td>retrained with the dataset&#x27;s own columns + rules</td><td class='n'>0/4024 = 0.00</td></tr>
+<tr><td>anomaly score (no labels) + rules</td><td class='n'>0/4024 = 0.00</td></tr>
+<tr><td>amount alone</td><td class='n'>18/4024 = 0.00</td></tr>
+</tbody></table></div>
+<h2>Fraud types the model was never shown</h2>
+<p class='note'>Not run: needs at least two labelled fraud types with 10+ incidents each.</p>
+<h2>How to read this</h2><ul><li><b>Incidents, not rows.</b> An incident counts as caught if any of its transactions is alerted: one alert opens the case.</li><li><b>Ranges overlap, no difference.</b> Two arms whose 95% ranges overlap are not distinguishable on this data.</li><li><b>Shipped versus retrained.</b> The shipped model learned a simulated Nigerian bank. A large gap to the retrained arm is expected on foreign data and says the model must be retrained on a bank's own outcomes before it is trusted.</li><li><b>No borrowed scores.</b> Columns somebody else computed (scores, risk, flags) were excluded as inputs (D10f).</li></ul>
+<h2>Mapping used</h2><pre># Risk Radar dataset mapping (D81) for IEEE-CIS Fraud Detection (Vesta, Kaggle).
+# Written 17 Sep 2026 from the published column list, then checked against the
+# downloaded files the same day (ml/datasets/join_ieee.py): every mapped column is
+# present; train 590,540 rows over 182 days, 3.50% fraud; test 506,691 rows, 30
+# days after train ends, no labels. The customer key gives 73,407 customers, half
+# with two transactions or fewer, so behavioural history is thin.
+#
+# What this dataset is: card-not-present e-commerce, with real chargeback labels.
+# What it cannot give: account transfers, declines (only processed transactions),
+# sign-in or SIM events, credits, destinations. So the rules built for Nigerian
+# transfers mostly cannot fire, and the test is mainly of the model and the method.
+#
+# Choices to check:
+# - Time: TransactionDT is seconds from an unstated start; 2017-11-30 is the common
+#   reading. Only gaps between transactions matter to the measurements.
+# - The customer: the file has no card number. card1 (issuer and card range),
+#   addr1 (billing region), P_emaildomain and card_start_day (transaction day minus
+#   D1, added by join_ieee.py) are the usual stand-in. Without card_start_day a
+#   card range reads as one card and the burst rule fired 20 times a day, all false.
+# - Labels: Vesta marks a card&#x27;s later transactions fraud after a chargeback, so
+#   incidents (fraud rows of one card within 24 hours) are the fairer unit.
+# - Native features for the ceiling arm: C1-C14 (counts) and D1-D15 (day gaps),
+#   Vesta&#x27;s own engineered columns. V1-V339 are left out: their meaning is not
+#   published (D10f: a column whose making cannot be read is not an input).
+dataset: IEEE-CIS Fraud Detection (Vesta)
+reviewed: true
+fields:
+  label:
+    column: isFraud
+    positive: [1]
+  incident:
+    derive: {by: customer, gap_hours: 24}
+  timestamp:
+    column: TransactionDT
+    unit: seconds
+    origin: &#x27;2017-11-30T00:00:00+00:00&#x27;
+  amount:
+    column: TransactionAmt
+    scale: 100
+  customer:
+    columns: [card1, addr1, P_emaildomain, card_start_day]
+  card:
+    columns: [card1, card2, card3, card5, addr1, P_emaildomain, card_start_day]
+  device:
+    column: DeviceInfo
+  channel:
+    constant: WEB
+  instrument:
+    constant: CARD
+  auth_result:
+    constant: APPROVED
+  region:
+    column: addr1
+  merchant_category:
+    column: ProductCD
+native_features:
+- C1
+- C2
+- C3
+- C4
+- C5
+- C6
+- C7
+- C8
+- C9
+- C10
+- C11
+- C12
+- C13
+- C14
+- D1
+- D2
+- D3
+- D4
+- D5
+- D6
+- D7
+- D8
+- D9
+- D10
+- D11
+- D12
+- D13
+- D14
+- D15
+- dist1
+- dist2
+ignore: {}
+</pre>
+<footer>Written by <code>ml/evaluate_dataset.py</code>. Alerts listed in <code>ieee_train.alerts.csv</code> (shipped model + rules). JSON beside this file.</footer>
+</main></body></html>

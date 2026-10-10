@@ -1,0 +1,32 @@
+# Production overlay (D101): the local backend stack, plus the public edge —
+# one origin behind Caddy with automatic HTTPS. Layer it on the base compose:
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml \
+#     --env-file .env up -d --build
+#
+# Only 80 and 443 need to reach the internet; keep 8000 closed at the cloud
+# firewall (the proxy reaches the API over the internal compose network as
+# `api:8000`, not the published port). See deploy/README.md for the full order.
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    environment:
+      RISKRADAR_SITE_ADDRESS: ${RISKRADAR_SITE_ADDRESS:?set your public address, e.g. riskradar.example.com}
+      RISKRADAR_ACME_EMAIL: ${RISKRADAR_ACME_EMAIL:-admin@localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    restart: unless-stopped
+    volumes:
+      # Persist the issued certificates so a restart does not re-request them.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

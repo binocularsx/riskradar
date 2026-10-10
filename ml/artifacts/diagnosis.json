@@ -1,0 +1,271 @@
+{
+  "baselines": [
+    {
+      "model": "gradient boosting (ours)",
+      "pr_auc": 0.3476,
+      "roc_auc": 0.8743,
+      "incident_recall": 0.6797,
+      "caught": 104,
+      "incidents": 153,
+      "ci95": [
+        0.602,
+        0.748
+      ]
+    },
+    {
+      "model": "logistic regression",
+      "pr_auc": 0.2849,
+      "roc_auc": 0.9151,
+      "incident_recall": 0.7124,
+      "caught": 109,
+      "incidents": 153,
+      "ci95": [
+        0.636,
+        0.778
+      ]
+    },
+    {
+      "model": "one feature: txn_count_1h_account",
+      "pr_auc": 0.1235,
+      "roc_auc": 0.8615,
+      "incident_recall": 0.6471,
+      "caught": 99,
+      "incidents": 153,
+      "ci95": [
+        0.569,
+        0.718
+      ]
+    },
+    {
+      "model": "one feature: distinct_beneficiaries_1h_account",
+      "pr_auc": 0.011,
+      "roc_auc": 0.5278,
+      "incident_recall": 0.268,
+      "caught": 41,
+      "incidents": 153,
+      "ci95": [
+        0.204,
+        0.343
+      ]
+    },
+    {
+      "model": "random guessing",
+      "pr_auc": 0.0029,
+      "roc_auc": 0.5003,
+      "incident_recall": 1.0,
+      "caught": 153,
+      "incidents": 153,
+      "ci95": [
+        0.976,
+        1.0
+      ]
+    }
+  ],
+  "confidence_intervals": [
+    {
+      "typology": "ACCOUNT_TAKEOVER",
+      "incidents": 47,
+      "point": 0.64,
+      "ci95": [
+        0.495,
+        0.76
+      ],
+      "width": 0.265
+    },
+    {
+      "typology": "ACCOUNT_TAKEOVER",
+      "incidents": 47,
+      "point": 0.89,
+      "ci95": [
+        0.774,
+        0.954
+      ],
+      "width": 0.18
+    },
+    {
+      "typology": "ACCOUNT_TAKEOVER",
+      "incidents": 47,
+      "point": 0.98,
+      "ci95": [
+        0.889,
+        0.996
+      ],
+      "width": 0.107
+    },
+    {
+      "typology": "CARD_TESTING",
+      "incidents": 49,
+      "point": 0.64,
+      "ci95": [
+        0.493,
+        0.753
+      ],
+      "width": 0.261
+    },
+    {
+      "typology": "CARD_TESTING",
+      "incidents": 49,
+      "point": 0.89,
+      "ci95": [
+        0.782,
+        0.956
+      ],
+      "width": 0.173
+    },
+    {
+      "typology": "CARD_TESTING",
+      "incidents": 49,
+      "point": 0.98,
+      "ci95": [
+        0.893,
+        0.996
+      ],
+      "width": 0.103
+    },
+    {
+      "typology": "MULE_FANOUT",
+      "incidents": 57,
+      "point": 0.64,
+      "ci95": [
+        0.502,
+        0.745
+      ],
+      "width": 0.243
+    },
+    {
+      "typology": "MULE_FANOUT",
+      "incidents": 57,
+      "point": 0.89,
+      "ci95": [
+        0.789,
+        0.951
+      ],
+      "width": 0.162
+    },
+    {
+      "typology": "MULE_FANOUT",
+      "incidents": 57,
+      "point": 0.98,
+      "ci95": [
+        0.907,
+        0.997
+      ],
+      "width": 0.09
+    }
+  ],
+  "calibration": {
+    "ece": 0.00119,
+    "worst_bin": [
+      0.4,
+      0.5,
+      100,
+      0.4441,
+      0.88
+    ],
+    "bins": [
+      {
+        "bin": [
+          0.0,
+          0.1
+        ],
+        "n": 621120,
+        "predicted": 0.00115,
+        "observed": 0.00181
+      },
+      {
+        "bin": [
+          0.1,
+          0.2
+        ],
+        "n": 808,
+        "predicted": 0.14475,
+        "observed": 0.31312
+      },
+      {
+        "bin": [
+          0.2,
+          0.3
+        ],
+        "n": 205,
+        "predicted": 0.23996,
+        "observed": 0.57073
+      },
+      {
+        "bin": [
+          0.3,
+          0.4
+        ],
+        "n": 108,
+        "predicted": 0.34473,
+        "observed": 0.73148
+      },
+      {
+        "bin": [
+          0.4,
+          0.5
+        ],
+        "n": 100,
+        "predicted": 0.44412,
+        "observed": 0.88
+      },
+      {
+        "bin": [
+          0.5,
+          0.6
+        ],
+        "n": 38,
+        "predicted": 0.53032,
+        "observed": 0.92105
+      },
+      {
+        "bin": [
+          0.6,
+          0.7
+        ],
+        "n": 56,
+        "predicted": 0.65852,
+        "observed": 0.98214
+      },
+      {
+        "bin": [
+          0.7,
+          0.8
+        ],
+        "n": 35,
+        "predicted": 0.71965,
+        "observed": 0.97143
+      },
+      {
+        "bin": [
+          0.8,
+          0.9
+        ],
+        "n": 6,
+        "predicted": 0.81481,
+        "observed": 1.0
+      }
+    ]
+  },
+  "correlated_pairs": [
+    {
+      "a": "amount_log10",
+      "b": "amount_ratio_to_account_p95_30d",
+      "spearman": 0.901
+    },
+    {
+      "a": "txn_count_1h_account",
+      "b": "distinct_beneficiaries_1h_account",
+      "spearman": 0.588
+    },
+    {
+      "a": "approved_value_ratio_24h_vs_daily_mean_30d",
+      "b": "device_is_new_to_subject",
+      "spearman": -0.501
+    },
+    {
+      "a": "failed_attempts_1h_account",
+      "b": "device_is_new_to_subject",
+      "spearman": 0.857
+    }
+  ]
+}

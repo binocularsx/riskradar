@@ -1,0 +1,492 @@
+"""Aggregates and search (FR-032, FR-034).
+
+D14b: transactions are presented as **aggregates and a searchable table**, never
+as a live feed of every transaction. A scrolling wall of every payment is
+unreadable, unmonitorable, and would push more bytes at the browser than the
+alert stream by three orders of magnitude.
+
+FR-034 lives here too rather than on its own screen (D25): alert volume, case
+outcomes and model metrics are the same query family as the charts, and a
+separate metrics page was one of the compensating cuts.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from ...cases import performance
+from ...config import settings
+from ...security import visibility
+from ...security.rbac import Permission
+from ..deps import get_conn, requires
+
+router = APIRouter(prefix="/v1", tags=["metrics"])
+
+
+def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return [dict(r) if not isinstance(r, dict) else r for r in cur.fetchall()]
+
+
+@router.get("/metrics/overview")
+def overview(
+    hours: int = Query(24, ge=1, le=720),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    window = f"{int(hours)} hours"
+
+    volume = _rows(
+        conn,
+        f"""
+        SELECT date_trunc('hour', occurred_at) AS bucket,
+               count(*)                        AS transactions,
+               count(*) FILTER (WHERE auth_result = 'APPROVED') AS approved,
+               count(*) FILTER (WHERE auth_result IN ('DECLINED','FAILED')) AS declined,
+               coalesce(sum(amount_minor) FILTER (WHERE auth_result = 'APPROVED'), 0)
+                                               AS approved_value_minor
+          FROM transactions
+         WHERE occurred_at > now() - interval '{window}'
+         GROUP BY 1 ORDER BY 1
+        """,
+    )
+
+    alerts = _rows(
+        conn,
+        f"""
+        SELECT date_trunc('hour', raised_at) AS bucket,
+               risk_level,
+               count(*) AS alerts
+          FROM alerts
+         WHERE raised_at > now() - interval '{window}'
+         GROUP BY 1, 2 ORDER BY 1
+        """,
+    )
+
+    risk_mix = _rows(
+        conn,
+        f"""
+        SELECT risk_level, decision, count(*) AS n
+          FROM decisions
+         WHERE decided_at > now() - interval '{window}'
+         GROUP BY 1, 2 ORDER BY 1
+        """,
+    )
+
+    outcomes = _rows(
+        conn,
+        """
+        SELECT coalesce(outcome::text, 'PENDING') AS outcome, state, count(*) AS n
+          FROM cases GROUP BY 1, 2 ORDER BY 1
+        """,
+    )
+
+    signals = _rows(
+        conn,
+        f"""
+        SELECT s->>'code' AS code, s->>'power' AS power, count(*) AS n
+          FROM decisions d, jsonb_array_elements(d.signals) s
+         WHERE d.decided_at > now() - interval '{window}'
+         GROUP BY 1, 2 ORDER BY n DESC
+        """,
+    )
+
+    # NFR-001 is a p95 latency claim, so the dashboard shows p95 — not a mean,
+    # which would hide exactly the tail the NFR is about.
+    latency = _rows(
+        conn,
+        f"""
+        SELECT count(*) AS scored,
+               percentile_disc(0.5)  WITHIN GROUP (ORDER BY latency_ms) AS p50_ms,
+               percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms,
+               max(latency_ms) AS max_ms,
+               count(*) FILTER (WHERE rule_only_mode) AS rule_only
+          FROM decisions
+         WHERE decided_at > now() - interval '{window}'
+        """,
+    )[0]
+
+    queue = _rows(
+        conn,
+        """
+        SELECT count(*) AS depth,
+               coalesce(max(extract(epoch FROM now() - enqueued_at)), 0) AS oldest_seconds,
+               coalesce(sum(attempts), 0) AS total_attempts
+          FROM scoring_queue
+        """,
+    )[0]
+
+    budget_row = _rows(
+        conn,
+        "SELECT value FROM app_config WHERE key = 'alert_budget_per_day'",
+    )
+    budget = int(budget_row[0]["value"]) if budget_row else 75
+    today = _rows(
+        conn,
+        "SELECT count(*) AS n FROM alerts WHERE raised_at > now() - interval '24 hours'",
+    )[0]["n"]
+
+    model = _rows(
+        conn,
+        """
+        SELECT name, version, calibration, metrics, trained_at, promoted_at
+          FROM model_versions WHERE is_active LIMIT 1
+        """,
+    )
+
+    return {
+        "window_hours": hours,
+        "transaction_volume": volume,
+        "alert_volume": alerts,
+        "risk_mix": risk_mix,
+        "case_outcomes": outcomes,
+        "signal_frequency": signals,
+        "latency": latency,
+        "queue": queue,
+        # D11d: the budget is not decoration — it is the number every threshold
+        # in the system was solved backwards from, so it belongs on the screen
+        # next to the volume it constrains.
+        "alert_budget": {
+            "per_day": budget,
+            "last_24h": today,
+            "utilisation": round(today / budget, 3) if budget else None,
+        },
+        "active_model": model[0] if model else None,
+    }
+
+
+@router.get("/metrics/geography")
+def geography(
+    hours: int = Query(168, ge=1, le=8760),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """Where the traffic and the alerts came from (D109).
+
+    ``transactions.ip_region`` holds ISO 3166-2 state codes for Nigeria. It is
+    the region the **session** appeared to come from, not the customer's
+    registered address, and the difference matters: a cluster here means several
+    sessions resolved to one state, which is how a cash-out ring looks, not
+    where anybody lives. The response says so, so a screen cannot quietly imply
+    otherwise.
+
+    Regions are not personal data under D9c — a state is not an identifier — so
+    this needs no token handling beyond what every other aggregate does.
+    """
+    window = f"{int(hours)} hours"
+    rows = _rows(
+        conn,
+        f"""
+        SELECT t.ip_region,
+               count(*)                                                    AS transactions,
+               count(*) FILTER (WHERE t.auth_result <> 'APPROVED')          AS declined,
+               count(DISTINCT t.subject_token)                              AS customers,
+               coalesce(sum(t.amount_minor) FILTER (WHERE t.auth_result = 'APPROVED'), 0) AS approved_value_minor,
+               count(a.id)                                                  AS alerts,
+               count(DISTINCT a.case_id) FILTER (WHERE a.case_id IS NOT NULL) AS cases
+          FROM transactions t
+          LEFT JOIN alerts a ON a.transaction_id = t.id
+         WHERE t.occurred_at > now() - interval '{window}'
+         GROUP BY 1 ORDER BY transactions DESC
+        """,
+    )
+    known = [r for r in rows if r["ip_region"]]
+    unknown = sum(int(r["transactions"]) for r in rows if not r["ip_region"])
+    total = sum(int(r["transactions"]) for r in known)
+    for r in known:
+        r["alert_rate"] = round(int(r["alerts"]) / int(r["transactions"]), 5) if r["transactions"] else 0.0
+    return {
+        "window_hours": hours,
+        "items": known,
+        "no_region": unknown,
+        "total": total,
+        "note": ("Region is derived from the session's IP address, not the customer's "
+                 "registered address. It shows where activity appeared to come from."),
+    }
+
+
+@router.get("/metrics/detection")
+def detection(
+    days: int = Query(30, ge=1, le=365),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """False alarms per rule and per model, from analyst outcomes (D69d).
+
+    Base PRD FR-505: an aggregate false-positive rate hides the one rule that is
+    drowning the desk. ``by_driver`` answers "which rule, or the model, put
+    cases in front of analysts, and how often were they right". ``rules``
+    answers, per rule, how often it fired and how often that became an alert;
+    for suppressing rules, how often it lowered risk on a customer who had a
+    confirmed fraud case within a day either side, which is the closest this
+    system can get to a missed-fraud count without labels on every payment.
+    """
+    window = f"{days} days"
+    alert_rows = _rows(
+        conn,
+        f"""
+        SELECT a.case_id, c.outcome, d.signals
+          FROM alerts a
+          JOIN cases c     ON c.id = a.case_id
+          JOIN decisions d ON d.id = a.decision_id
+         WHERE c.outcome IS NOT NULL
+           AND c.opened_at > now() - interval '{window}'
+        """,
+    )
+    decided_cases = len({r["case_id"] for r in alert_rows})
+
+    rules = _rows(
+        conn,
+        f"""
+        SELECT s->>'code' AS code, s->>'power' AS power,
+               count(*) AS fired,
+               count(*) FILTER (WHERE a.id IS NOT NULL) AS on_alerts
+          FROM decisions d
+          JOIN transactions t ON t.id = d.transaction_id
+          LEFT JOIN alerts a ON a.decision_id = d.id,
+               jsonb_array_elements(d.signals) s
+         WHERE d.decided_at > now() - interval '{window}'
+           -- Replayed history is scored but can never alert (D8d); counting it
+           -- would make a rule look as if it fired without consequence.
+           AND t.raise_alerts
+         GROUP BY 1, 2
+         ORDER BY fired DESC
+        """,
+    )
+    suppressed_on_fraud = {
+        r["code"]: int(r["n"])
+        for r in _rows(
+            conn,
+            f"""
+            SELECT s->>'code' AS code, count(*) AS n
+              FROM decisions d
+              JOIN transactions t ON t.id = d.transaction_id,
+                   jsonb_array_elements(d.signals) s
+             WHERE s->>'power' = 'SUPPRESS'
+               AND d.decided_at > now() - interval '{window}'
+               AND EXISTS (
+                   SELECT 1 FROM cases c
+                    WHERE c.subject_token = t.subject_token
+                      AND c.outcome = 'CONFIRMED_FRAUD'
+                      AND c.opened_at BETWEEN t.occurred_at - interval '24 hours'
+                                          AND t.occurred_at + interval '24 hours')
+             GROUP BY 1
+            """,
+        )
+    }
+    for rule in rules:
+        rule["fired"] = int(rule["fired"])
+        rule["on_alerts"] = int(rule["on_alerts"])
+        if rule["power"] == "SUPPRESS":
+            rule["lowered_risk_on_confirmed_fraud_customers"] = suppressed_on_fraud.get(rule["code"], 0)
+
+    case_rows = _rows(
+        conn,
+        f"""
+        SELECT c.id, c.outcome::text AS outcome,
+               count(a.id) AS alerts,
+               coalesce(sum(t.amount_minor), 0) AS alerted_value_minor
+          FROM cases c
+          JOIN alerts a       ON a.case_id = c.id
+          JOIN transactions t ON t.id = a.transaction_id
+         WHERE c.outcome IS NOT NULL
+           AND c.opened_at > now() - interval '{window}'
+         GROUP BY c.id, c.outcome
+        """,
+    )
+
+    return {
+        "window_days": days,
+        "decided_cases": decided_cases,
+        "min_decided_for_evidence": performance.MIN_DECIDED_FOR_EVIDENCE,
+        "by_driver": performance.by_driver(alert_rows),
+        "rules": rules,
+        # WP-09: the unit banks benchmark, not a raw count of false alarms.
+        "ratio": performance.alert_ratio(case_rows),
+    }
+
+
+@router.get("/metrics/budget-menu")
+def budget_menu(
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """What each alert budget buys, as measured offline (WP-09, D67c).
+
+    The figures come from ``ml/budget_menu.py``, not from live traffic: the
+    fraud a live system misses carries no label, so recall and value detection
+    can only be measured where the truth is known. Read-only by design.
+    """
+    path = settings().artifact_dir / "budget-menu.json"
+    menu = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    budget_row = _rows(conn, "SELECT value FROM app_config WHERE key = 'alert_budget_per_day'")
+    budget = int(budget_row[0]["value"]) if budget_row else 75
+    return performance.budget_menu(menu, budget)
+
+
+@router.get("/transactions/search")
+def search_transactions(
+    q: str | None = Query(None, description="transaction_ref or display name fragment"),
+    channel: str | None = None,
+    auth_result: str | None = None,
+    risk_level: str | None = None,
+    min_amount_minor: int | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: dict = Depends(requires(Permission.CASES_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    # D94: search is scoped like every other read. A payment is visible when the
+    # caller holds a case for that customer; a lead sees everything.
+    scope_sql, scope_params = visibility.subject_predicate(user, "t.subject_token")
+    where = [scope_sql]
+    params: dict[str, Any] = {"limit": limit, "offset": offset, **scope_params}
+    if q:
+        where.append("(t.transaction_ref ILIKE %(q)s OR t.display_name ILIKE %(q)s)")
+        params["q"] = f"%{q}%"
+    if channel:
+        where.append("t.channel = %(channel)s")
+        params["channel"] = channel
+    if auth_result:
+        where.append("t.auth_result = %(auth_result)s")
+        params["auth_result"] = auth_result
+    if risk_level:
+        where.append("d.risk_level = %(risk_level)s")
+        params["risk_level"] = risk_level
+    if min_amount_minor is not None:
+        where.append("t.amount_minor >= %(min_amount)s")
+        params["min_amount"] = min_amount_minor
+
+    items = _rows(
+        conn,
+        f"""
+        SELECT t.id, t.transaction_ref, t.occurred_at, t.amount_minor, t.currency,
+               t.channel, t.instrument, t.rail, t.auth_result, t.decline_reason,
+               t.display_name, t.ip_region, t.direction,
+               d.score_0_100, d.risk_level, d.decision,
+               (a.id IS NOT NULL) AS alerted, a.case_id
+          FROM transactions t
+          LEFT JOIN decisions d ON d.transaction_id = t.id
+          LEFT JOIN alerts a    ON a.transaction_id = t.id
+         WHERE {' AND '.join(where)}
+         ORDER BY t.occurred_at DESC
+         LIMIT %(limit)s OFFSET %(offset)s
+        """,
+        params,
+    )
+    return {"items": items, "limit": limit, "offset": offset}
+
+
+@router.get("/transactions/{transaction_ref}/check")
+def transaction_check(
+    transaction_ref: str,
+    user: dict = Depends(requires(Permission.CASES_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """One payment's risk check, whether or not it was ever flagged.
+
+    A flagged payment's check is already on its case. This is for the rest:
+    the payment support reports that the detector let through, or one a
+    colleague mentions. It answers "why did it score what it scored?" with the
+    same evidence a case shows — the warning signs, the decision trail, what
+    moved the model — and puts the payment in context.
+
+    Scoped like search (D94): a payment is visible when the caller holds a case
+    for that customer; a lead sees everything; anything else is a 404. The
+    context about the recipient is counts only, never other customers' payments.
+    """
+    scope_sql, scope_params = visibility.subject_predicate(user, "t.subject_token")
+    rows = _rows(
+        conn,
+        f"""
+        SELECT t.id, t.transaction_ref, t.occurred_at, t.amount_minor, t.currency,
+               t.channel, t.instrument, t.rail, t.auth_result, t.decline_reason,
+               t.ip_region, t.merchant_category, t.display_name, t.direction,
+               t.subject_token, t.beneficiary_token,
+               d.score_0_100, d.risk_level, d.p_fraud, d.decision, d.signals, d.attributions,
+               d.policy_trace, d.features, d.rule_only_mode, d.feature_spec_version,
+               mv.name AS model_name, mv.version AS model_version,
+               rs.version AS ruleset_version, ts.version AS threshold_version,
+               a.id AS alert_id, a.case_id, a.source AS alert_source
+          FROM transactions t
+          LEFT JOIN decisions d        ON d.transaction_id = t.id
+          LEFT JOIN model_versions mv  ON mv.id = d.model_version_id
+          LEFT JOIN rulesets rs        ON rs.id = d.ruleset_id
+          LEFT JOIN threshold_sets ts  ON ts.id = d.threshold_set_id
+          LEFT JOIN alerts a           ON a.transaction_id = t.id
+         WHERE t.transaction_ref = %(ref)s AND {scope_sql}
+        """,
+        {"ref": transaction_ref, **scope_params},
+    )
+    if not rows:
+        raise HTTPException(404, "no such payment, or it belongs to a customer outside your cases")
+    tx = rows[0]
+
+    # The customer's own activity either side of it: what else they did then.
+    around = _rows(
+        conn,
+        """
+        SELECT t.transaction_ref, t.occurred_at, t.amount_minor, t.currency, t.channel,
+               t.auth_result, t.direction, d.risk_level, (a.id IS NOT NULL) AS alerted, a.case_id
+          FROM transactions t
+          LEFT JOIN decisions d ON d.transaction_id = t.id
+          LEFT JOIN alerts a    ON a.transaction_id = t.id
+         WHERE t.subject_token = %(subject)s
+           AND t.occurred_at BETWEEN %(at)s - interval '24 hours' AND %(at)s + interval '24 hours'
+         ORDER BY t.occurred_at
+         LIMIT 60
+        """,
+        {"subject": tx["subject_token"], "at": tx["occurred_at"]},
+    )
+
+    recipient = None
+    if tx["beneficiary_token"]:
+        recipient = _rows(
+            conn,
+            """
+            SELECT count(DISTINCT t.subject_token) FILTER (WHERE t.subject_token <> %(subject)s) AS other_customers_24h,
+                   count(*) FILTER (WHERE t.subject_token = %(subject)s
+                                      AND t.occurred_at < %(at)s - interval '24 hours') AS paid_before_by_customer,
+                   EXISTS (SELECT 1 FROM beneficiary_lists b
+                            WHERE b.token = %(ben)s AND b.kind = 'KNOWN_MULE') AS known_mule
+              FROM transactions t
+             WHERE t.beneficiary_token = %(ben)s
+               AND t.occurred_at <= %(at)s
+               AND (t.subject_token = %(subject)s OR t.occurred_at > %(at)s - interval '24 hours')
+            """,
+            {"ben": tx["beneficiary_token"], "subject": tx["subject_token"], "at": tx["occurred_at"]},
+        )[0]
+
+    case = None
+    if tx["case_id"]:
+        case = _rows(conn, "SELECT id, state::text AS state, outcome::text AS outcome, risk_level::text AS risk_level "
+                           "FROM cases WHERE id = %s", (tx["case_id"],))
+        case = case[0] if case else None
+    else:
+        # Not flagged: is this customer already under investigation for something else?
+        open_case = _rows(conn, "SELECT id, state::text AS state, risk_level::text AS risk_level FROM cases "
+                                "WHERE subject_token = %s AND state <> 'CLOSED' ORDER BY opened_at DESC LIMIT 1",
+                          (tx["subject_token"],))
+        case = {**open_case[0], "not_on_this_payment": True} if open_case else None
+
+    for key in ("subject_token", "beneficiary_token"):
+        tx.pop(key)
+    return {"transaction": tx, "around": around, "recipient": recipient, "case": case,
+            "scored": tx["risk_level"] is not None}
+
+
+@router.get("/metrics/drift")
+def drift(
+    recent_days: float = Query(1.0, gt=0, le=30),
+    baseline_days: float = Query(7.0, gt=0, le=90),
+    user: dict = Depends(requires(Permission.METRICS_READ)),
+    conn: Any = Depends(get_conn),
+) -> dict[str, Any]:
+    """D88: score and feature drift (PSI) and each rule's firing rate, recent against baseline."""
+    from ...monitoring import report
+
+    return report(conn, recent_days=recent_days, baseline_days=baseline_days)

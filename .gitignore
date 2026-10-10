@@ -1,28 +1,44 @@
-# data
+.venv/
+__pycache__/
+*.pyc
+.env
+node_modules/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+ml/artifacts/*.pkl
+ml/artifacts/*.joblib
+fixtures/*.dump
+# D75: the simulated core's customer file, written by `riskradar_sim history`.
+fixtures/core_identities.csv
+logs/
+.local/
+
+# Generated corpora and feature caches. Reproducible from the simulator with a
+# fixed seed, and far too large for version control:
+#   python -m riskradar_sim corpus --profile training --out ml/data/corpus.jsonl
+ml/data/
+
+# D81: dataset evaluation by-products. The JSON and HTML reports are kept; the
+# feature caches, alert lists, replay labels and service logs are rebuilt on demand.
+ml/artifacts/datasets/*.npz
+ml/artifacts/datasets/*.alerts.csv
+ml/artifacts/datasets/*.jsonl
+ml/artifacts/datasets/*.log
+ml/artifacts/*.log
+.vs/
+
+# Ire's Nigerian-dataset analysis (archive/ire-ml-v1): local data and model files
 data/raw/*
 data/processed/*
 data/public/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/public/.gitkeep
-
-# archives someone may drop in data/ (e.g. manual backups) - never committed
+models/*.pkl
+models/*.joblib
+# manual archives dropped into data/ are never committed
 *.rar
 *.zip
 *.7z
-
-# models
-models/*.pkl
-models/*.joblib
-
-# python
-venv/
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-
-# env
-.env
-
-# editor
-.vscode/

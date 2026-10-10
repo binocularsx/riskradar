@@ -1,0 +1,45 @@
+# Risk Radar, one origin (D101b).
+#
+# The dashboard calls the API on relative paths and the session is a
+# SameSite=Lax first-party cookie (D12, D95), so the frontend and the API must
+# be served from the *same* origin or login silently stops working. Caddy does
+# that: it serves the built single-page app and reverse-proxies the API, the
+# health probes and the Server-Sent Events stream to the backend on the internal
+# network. With a real domain in RISKRADAR_SITE_ADDRESS it also provisions and
+# renews HTTPS automatically.
+
+{
+	# ACME contact for the TLS certificate. A real address is polite, not required.
+	email {$RISKRADAR_ACME_EMAIL:admin@localhost}
+}
+
+# The public address. A domain (riskradar.example.com) gets automatic HTTPS;
+# ":80" or "localhost" serves plain HTTP for a local trial.
+{$RISKRADAR_SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	# The API, the health probes and the live stream go to the backend — same
+	# origin, so the session cookie stays first-party and no CORS is needed.
+	@backend path /v1/* /health /health/*
+	handle @backend {
+		reverse_proxy api:8000 {
+			# Flush Server-Sent Events straight through instead of buffering (D14).
+			flush_interval -1
+		}
+	}
+
+	# Everything else is the built SPA; unknown paths fall back to index.html so
+	# client-side routing works on a hard refresh.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

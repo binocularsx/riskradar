@@ -1,0 +1,173 @@
+{
+  "budget_per_day": 120,
+  "test_days": 30.1,
+  "incidents": {
+    "ACCOUNT_TAKEOVER": 50,
+    "MULE_FANOUT": 53,
+    "CARD_TESTING": 47
+  },
+  "grid": [
+    {
+      "velocity_min": null,
+      "feasible": true,
+      "rules_per_day": 17.4,
+      "model_per_day": 102.6,
+      "system_per_day": 120.0,
+      "precision": 0.376,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 50,
+        "MULE_FANOUT": 52,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 1.0,
+        "MULE_FANOUT": 0.981,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.9937
+    },
+    {
+      "velocity_min": 5,
+      "feasible": false,
+      "rules_per_day": 188.0
+    },
+    {
+      "velocity_min": 6,
+      "feasible": false,
+      "rules_per_day": 142.9
+    },
+    {
+      "velocity_min": 7,
+      "feasible": true,
+      "rules_per_day": 117.1,
+      "model_per_day": 2.9,
+      "system_per_day": 120.0,
+      "precision": 0.238,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 16,
+        "MULE_FANOUT": 40,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.32,
+        "MULE_FANOUT": 0.755,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.6916
+    },
+    {
+      "velocity_min": 8,
+      "feasible": true,
+      "rules_per_day": 97.4,
+      "model_per_day": 22.6,
+      "system_per_day": 120.0,
+      "precision": 0.324,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 48,
+        "MULE_FANOUT": 47,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.96,
+        "MULE_FANOUT": 0.887,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.9489
+    },
+    {
+      "velocity_min": 9,
+      "feasible": true,
+      "rules_per_day": 80.8,
+      "model_per_day": 39.2,
+      "system_per_day": 120.0,
+      "precision": 0.345,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 50,
+        "MULE_FANOUT": 47,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 1.0,
+        "MULE_FANOUT": 0.887,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.9623
+    },
+    {
+      "velocity_min": 10,
+      "feasible": true,
+      "rules_per_day": 67.3,
+      "model_per_day": 52.6,
+      "system_per_day": 120.0,
+      "precision": 0.357,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 50,
+        "MULE_FANOUT": 48,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 1.0,
+        "MULE_FANOUT": 0.906,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.9686
+    },
+    {
+      "velocity_min": 12,
+      "feasible": true,
+      "rules_per_day": 47.3,
+      "model_per_day": 72.7,
+      "system_per_day": 120.0,
+      "precision": 0.368,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 50,
+        "MULE_FANOUT": 50,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 1.0,
+        "MULE_FANOUT": 0.943,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.9811
+    },
+    {
+      "velocity_min": 15,
+      "feasible": true,
+      "rules_per_day": 30.5,
+      "model_per_day": 89.5,
+      "system_per_day": 120.0,
+      "precision": 0.373,
+      "incidents_caught": {
+        "ACCOUNT_TAKEOVER": 50,
+        "MULE_FANOUT": 52,
+        "CARD_TESTING": 47
+      },
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 1.0,
+        "MULE_FANOUT": 0.981,
+        "CARD_TESTING": 1.0
+      },
+      "mean_incident_recall": 0.9937
+    }
+  ],
+  "best": {
+    "velocity_min": null,
+    "feasible": true,
+    "rules_per_day": 17.4,
+    "model_per_day": 102.6,
+    "system_per_day": 120.0,
+    "precision": 0.376,
+    "incidents_caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 52,
+      "CARD_TESTING": 47
+    },
+    "incident_recall": {
+      "ACCOUNT_TAKEOVER": 1.0,
+      "MULE_FANOUT": 0.981,
+      "CARD_TESTING": 1.0
+    },
+    "mean_incident_recall": 0.9937
+  }
+}

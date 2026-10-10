@@ -1,0 +1,52 @@
+{
+  "trained_on": "all typologies (production model)",
+  "held_out_typology": null,
+  "evidence_note": "Trained on everything, so it cannot be tested on an unseen typology. The figures below are the held-out evaluation of this same recipe.",
+  "system_mean_incident_recall": {
+    "rules only": 0.4793,
+    "one feature (txn_count_1h_account)": 0.6771,
+    "logistic regression": 0.7173,
+    "gradient boosting (ours)": 0.4033,
+    "rules + logistic regression": 0.7253,
+    "rules + gradient boosting (ours)": 0.8053
+  },
+  "calibration_on_fair_test": {
+    "confidence_ratio": 0.919,
+    "ece_alerting_region": 0.0319
+  },
+  "corpus": {
+    "rows": 2454813,
+    "fraud": 7272,
+    "incidents": 604,
+    "span_days": 120.6
+  },
+  "feature_names": [
+    "amount_log10",
+    "amount_ratio_to_account_p95_30d",
+    "txn_count_1h_account",
+    "approved_value_ratio_24h_vs_daily_mean_30d",
+    "failed_attempts_1h_account",
+    "decline_rate_24h_account",
+    "distinct_beneficiaries_1h_account",
+    "beneficiary_is_new_to_account",
+    "beneficiary_first_seen_days",
+    "device_is_new_to_subject",
+    "account_age_days",
+    "days_since_account_activity"
+  ],
+  "feature_baseline": [
+    4.357211,
+    0.022866,
+    0.0,
+    0.873551,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    2.024653,
+    0.0,
+    568.419775,
+    0.080185
+  ],
+  "alert_budget_per_day": 120
+}

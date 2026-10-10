@@ -1,0 +1,88 @@
+# Risk Radar dataset mapping (D81) for IEEE-CIS Fraud Detection (Vesta, Kaggle).
+# Written 17 Sep 2026 from the published column list, then checked against the
+# downloaded files the same day (ml/datasets/join_ieee.py): every mapped column is
+# present; train 590,540 rows over 182 days, 3.50% fraud; test 506,691 rows, 30
+# days after train ends, no labels. The customer key gives 73,407 customers, half
+# with two transactions or fewer, so behavioural history is thin.
+#
+# What this dataset is: card-not-present e-commerce, with real chargeback labels.
+# What it cannot give: account transfers, declines (only processed transactions),
+# sign-in or SIM events, credits, destinations. So the rules built for Nigerian
+# transfers mostly cannot fire, and the test is mainly of the model and the method.
+#
+# Choices to check:
+# - Time: TransactionDT is seconds from an unstated start; 2017-11-30 is the common
+#   reading. Only gaps between transactions matter to the measurements.
+# - The customer: the file has no card number. card1 (issuer and card range),
+#   addr1 (billing region), P_emaildomain and card_start_day (transaction day minus
+#   D1, added by join_ieee.py) are the usual stand-in. Without card_start_day a
+#   card range reads as one card and the burst rule fired 20 times a day, all false.
+# - Labels: Vesta marks a card's later transactions fraud after a chargeback, so
+#   incidents (fraud rows of one card within 24 hours) are the fairer unit.
+# - Native features for the ceiling arm: C1-C14 (counts) and D1-D15 (day gaps),
+#   Vesta's own engineered columns. V1-V339 are left out: their meaning is not
+#   published (D10f: a column whose making cannot be read is not an input).
+dataset: IEEE-CIS Fraud Detection (Vesta)
+reviewed: true
+fields:
+  label:
+    column: isFraud
+    positive: [1]
+  incident:
+    derive: {by: customer, gap_hours: 24}
+  timestamp:
+    column: TransactionDT
+    unit: seconds
+    origin: '2017-11-30T00:00:00+00:00'
+  amount:
+    column: TransactionAmt
+    scale: 100
+  customer:
+    columns: [card1, addr1, P_emaildomain, card_start_day]
+  card:
+    columns: [card1, card2, card3, card5, addr1, P_emaildomain, card_start_day]
+  device:
+    column: DeviceInfo
+  channel:
+    constant: WEB
+  instrument:
+    constant: CARD
+  auth_result:
+    constant: APPROVED
+  region:
+    column: addr1
+  merchant_category:
+    column: ProductCD
+native_features:
+- C1
+- C2
+- C3
+- C4
+- C5
+- C6
+- C7
+- C8
+- C9
+- C10
+- C11
+- C12
+- C13
+- C14
+- D1
+- D2
+- D3
+- D4
+- D5
+- D6
+- D7
+- D8
+- D9
+- D10
+- D11
+- D12
+- D13
+- D14
+- D15
+- dist1
+- dist2
+ignore: {}

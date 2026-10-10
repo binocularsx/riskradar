@@ -1,0 +1,72 @@
+# The IEEE-CIS mapping without a label: Kaggle never released test labels, so
+# the test split can be scored and replayed, not measured (D81d).
+dataset: 'IEEE-CIS Fraud Detection (Vesta), test split: no labels'
+reviewed: true
+fields:
+  timestamp:
+    column: TransactionDT
+    unit: seconds
+    origin: '2017-11-30T00:00:00+00:00'
+  amount:
+    column: TransactionAmt
+    scale: 100
+  customer:
+    columns:
+    - card1
+    - addr1
+    - P_emaildomain
+    - card_start_day
+  card:
+    columns:
+    - card1
+    - card2
+    - card3
+    - card5
+    - addr1
+    - P_emaildomain
+    - card_start_day
+  device:
+    column: DeviceInfo
+  channel:
+    constant: WEB
+  instrument:
+    constant: CARD
+  auth_result:
+    constant: APPROVED
+  region:
+    column: addr1
+  merchant_category:
+    column: ProductCD
+native_features:
+- C1
+- C2
+- C3
+- C4
+- C5
+- C6
+- C7
+- C8
+- C9
+- C10
+- C11
+- C12
+- C13
+- C14
+- D1
+- D2
+- D3
+- D4
+- D5
+- D6
+- D7
+- D8
+- D9
+- D10
+- D11
+- D12
+- D13
+- D14
+- D15
+- dist1
+- dist2
+ignore: {}

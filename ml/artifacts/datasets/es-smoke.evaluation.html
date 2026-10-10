@@ -1,0 +1,190 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ElectricSheep Nigerian transactions evaluation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root { --ink:#16202c; --ink-2:#4a5667; --line:#d9dee6; --bg:#fbfcfd; --surface:#fff; --accent:#1f5fa8;
+        --ok:#1d7a4f; --ok-bg:#e3f3ea; --no:#9a3b21; --no-bg:#f8e7e0; --warn-bg:#fff5da; }
+@media (prefers-color-scheme: dark) { :root { --ink:#e6ebf2; --ink-2:#a6b1c0; --line:#2c3644; --bg:#0f141b;
+        --surface:#161d27; --accent:#7fb0ea; --ok:#7fd3a5; --ok-bg:#15301f; --no:#f0a58c; --no-bg:#3a1d14; --warn-bg:#3a3014; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 "Libre Franklin", system-ui, sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding-block: 28px 60px; padding-inline: 20px; }
+h1 { font-size: 30px; margin: 4px 0 8px; text-wrap: balance; } h2 { font-size: 19px; margin: 34px 0 8px; }
+.kicker { font: 12px "IBM Plex Mono", monospace; letter-spacing: .06em; color: var(--ink-2); margin: 0; }
+.lede { color: var(--ink-2); max-width: 70ch; }
+.note, .sub { color: var(--ink-2); font-size: 13px; } .sub { margin-top: 2px; }
+.warn { background: var(--warn-bg); border: 1px solid var(--line); padding: 10px 14px; border-radius: 4px; margin: 10px 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.tile .v { font: 600 32px "IBM Plex Mono", monospace; color: var(--accent); } .tile .k { font-size: 13px; color: var(--ink-2); }
+.scroll { overflow-x: auto; } table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--ink-2); font-weight: 600; } td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+code, pre { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+pre { background: var(--surface); border: 1px solid var(--line); padding: 12px; overflow-x: auto; }
+.chip { font: 11px "IBM Plex Mono", monospace; padding: 1px 7px; border-radius: 10px; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.no { background: var(--no-bg); color: var(--no); }
+footer { margin-top: 40px; color: var(--ink-2); font-size: 12.5px; }
+</style></head><body><main>
+<header><p class='kicker'>Risk Radar · dataset evaluation (D81) · feature spec 1.3.0</p><h1>ElectricSheep Nigerian transactions</h1><p class='lede'>8,052 transactions evaluated of 8,053 in the file. Test period 2023-09-19 to 2024-01-28 (131.14 days), budget 0.1 alerts a day (the shipped operating point, 0.536% of traffic (75 a day, D76)).</p></header>
+<div class='warn'>there are 0.7 fraud rows a day against a budget of 0 alerts a day: row recall is capped well below 1 by the budget, not by detection. Incident recall is the fairer figure.</div>
+<section class='tiles'><div class='tile'><div class='v'>0.00</div><div class='k'>Switched on as it ships: incidents caught (shipped model + rules)<br>0 of 94 · 95% 0.00–0.04 · money 0.0% · — false alerts per incident</div></div><div class='tile'><div class='v'>0.00</div><div class='k'>After learning this data: incidents caught (retrained model + rules)<br>0 of 94 · 95% 0.00–0.04 · money 0.0% · — false alerts per incident</div></div><div class='tile'><div class='v'>0.01</div><div class='k'>Best arm: incidents caught (anomaly score (no labels) + rules)<br>1 of 94 · 95% 0.00–0.06 · money 0.2% · 12.0 false alerts per incident</div></div></section>
+<p class='note'>298 fraud rows (3.7% of rows) in 298 incidents; 94 incidents fall in the test period.</p>
+<h2>What this data can feed</h2><p>13 of 22 measurements carry information on this data. A measurement that cannot work here is not a detection failure; it is a fact about the file.</p>
+<div class='scroll'><table><thead><tr><th>Measurement</th><th>Works here</th><th>Why not</th><th>Share “does not apply”</th></tr></thead><tbody>
+<tr><td><code>amount_log10</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>amount_ratio_to_account_p95_30d</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>txn_count_1h_account</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>approved_value_ratio_24h_vs_daily_mean_30d</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>failed_attempts_1h_account</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped</td><td class='n'>0.0%</td></tr>
+<tr><td><code>decline_rate_24h_account</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped</td><td class='n'>0.0%</td></tr>
+<tr><td><code>distinct_beneficiaries_1h_account</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>beneficiary_is_new_to_account</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>25.1%</td></tr>
+<tr><td><code>beneficiary_first_seen_days</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>25.1%</td></tr>
+<tr><td><code>device_is_new_to_subject</code></td><td><span class='chip no'>no</span></td><td>constant on this data</td><td class='n'>0.0%</td></tr>
+<tr><td><code>account_age_days</code></td><td><span class='chip no'>no</span></td><td>no `account_opened_at` column mapped</td><td class='n'>100.0%</td></tr>
+<tr><td><code>days_since_account_activity</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>18.1%</td></tr>
+<tr><td><code>failed_logins_1h_subject</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>device_bound_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>credential_changed_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>sim_changed_hours</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0.0%</td></tr>
+<tr><td><code>payee_added_minutes</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>25.1%</td></tr>
+<tr><td><code>credits_24h_account</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>distinct_remitters_24h_account</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>inbound_count_ratio_24h_vs_daily_mean_30d</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>minutes_since_last_credit</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+<tr><td><code>pass_through_ratio_24h</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0.0%</td></tr>
+</tbody></table></div>
+<div class='scroll'><table><thead><tr><th>Rule</th><th>Can fire</th><th>Why not</th><th>Fired in test</th></tr></thead><tbody>
+<tr><td><code>VELOCITY_BURST_1H</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+<tr><td><code>ACCOUNT_TAKEOVER_SEQUENCE</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0</td></tr>
+<tr><td><code>MULE_INBOUND_FANIN</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+<tr><td><code>SECOND_LEG_ONWARD_PAYMENT</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+<tr><td><code>CARD_TESTING_PROBES</code></td><td><span class='chip no'>no</span></td><td>no `auth_result` column mapped</td><td class='n'>0</td></tr>
+<tr><td><code>SCAM_BENEFICIARY_FANIN</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+<tr><td><code>SIM_SWAP_TRANSFER</code></td><td><span class='chip no'>no</span></td><td>no sign-in, device or SIM event feed: a transaction file does not carry one</td><td class='n'>0</td></tr>
+<tr><td><code>DORMANT_ACCOUNT_REACTIVATION</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+<tr><td><code>CARD_PRESENT_NEW_REGION_CASHOUT</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+<tr><td><code>SANCTIONED_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>KNOWN_MULE_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>PRE_REGISTERED_BENEFICIARY</code></td><td><span class='chip no'>no</span></td><td>sanctions, confirmed-mule and payee lists belong to the bank, not the dataset</td><td class='n'>0</td></tr>
+<tr><td><code>ESTABLISHED_PAYEE_NORMAL</code></td><td><span class='chip ok'>yes</span></td><td></td><td class='n'>0</td></tr>
+</tbody></table></div>
+<h2>Each layer, same rows, same budget</h2>
+<div class='scroll'><table><thead><tr><th>Arm</th><th>Alerts a day</th><th>Incidents caught</th><th>95% range</th><th>Money caught</th><th>False alerts per incident</th><th>Precision</th></tr></thead><tbody>
+<tr><td>rules only<div class='sub'>no model</div></td><td class='n'>0.0</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+<tr><td>shipped model + rules<div class='sub'>as it ships, never shown this data</div></td><td class='n'>0.2</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+<tr><td>shipped model alone<div class='sub'>as it ships, no rules</div></td><td class='n'>0.2</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+<tr><td>retrained model + rules<div class='sub'>trained on the older part of this file</div></td><td class='n'>0.1</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+<tr><td>retrained model alone<div class='sub'>trained on this file, no rules</div></td><td class='n'>0.1</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+<tr><td>retrained with the dataset&#x27;s own columns + rules<div class='sub'>a ceiling: uses columns a bank feed would not have</div></td><td class='n'>0.1</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+<tr><td>anomaly score (no labels) + rules<div class='sub'>never sees a label</div></td><td class='n'>0.1</td><td class='n'>1 / 94 = 0.011</td><td class='n'>0.00–0.06</td><td class='n'>0.2%</td><td class='n'>12.0</td><td class='n'>7.7%</td></tr>
+<tr><td>amount alone<div class='sub'>the floor</div></td><td class='n'>0.1</td><td class='n'>0 / 94 = 0.000</td><td class='n'>0.00–0.04</td><td class='n'>0.0%</td><td class='n'>—</td><td class='n'>0.0%</td></tr>
+</tbody></table></div>
+<h2>By fraud type</h2><div class='scroll'><table><thead><tr><th>Arm</th><th>Account Takeover</th><th>Identity Fraud</th></tr></thead><tbody>
+<tr><td>rules only</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>shipped model + rules</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>shipped model alone</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>retrained model + rules</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>retrained model alone</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>retrained with the dataset&#x27;s own columns + rules</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>anomaly score (no labels) + rules</td><td class='n'>1/88 = 0.01</td><td class='n'>0/6 = 0.00</td></tr>
+<tr><td>amount alone</td><td class='n'>0/88 = 0.00</td><td class='n'>0/6 = 0.00</td></tr>
+</tbody></table></div>
+<h2>Fraud types the model was never shown</h2>
+<p>Each type in turn is removed from training, then looked for. This is the closest this file can come to the question “would it catch a new kind of fraud?”.</p>
+<div class='scroll'><table><thead><tr><th>Hidden type</th><th>rules only</th><th>retrained model + rules</th><th>retrained model alone</th><th>anomaly score (no labels) + rules</th></tr></thead><tbody>
+<tr><td>Account Takeover</td><td colspan='4'>too few other fraud rows to train on</td></tr>
+<tr><td>Identity Fraud</td><td class='n'>0/12 = 0.00<div class='sub'>0.00–0.24</div></td><td class='n'>0/12 = 0.00<div class='sub'>0.00–0.24</div></td><td class='n'>0/12 = 0.00<div class='sub'>0.00–0.24</div></td><td class='n'>0/12 = 0.00<div class='sub'>0.00–0.24</div></td></tr>
+</tbody></table></div>
+<p class='note'>hidden-type incidents are tested across the whole file; legitimate rows only from the test period. Span of the test rows 374.3 days.</p>
+<h2>How to read this</h2><ul><li><b>Incidents, not rows.</b> An incident counts as caught if any of its transactions is alerted: one alert opens the case.</li><li><b>Ranges overlap, no difference.</b> Two arms whose 95% ranges overlap are not distinguishable on this data.</li><li><b>Shipped versus retrained.</b> The shipped model learned a simulated Nigerian bank. A large gap to the retrained arm is expected on foreign data and says the model must be retrained on a bank's own outcomes before it is trusted.</li><li><b>No borrowed scores.</b> Columns somebody else computed (scores, risk, flags) were excluded as inputs (D10f).</li></ul>
+<h2>Mapping used</h2><pre># Risk Radar dataset mapping (D81). Written by `evaluate_dataset.py suggest`.
+# Read every field before running: a wrong sender or label column makes every
+# figure meaningless while looking plausible. Then set `reviewed: true`.
+# NOTE: no incident column: fraud rows of one customer (and type) within 24 hours count as one incident
+# NOTE: amounts are multiplied by 100 into minor units (kobo, cents); set `scale: 1` if already minor
+# NOTE: no approval/decline column: every row is treated as approved, so decline-based measurements and the card-testing rule cannot fire
+# NOTE: `transaction_type` values read as credits: [&#x27;deposit&#x27;]
+# NOTE: 17 other numeric columns are offered as `native_features` for the comparison arm only; delete any that are derived from the label or from the future
+dataset: ElectricSheep Nigerian transactions
+reviewed: true
+fields:
+  label:
+    column: is_fraud
+    positive:
+    - true
+  fraud_type:
+    column: fraud_type
+  incident:
+    derive:
+      by: customer
+      gap_hours: 24
+  timestamp:
+    column: timestamp
+    timezone: Africa/Lagos
+  amount:
+    column: amount_ngn
+    scale: 100
+  account:
+    column: sender_account
+  beneficiary:
+    column: receiver_account
+  device:
+    column: device_hash
+  channel:
+    column: payment_channel
+    values:
+      USSD: USSD
+      Bank Transfer: API
+      Mobile App: MOBILE_APP
+      Card: POS
+    default: API
+  auth_result:
+    constant: APPROVED
+  instrument:
+    column: transaction_type
+    values:
+      deposit: ACCOUNT_TRANSFER
+      payment: ACCOUNT_TRANSFER
+      withdrawal: CASH
+      transfer: ACCOUNT_TRANSFER
+    default: ACCOUNT_TRANSFER
+  direction:
+    column: transaction_type
+    values:
+      deposit: INBOUND
+      payment: OUTBOUND
+      withdrawal: OUTBOUND
+      transfer: OUTBOUND
+    default: OUTBOUND
+  region:
+    column: location
+  merchant_category:
+    column: merchant_category
+native_features:
+# Reviewed 17 Sep 2026: kept only columns computable from the row and its past.
+# Dropped user_txn_count_total, user_avg_txn_amt, user_std_txn_amt, device_seen_count,
+# ip_seen_count, is_device_shared, is_ip_shared, avg_gap_between_txns (whole-file
+# aggregates: they read the future) and time_since_last_transaction (negative, unexplained).
+- txn_hour
+- is_weekend
+- is_salary_week
+- is_night_txn
+- txn_count_last_1h
+- txn_count_last_24h
+- total_amount_last_1h
+- time_since_last
+ignore:
+  spending_deviation_score: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  velocity_score: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  geo_anomaly_score: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  geospatial_velocity_anomaly: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  merchant_fraud_rate: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  channel_risk_score: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  persona_fraud_risk: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+  location_fraud_risk: &#x27;somebody else&#x27;&#x27;s score or flag (D10f): never an input&#x27;
+</pre>
+<footer>Written by <code>ml/evaluate_dataset.py</code>. Alerts listed in <code>es-smoke.alerts.csv</code> (shipped model + rules). JSON beside this file.</footer>
+</main></body></html>

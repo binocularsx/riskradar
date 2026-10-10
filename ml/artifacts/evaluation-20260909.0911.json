@@ -1,0 +1,135 @@
+{
+  "held_out_typology": "ACCOUNT_TAKEOVER",
+  "held_out": {
+    "label": "held-out typology: ACCOUNT_TAKEOVER",
+    "n": 150442,
+    "positives": 442,
+    "base_rate_pct": 0.2938,
+    "pr_auc": 0.0183,
+    "roc_auc": 0.6897,
+    "at_alert_budget": {
+      "threshold": 0.017380144481710356,
+      "alerts": 894,
+      "true_positives": 46,
+      "transaction_recall": 0.1041,
+      "precision": 0.0515
+    },
+    "incident_level": {
+      "threshold": 0.017380144481710356,
+      "incidents": 45,
+      "incidents_caught": 33,
+      "incident_recall": 0.7333
+    },
+    "reliability": [
+      {
+        "bin_low": 0.0,
+        "bin_high": 0.1,
+        "n": 150279,
+        "mean_predicted": 0.0004,
+        "observed_rate": 0.00283
+      },
+      {
+        "bin_low": 0.1,
+        "bin_high": 0.2,
+        "n": 87,
+        "mean_predicted": 0.13307,
+        "observed_rate": 0.10345
+      },
+      {
+        "bin_low": 0.2,
+        "bin_high": 0.3,
+        "n": 20,
+        "mean_predicted": 0.24715,
+        "observed_rate": 0.25
+      },
+      {
+        "bin_low": 0.3,
+        "bin_high": 0.4,
+        "n": 14,
+        "mean_predicted": 0.36107,
+        "observed_rate": 0.0
+      },
+      {
+        "bin_low": 0.4,
+        "bin_high": 0.5,
+        "n": 14,
+        "mean_predicted": 0.45854,
+        "observed_rate": 0.0
+      },
+      {
+        "bin_low": 0.5,
+        "bin_high": 0.6,
+        "n": 13,
+        "mean_predicted": 0.53828,
+        "observed_rate": 0.0
+      },
+      {
+        "bin_low": 0.6,
+        "bin_high": 0.7,
+        "n": 3,
+        "mean_predicted": 0.652,
+        "observed_rate": 0.0
+      },
+      {
+        "bin_low": 0.7,
+        "bin_high": 0.8,
+        "n": 4,
+        "mean_predicted": 0.75594,
+        "observed_rate": 0.0
+      },
+      {
+        "bin_low": 0.8,
+        "bin_high": 0.9,
+        "n": 6,
+        "mean_predicted": 0.82373,
+        "observed_rate": 0.33333
+      },
+      {
+        "bin_low": 0.9,
+        "bin_high": 1.0,
+        "n": 2,
+        "mean_predicted": 0.98348,
+        "observed_rate": 0.0
+      }
+    ],
+    "note": "Accuracy is deliberately absent (D10c). Transaction-level recall is a misleading denominator here \u2014 see incident_level, which is the headline figure (D24a)."
+  },
+  "in_distribution": {
+    "pr_auc": 0.9463,
+    "incident_recall": 1.0
+  },
+  "corpus": {
+    "rows": 601869,
+    "fraud": 1869,
+    "span_days": 29.79
+  },
+  "feature_names": [
+    "amount_log10",
+    "amount_ratio_to_account_p95_30d",
+    "txn_count_1h_account",
+    "approved_value_ratio_24h_vs_daily_mean_30d",
+    "failed_attempts_1h_account",
+    "decline_rate_24h_account",
+    "distinct_beneficiaries_1h_account",
+    "beneficiary_is_new_to_account",
+    "beneficiary_first_seen_days",
+    "device_is_new_to_subject",
+    "account_age_days",
+    "days_since_account_activity"
+  ],
+  "feature_baseline": [
+    4.253192,
+    0.037957,
+    0.0,
+    1.701967,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    17.923241,
+    0.0,
+    615.805367,
+    0.082118
+  ],
+  "alert_budget_per_day": 120
+}

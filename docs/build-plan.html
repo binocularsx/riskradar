@@ -1,0 +1,802 @@
+<title>Risk Radar Build Plan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600;650;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --paper:#f3f5f8; --surface:#ffffff; --surface-2:#e8edf3; --line:#d0d8e2; --line-2:#a9b6c6;
+    --ink:#141a22; --ink-2:#4a5566; --ink-3:#7a8697;
+    --accent:#25548f; --accent-bg:#e1eaf6; --on-accent:#ffffff;
+    --met:#2c6b47; --met-bg:#e0efe6;
+    --part:#8a6516; --part-bg:#f5ecd8;
+    --not:#9a3a33; --not-bg:#f6e3e1;
+    --measure:66ch;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0d1117; --surface:#151c25; --surface-2:#1c2531; --line:#28333f; --line-2:#3f4d5e;
+      --ink:#e8eef5; --ink-2:#a6b3c3; --ink-3:#7a889a;
+      --accent:#7fa9e3; --accent-bg:#172437; --on-accent:#0d1117;
+      --met:#6cbf8e; --met-bg:#142a1e;
+      --part:#d9ab52; --part-bg:#2c2312;
+      --not:#e07f76; --not-bg:#2e1917;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0d1117; --surface:#151c25; --surface-2:#1c2531; --line:#28333f; --line-2:#3f4d5e;
+    --ink:#e8eef5; --ink-2:#a6b3c3; --ink-3:#7a889a;
+    --accent:#7fa9e3; --accent-bg:#172437; --on-accent:#0d1117;
+    --met:#6cbf8e; --met-bg:#142a1e;
+    --part:#d9ab52; --part-bg:#2c2312;
+    --not:#e07f76; --not-bg:#2e1917;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Source Serif 4",Georgia,serif; font-size:17px; line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding-block:48px 110px; padding-left:24px; padding-right:24px;}
+  .narrow{max-width:74ch;}
+  h1{
+    font-family:"Libre Franklin",system-ui,sans-serif; font-weight:700;
+    font-size:clamp(1.9rem,4.4vw,2.6rem); line-height:1.08; letter-spacing:-.025em;
+    margin:0 0 14px; text-wrap:balance;
+  }
+  h2{
+    font-family:"Libre Franklin",system-ui,sans-serif; font-weight:650; font-size:1.3rem;
+    line-height:1.24; letter-spacing:-.012em; margin:0 0 10px; text-wrap:balance;
+  }
+  h3{font-family:"Libre Franklin",system-ui,sans-serif; font-weight:650; font-size:.98rem; margin:26px 0 8px;}
+  p{margin:0 0 16px; max-width:var(--measure);}
+  strong{font-weight:600;}
+  .mono,code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.84em; font-variant-numeric:tabular-nums slashed-zero;}
+  code{background:var(--surface-2); padding:1px 5px; border-radius:3px;}
+  a{color:var(--accent);}
+  .kicker{
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--accent); margin:0 0 12px;
+  }
+  .lede{font-size:1.16rem; color:var(--ink-2); max-width:62ch; margin:0 0 8px;}
+  section{padding-block:38px; border-top:1px solid var(--line);}
+  section:first-of-type{border-top:none; padding-top:0;}
+  section.standing{border-top:1px solid var(--line);}
+  section.standing .tablewrap td:last-child{min-width:260px;}
+
+  /* header meta */
+  .meta{
+    display:flex; flex-wrap:wrap; gap:8px 10px; margin-top:18px;
+    font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink-3);
+  }
+  .meta span{border:1px solid var(--line); border-radius:999px; padding:3px 10px; background:var(--surface);}
+
+  /* verdict cards */
+  .verdicts{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px; margin:22px 0 0;}
+  .vcard{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:16px 18px;}
+  .vcard .v{
+    font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1.6rem; line-height:1;
+    font-variant-numeric:tabular-nums slashed-zero; color:var(--ink);
+  }
+  .vcard .k{font-family:"Libre Franklin",sans-serif; font-size:12.5px; color:var(--ink-2); margin-top:8px; line-height:1.4;}
+  .vcard .band{
+    display:inline-block; margin-top:9px; font-family:"IBM Plex Mono",monospace; font-size:9.5px;
+    letter-spacing:.08em; text-transform:uppercase; padding:2px 8px; border-radius:999px; border:1px solid;
+  }
+  .band.good{color:var(--met); background:var(--met-bg); border-color:var(--met);}
+  .band.mid{color:var(--part); background:var(--part-bg); border-color:var(--part);}
+
+  /* fp scale */
+  .figframe{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:22px 20px; margin:22px 0 0; overflow-x:auto;}
+  figure{margin:0;}
+  figcaption{
+    font-size:14px; color:var(--ink-2); margin-top:14px; padding-left:14px;
+    border-left:2px solid var(--accent); max-width:84ch; font-family:"Libre Franklin",sans-serif; line-height:1.5;
+  }
+  svg{display:block; width:100%; height:auto;}
+  svg.fpscale{min-width:600px;}
+  svg.arch{min-width:940px;}
+  .s-band{fill:var(--surface-2);}
+  .s-band-good{fill:var(--met-bg);}
+  .s-axis{stroke:var(--line-2); stroke-width:1;}
+  .s-tick{fill:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:10px;}
+  .s-bandlbl{fill:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.07em;}
+  .s-dot{fill:var(--accent);}
+  .s-dot-out{fill:var(--not);}
+  .s-dot-ring{fill:var(--surface); }
+  .s-lbl{fill:var(--ink); font-family:"Libre Franklin",sans-serif; font-size:11.5px; font-weight:650;}
+  .s-sub{fill:var(--ink-2); font-family:"IBM Plex Mono",monospace; font-size:10px;}
+
+  /* tables */
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:6px; background:var(--surface); margin:20px 0 0;}
+  table{width:100%; border-collapse:collapse; font-family:"Libre Franklin",system-ui,sans-serif; font-size:14px;}
+  th{
+    text-align:left; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.13em;
+    text-transform:uppercase; color:var(--ink-3); font-weight:500; padding:11px 14px;
+    border-bottom:1px solid var(--line); background:var(--surface-2); white-space:nowrap;
+  }
+  td{padding:11px 14px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.45; color:var(--ink-2);}
+  td strong{color:var(--ink);}
+  tbody tr:last-child td{border-bottom:none;}
+  td.v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums slashed-zero; white-space:nowrap; color:var(--ink);}
+  tr.now td{background:var(--accent-bg);}
+
+  .chip{
+    display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.08em;
+    text-transform:uppercase; padding:2px 8px; border-radius:999px; border:1px solid; white-space:nowrap;
+  }
+  .chip.ok{color:var(--met); background:var(--met-bg); border-color:var(--met);}
+  .chip.chg{color:var(--part); background:var(--part-bg); border-color:var(--part);}
+  .chip.new{color:var(--not); background:var(--not-bg); border-color:var(--not);}
+  .chip.acc{color:var(--accent); background:var(--accent-bg); border-color:var(--accent);}
+
+  .note{
+    border-left:3px solid var(--part); background:var(--surface); padding:14px 18px; border-radius:0 5px 5px 0;
+    margin:20px 0 0; font-size:15.5px; color:var(--ink-2); max-width:84ch;
+  }
+  .note.correct{border-left-color:var(--not);}
+  .note .tag{
+    display:block; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--part); margin-bottom:6px;
+  }
+  .note.correct .tag{color:var(--not);}
+  .note p{margin:0 0 10px; max-width:none;}
+  .note p:last-child{margin:0;}
+
+  /* breaks list */
+  .breaks{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-top:22px;}
+  .brk{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:16px 18px;}
+  .brk h4{font-family:"Libre Franklin",sans-serif; font-size:14.5px; font-weight:650; margin:0 0 7px; color:var(--ink);}
+  .brk p{font-size:14.5px; margin:0; color:var(--ink-2); max-width:none; line-height:1.5;}
+  .brk .from{
+    display:block; font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--ink-3);
+    margin-top:9px; letter-spacing:.03em;
+  }
+
+  /* work packages */
+  .wps{display:flex; flex-direction:column; gap:10px; margin-top:22px;}
+  .wp{
+    background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:0 6px 6px 0; padding:16px 20px;
+    display:grid; grid-template-columns:74px minmax(0,1fr) 148px; gap:18px; align-items:start;
+  }
+  .wp.later{border-left-color:var(--line-2);}
+  .wp .id{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; color:var(--accent); padding-top:2px;}
+  .wp.later .id{color:var(--ink-3);}
+  .wp h4{font-family:"Libre Franklin",sans-serif; font-size:15.5px; font-weight:650; margin:0 0 5px; color:var(--ink);}
+  .wp .does{font-size:15px; color:var(--ink-2); margin:0 0 9px; max-width:none; line-height:1.5;}
+  .wp .why{
+    font-family:"Libre Franklin",sans-serif; font-size:13px; color:var(--ink-2); margin:0;
+    padding-left:11px; border-left:2px solid var(--line-2); line-height:1.45;
+  }
+  .wp .why b{color:var(--ink); font-weight:600;}
+  .wp .side{display:flex; flex-direction:column; gap:6px; align-items:flex-start;}
+  .wp .side .row{font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--ink-3); line-height:1.5;}
+  .wp .side .row b{color:var(--ink-2); font-weight:500;}
+  @media (max-width:760px){
+    .wp{grid-template-columns:1fr; gap:10px;}
+    .wp .side{flex-direction:row; flex-wrap:wrap; gap:6px 14px;}
+  }
+
+  .notbuilding{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-top:18px;}
+  .nb{background:var(--surface); border:1px dashed var(--line-2); border-radius:6px; padding:14px 16px;}
+  .nb h4{font-family:"Libre Franklin",sans-serif; font-size:13.5px; font-weight:650; margin:0 0 5px;}
+  .nb p{font-size:13.5px; margin:0; color:var(--ink-2); max-width:none; line-height:1.45;}
+
+  footer.src{
+    margin-top:36px; padding-top:18px; border-top:1px solid var(--line);
+    font-family:"Libre Franklin",sans-serif; font-size:13px; color:var(--ink-3); line-height:1.75; max-width:90ch;
+  }
+  footer.src a{color:var(--ink-3);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important; transition:none!important;}}
+</style>
+
+<div class="wrap">
+
+  <section>
+    <p class="kicker">Risk Radar · architecture re-cut · 14 September 2026</p>
+    <h1>What a bank-grade build actually requires — and the nine packages that get us there</h1>
+    <p class="lede">The enterprise base PRD was treated as a checklist to score against. It is not a checklist. It is a description of a different shape of system, and three of its requirements do not add features to Risk Radar — they change the spine.</p>
+    <div class="meta">
+      <span>Benchmarks: Feedzai, IBM (2026)</span>
+      <span>Regulation verified: CBN, Nacha</span>
+      <span>9 work packages · 9 built</span>
+      <span>Supersedes base-prd-alignment.md §5.2, §7.1</span>
+    </div>
+  </section>
+
+  <section class="standing" id="where-it-stands">
+    <p class="kicker">Where the build stands · 17 September 2026</p>
+    <h2>All nine packages built, plus four the team added</h2>
+    <p class="narrow">Built, in order: WP-09, WP-05, WP-01, WP-06, WP-07, WP-02, WP-03, WP-04 and WP-08; then WP-06b (BVN identity), WP-10 (running the system on data we did not make), WP-11 (four Nigerian fraud types) and WP-12 (following a case to resolution, and who it is linked to). The desk runs at <strong>75 alerts a day</strong> (D76). Figures come from the 150-day corpus with seven fraud types (D82); earlier write-ups used three types on a 120-day corpus.</p>
+
+    <div class="verdicts">
+      <div class="vcard">
+        <div class="v">0.822</div>
+        <div class="k">Mean recall across seven fraud types, each hidden from training in turn: takeover 1.000, mule 0.960, card testing 1.000, SIM swap 0.972, dormant 0.872, scams 0.516, cloned cards 0.432</div>
+        <span class="band mid">Partly shaped by the simulator (D77d, D82c)</span>
+      </div>
+      <div class="vcard">
+        <div class="v">2.0 : 1</div>
+        <div class="k">False alerts per fraud incident on a time-ordered test at 75/day, all seven types present</div>
+        <span class="band good">Better than best-in-class 12–14</span>
+      </div>
+      <div class="vcard">
+        <div class="v">82.3%</div>
+        <div class="k">Share of fraud value flagged; lower than three types' 90.4% because seven now share the same 75 alerts</div>
+        <span class="band good">Above the 60–70% band</span>
+      </div>
+      <div class="vcard">
+        <div class="v">101.6×</div>
+        <div class="k">Ranking better than random on PaySim, data we did not write, after retraining there; the model as shipped reaches 1.9×</div>
+        <span class="band mid">Retrain on each bank's outcomes</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="tag">What the build measured and refused</span>
+      <p>The first three fraud types did not fall when four were added (0.991, 0.913, 0.976 before). Tuning the new rules caught three faults before anything shipped: a region check that hid a cloned card's own run, dormant accounts that were not dormant, and a giveaway check comparing card cash-outs with transfers (D82a). Two Nigerian transaction files, 5.09 and 1 million rows, have fraud labels no detector can learn from, even with their own score columns (D81a). Closing a confirmed-fraud case was failing and is fixed (D83a).</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Next</th><th>What it does</th><th>Can start</th><th>Why it waits or goes</th></tr>
+        </thead>
+        <tbody>
+          <tr class="now"><td class="v">IEEE-CIS</td><td>Run the system on real chargeback labels</td><td><span class="chip ok">When the files arrive</span></td><td>Mapping and join script are ready (D81c). Confirms the model and method on labels we did not write; the Nigerian transfer rules mostly cannot fire on card e-commerce data.</td></tr>
+          <tr><td class="v">Demo rebuild</td><td>Rebuild the simulated demo bank with seven fraud types</td><td><span class="chip chg">When the replay is done</span></td><td>The database holds the Nigerian dataset replay; a rebuild takes about three hours and replaces it.</td></tr>
+          <tr><td class="v">Before the defence</td><td>Re-run the speed test and calibration on the new corpus</td><td><span class="chip">Open</span></td><td>The 0.88 s and 0.919 figures predate events, credits and the new types.</td></tr>
+          <tr><td class="v">Bank track</td><td>Finacle, NIBSS, synchronous directives, shadow traffic</td><td><span class="chip">With a sponsor</span></td><td>Deferred, not undecided: D71e, D74c, D75d, D77d, D78e, D80c.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="tag">Reading the rest of this page</span>
+      <p>The three sections that follow and the spine diagram are the plan as written on 14 September, when the desk ran at 120 alerts a day on the earlier corpus; "today" in them means that day. Every blue box in the diagram is now built. The progress table under the work packages is kept current.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>First: the false alarms are not the problem. The unit is.</h2>
+    <p class="narrow">Reporting false positives per rule is not an admission — it is the single question the base PRD says ends vendor conversations, and best-in-class banks publish it. But we have been reporting it in the wrong unit. Banks do not benchmark <em>counts</em> of false alarms. They benchmark the <strong>ratio of false alerts to confirmed fraud</strong>, and the <strong>share of fraud value stopped</strong>. Measured that way, here is where Risk Radar actually sits.</p>
+
+    <div class="verdicts">
+      <div class="vcard">
+        <div class="v">15 : 1</div>
+        <div class="k">False alerts per fraud incident at the current 120/day budget</div>
+        <span class="band mid">Just outside best-in-class</span>
+      </div>
+      <div class="vcard">
+        <div class="v">6.6 : 1</div>
+        <div class="k">Same system at a 75/day budget, with no loss on fraud the model has seen</div>
+        <span class="band good">Better than published best-in-class</span>
+      </div>
+      <div class="vcard">
+        <div class="v">65%</div>
+        <div class="k">Share of fraud value detected (PaySim) — the industry's headline metric, VDR</div>
+        <span class="band good">Market-leading band, 60–70%</span>
+      </div>
+      <div class="vcard">
+        <div class="v">0.892</div>
+        <div class="k">Recall on fraud types hidden from training entirely</div>
+        <span class="band good">Not a metric vendors publish</span>
+      </div>
+    </div>
+
+    <div class="figframe">
+      <figure>
+        <svg class="fpscale" viewBox="0 0 900 250" role="img" aria-labelledby="fpTitle fpDesc">
+          <title id="fpTitle">False alerts per confirmed fraud incident, Risk Radar operating points against published bank benchmarks</title>
+          <desc id="fpDesc">A horizontal scale from 0 to 36 false alerts per fraud incident. Published best-in-class banks sit at 12 to 14 to 1; strong banks run up to and beyond 30 to 1. Risk Radar sits at 4 to 1 at a 60 per day budget, 6.6 to 1 at 75 per day, and 15 to 1 at the current 120 per day budget. The demo day figure of 32 to 1 is drawn from only 3 incidents.</desc>
+
+          <!-- bands -->
+          <rect class="s-band-good" x="40" y="40" width="280" height="58" rx="3"></rect>
+          <rect class="s-band" x="320" y="40" width="53" height="58" rx="3"></rect>
+          <rect class="s-band" x="373" y="40" width="427" height="58" rx="3" opacity="0.55"></rect>
+
+          <text class="s-bandlbl" x="296" y="18">BEST-IN-CLASS BAND, 12–14:1 ↓</text>
+          <text class="s-bandlbl" x="48" y="34">BETTER THAN PUBLISHED BEST-IN-CLASS</text>
+          <text class="s-bandlbl" x="381" y="34">STRONG BANKS — UP TO AND BEYOND 30:1</text>
+
+          <!-- axis -->
+          <line class="s-axis" x1="40" y1="112" x2="860" y2="112"></line>
+          <g>
+            <text class="s-tick" x="40" y="128" text-anchor="middle">0</text>
+            <text class="s-tick" x="173" y="128" text-anchor="middle">6</text>
+            <text class="s-tick" x="306" y="128" text-anchor="middle">12</text>
+            <text class="s-tick" x="440" y="128" text-anchor="middle">18</text>
+            <text class="s-tick" x="573" y="128" text-anchor="middle">24</text>
+            <text class="s-tick" x="706" y="128" text-anchor="middle">30</text>
+            <text class="s-tick" x="840" y="128" text-anchor="middle">36</text>
+          </g>
+          <text class="s-tick" x="40" y="146">FALSE ALERTS PER CONFIRMED FRAUD INCIDENT →</text>
+
+          <!-- points: x = 40 + ratio*22.2 -->
+          <!-- 60/day = 4:1 -->
+          <circle class="s-dot" cx="129" cy="69" r="7"></circle>
+          <line class="s-axis" x1="129" y1="76" x2="129" y2="112"></line>
+          <text class="s-lbl" x="129" y="176" text-anchor="middle">60 / day</text>
+          <text class="s-sub" x="129" y="192" text-anchor="middle">4:1 · 20 false</text>
+          <text class="s-sub" x="129" y="206" text-anchor="middle">held-out 0.846</text>
+
+          <!-- 75/day = 6.6:1 -->
+          <circle class="s-dot" cx="187" cy="69" r="7"></circle>
+          <line class="s-axis" x1="187" y1="76" x2="187" y2="112"></line>
+          <text class="s-lbl" x="187" y="222" text-anchor="middle">75 / day</text>
+          <text class="s-sub" x="187" y="238" text-anchor="middle">6.6:1 · held-out 0.862</text>
+
+          <!-- 120/day = 15:1 current -->
+          <circle class="s-dot" cx="373" cy="69" r="9"></circle>
+          <circle class="s-dot-ring" cx="373" cy="69" r="3.5"></circle>
+          <line class="s-axis" x1="373" y1="78" x2="373" y2="112"></line>
+          <text class="s-lbl" x="373" y="176" text-anchor="middle">120 / day — today</text>
+          <text class="s-sub" x="373" y="192" text-anchor="middle">15:1 · 75 false</text>
+          <text class="s-sub" x="373" y="206" text-anchor="middle">held-out 0.892</text>
+
+          <!-- demo day 32:1 -->
+          <circle class="s-dot-out" cx="750" cy="69" r="7"></circle>
+          <line class="s-axis" x1="750" y1="76" x2="750" y2="112"></line>
+          <text class="s-lbl" x="750" y="176" text-anchor="middle">Demo day</text>
+          <text class="s-sub" x="750" y="192" text-anchor="middle">32:1 — from 3 incidents</text>
+          <text class="s-sub" x="750" y="206" text-anchor="middle">too few to rate</text>
+        </svg>
+        <figcaption>The number that looked alarming — 97 of 117 alerts on legitimate payments — is one demo day carrying three fraud incidents. Our own decision log already says three incidents cannot set a rate (D66d). The evaluation figures, on 30 days and five incidents a day, are the ones that count, and they land inside the band banks advertise.</figcaption>
+      </figure>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Alert budget</th><th>False alerts / day</th><th>Ratio</th><th>Seen fraud caught</th><th>Held-out mean</th><th>What it costs</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="v">60 / day</td><td class="v">20</td><td class="v">4 : 1</td><td class="v">49/50 · 50/53</td><td class="v">0.846</td><td>Takeover recall falls to 0.658 on fraud never seen — intervals barely overlap 120's</td></tr>
+          <tr><td class="v">75 / day</td><td class="v">33</td><td class="v">6.6 : 1</td><td class="v">50/50 · 51/53</td><td class="v">0.862</td><td><strong>Almost nothing on seen fraud.</strong> Takeover on unseen fraud 0.777 → 0.703</td></tr>
+          <tr class="now"><td class="v">120 / day</td><td class="v">75</td><td class="v">15 : 1</td><td class="v">50/50 · 53/53</td><td class="v">0.892</td><td>Current setting. Buys the most recall on fraud the model has never seen</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="tag">The defensible line</span>
+      <p>Every one of those rows is a business choice, not a technical limit — and being able to <em>show</em> the choice is the thing. IBM's 2026 position is that operational capacity, not model quality, is now the binding constraint in fraud detection, and that the right question is not "how many alerts can we handle" but "how much fraud are we willing to miss." Risk Radar derives its thresholds from a fixed analyst capacity and reports recall at each. That is the architecture that question requires, and it was built in week three.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Second: the Nigerian clocks are real, they are dated, and two of them are not in our docs</h2>
+    <p class="narrow">Our base PRD alignment flagged the CBN clock values as unconfirmed secondary sources and said not to build on them. They are now confirmed against the circulars, and the regime moved while we were building.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Obligation</th><th>Clock</th><th>Source</th><th>In our docs?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Customer must report the fraud</td><td class="v">72 hours</td><td>APP draft, Nov 2025</td><td><span class="chip new">Missing</span></td></tr>
+          <tr><td>Bank acknowledges the report</td><td class="v">24 hours</td><td>APP draft, Nov 2025</td><td><span class="chip new">Missing</span></td></tr>
+          <tr><td>Originating bank notifies the other institution</td><td class="v">30 minutes</td><td>APP draft, Nov 2025</td><td><span class="chip ok">Yes</span></td></tr>
+          <tr><td>Investigation concludes</td><td class="v">14 working days</td><td>APP draft, Nov 2025</td><td><span class="chip ok">Yes</span></td></tr>
+          <tr><td>Reimbursement after investigation</td><td class="v">48 hours</td><td>APP draft, Nov 2025</td><td><span class="chip ok">Yes</span></td></tr>
+          <tr><td>Total refund, multi-institution</td><td class="v">16 working days</td><td>APP draft, Nov 2025</td><td><span class="chip ok">Yes</span></td></tr>
+          <tr><td>BVN temporary watch-list, with mandatory customer contact</td><td class="v">24 hours max</td><td>BVN addendum, Mar 2026</td><td><span class="chip chg">Listed, now in force</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note correct">
+      <span class="tag">Two corrections to our current documents</span>
+      <p><strong>The BVN watch-list is no longer a future requirement.</strong> CBN's addendum to the BVN framework was issued 12 March 2026 and took effect <strong>1 May 2026</strong>. REG-NG-04 is live regulation today, not a roadmap item — a temporary flag of at most 24 hours, during which the bank must contact the customer for clarification.</p>
+      <p><strong>There is a liability clause that speaks directly to D7.</strong> The APP framework puts the cost on the institution where it "fails to flag or freeze" a fraudulent transaction because its systems were inadequate, and lets CBN direct NIBSS to withhold settlement — extending to second-level beneficiary institutions. This does <em>not</em> mean Risk Radar should start blocking payments; D7 and D69a stand. It means the advisory output has to become something a bank can prove it received in time and acted on. That is WP-07, and it is the difference between "we chose not to enforce" and "we cannot be deployed into the liability regime that exists."</p>
+    </div>
+
+    <p class="narrow" style="margin-top:20px;">One more datum for the receiving-side argument: from March and June 2026, Nacha requires US receiving institutions to monitor <em>incoming</em> credits for the first time. Screening money coming in stopped being a differentiator and became a baseline obligation in two regimes at once, inside twelve months.</p>
+  </section>
+
+  <section>
+    <h2>Third: what actually breaks in the architecture</h2>
+    <p class="narrow">These are not features we skipped. Each one is a structural assumption in the current spine that the industry standard invalidates — and each is cheaper to change now than after another two weeks of features land on top of it.</p>
+
+    <div class="breaks">
+      <div class="brk">
+        <h4>The event is a transaction</h4>
+        <p>§6.1 defines a canonical <em>transaction</em> event. A login, a device binding, an MFA change, a SIM swap and a new-payee enrolment are none of those, and cannot be expressed in it at all. Every published account-takeover playbook is built on exactly these pre-authorisation signals.</p>
+        <span class="from">payment-only schema → event envelope, payment as one type</span>
+      </div>
+      <div class="brk">
+        <h4>Every profile is one-sided</h4>
+        <p>Account, customer and destination profiles are all built from the sender's side. Receive-side mule detection needs the opposite: account age at the moment of credit, inbound credit velocity, and how fast money leaves again. Those features exist only in the receiving institution.</p>
+        <span class="from">sender aggregates → two-sided profile store</span>
+      </div>
+      <div class="brk">
+        <h4>Decisions are one-shot</h4>
+        <p>Each transaction is scored alone. The receive-side playbook's core move is to link the inbound credit to the account's <em>next outbound debit</em> — a hold placed with conviction on the onward payment recovers more money than a millisecond decision on the credit.</p>
+        <span class="from">one event, one decision → linked two-leg decision</span>
+      </div>
+      <div class="brk">
+        <h4>Decisions have no expiry and no clock</h4>
+        <p>ALLOW / MONITOR / REVIEW / HOLD carry no time-to-live and no regulatory deadline. Every Nigerian obligation above is a clock, and a 24-hour BVN flag is a decision that must expire on its own. A case has no field for when the customer first reported.</p>
+        <span class="from">advisory band → directive with TTL + clock engine</span>
+      </div>
+      <div class="brk">
+        <h4>The alert budget is one undifferentiated pool</h4>
+        <p>All 120 alerts a day are routed to a human. The regulation itself names a machine action — flag the BVN for 24 hours and contact the customer — that no analyst needs to perform. Capacity should be allocated by disposition, not spent uniformly.</p>
+        <span class="from">one queue → tiered disposition, capacity per tier</span>
+      </div>
+      <div class="brk">
+        <h4>Nothing leaves the building</h4>
+        <p>The hashed identifier was designed to travel (D9d), but there is no path for it to travel on. The 30-minute counterparty notification is an outbound obligation, and cross-bank signal exchange is where receive-side detection gets most of its lift.</p>
+        <span class="from">closed system → counterparty channel, provable and timed</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The target spine</h2>
+    <p class="narrow">Everything in plain outline exists and is tested. Everything in blue is new work, and carries the number of the package that builds it. The shape is unchanged — channel and switch in, point-in-time features, rules and model scored separately, immutable decision, correlated case, sealed audit. What changes is what an event can be, whose side the profiles are built from, and what comes out of the decision.</p>
+
+    <div class="figframe">
+      <figure>
+        <svg class="arch" viewBox="0 0 1080 332" role="img" aria-labelledby="archTitle archDesc">
+          <title id="archTitle">Risk Radar target architecture, with new components marked by work package</title>
+          <desc id="archDesc">A seven-stage pipeline: sources, ingest, profile, score, decide, case, and surfaces. Existing components are drawn in plain outline; nine new components drawn in blue are labelled with work package numbers WP-01 through WP-09.</desc>
+          <defs>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--line-2)"></path>
+            </marker>
+          </defs>
+
+          <g font-family="IBM Plex Mono, monospace" font-size="9.5" letter-spacing="1.2" fill="var(--ink-3)">
+            <text x="14" y="16">SOURCES</text>
+            <text x="164" y="16">INGEST</text>
+            <text x="314" y="16">PROFILE</text>
+            <text x="464" y="16">SCORE</text>
+            <text x="614" y="16">DECIDE</text>
+            <text x="764" y="16">CASE</text>
+            <text x="914" y="16">SURFACES</text>
+          </g>
+
+          <!-- flow arrows between stages, at y=52 -->
+          <g stroke="var(--line-2)" stroke-width="1.3" marker-end="url(#arw)" fill="none">
+            <line x1="148" y1="52" x2="160" y2="52"></line>
+            <line x1="298" y1="52" x2="310" y2="52"></line>
+            <line x1="448" y1="52" x2="460" y2="52"></line>
+            <line x1="598" y1="52" x2="610" y2="52"></line>
+            <line x1="748" y1="52" x2="760" y2="52"></line>
+            <line x1="898" y1="52" x2="910" y2="52"></line>
+          </g>
+
+          <g font-family="Libre Franklin, system-ui, sans-serif">
+            <!-- STAGE 1 SOURCES -->
+            <rect x="14" y="30" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="24" y="49" font-size="11" font-weight="650" fill="var(--ink)">Channel layer</text>
+            <text x="24" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">app · USSD · agent</text>
+
+            <rect x="14" y="86" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="24" y="105" font-size="11" font-weight="650" fill="var(--ink)">Switch layer</text>
+            <text x="24" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">NIP · card · ATM</text>
+
+            <rect x="14" y="142" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="24" y="161" font-size="11" font-weight="650" fill="var(--ink)">Security events</text>
+            <text x="136" y="176" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-02</text>
+            <text x="24" y="176" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">login · device</text>
+
+            <!-- STAGE 2 INGEST -->
+            <rect x="164" y="30" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="174" y="49" font-size="11" font-weight="650" fill="var(--ink)">Event envelope</text>
+            <text x="286" y="64" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-01</text>
+            <text x="174" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">any event type</text>
+
+            <rect x="164" y="86" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="174" y="105" font-size="11" font-weight="650" fill="var(--ink)">Stamp the facts</text>
+            <text x="174" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">immutable at entry</text>
+
+            <!-- STAGE 3 PROFILE -->
+            <rect x="314" y="30" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="324" y="49" font-size="11" font-weight="650" fill="var(--ink)">Sender profiles</text>
+            <text x="324" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">account · customer</text>
+
+            <rect x="314" y="86" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="324" y="105" font-size="11" font-weight="650" fill="var(--ink)">Beneficiary side</text>
+            <text x="436" y="120" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-03</text>
+            <text x="324" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">inbound bursts</text>
+
+            <rect x="314" y="142" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="324" y="161" font-size="11" font-weight="650" fill="var(--ink)">Session state</text>
+            <text x="436" y="176" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-02</text>
+            <text x="324" y="176" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">in-session</text>
+
+            <!-- STAGE 4 SCORE -->
+            <rect x="464" y="30" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="474" y="49" font-size="11" font-weight="650" fill="var(--ink)">Rules</text>
+            <text x="474" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">owned · reviewed</text>
+
+            <rect x="464" y="86" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="474" y="105" font-size="11" font-weight="650" fill="var(--ink)">Model</text>
+            <text x="474" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">calibrated, apart</text>
+
+            <rect x="464" y="142" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="474" y="161" font-size="11" font-weight="650" fill="var(--ink)">Second-leg link</text>
+            <text x="586" y="176" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-04</text>
+            <text x="474" y="176" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">credit → debit</text>
+
+            <!-- STAGE 5 DECIDE -->
+            <rect x="614" y="30" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="624" y="49" font-size="11" font-weight="650" fill="var(--ink)">Policy tiers</text>
+            <text x="736" y="64" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-08</text>
+            <text x="624" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">3 dispositions</text>
+
+            <rect x="614" y="86" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="624" y="105" font-size="11" font-weight="650" fill="var(--ink)">Decision record</text>
+            <text x="624" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">immutable</text>
+
+            <rect x="614" y="142" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="624" y="161" font-size="11" font-weight="650" fill="var(--ink)">Directive + TTL</text>
+            <text x="736" y="176" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-07</text>
+            <text x="624" y="176" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">fail-open, timed</text>
+
+            <rect x="614" y="198" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="624" y="217" font-size="11" font-weight="650" fill="var(--ink)">Subject flag, 24h</text>
+            <text x="736" y="232" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-06</text>
+            <text x="624" y="232" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">BVN watch-list</text>
+
+            <!-- STAGE 6 CASE -->
+            <rect x="764" y="30" width="132" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="774" y="49" font-size="11" font-weight="650" fill="var(--ink)">Case</text>
+            <text x="774" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">one incident, one</text>
+
+            <rect x="764" y="86" width="132" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="774" y="105" font-size="11" font-weight="650" fill="var(--ink)">Regulatory clocks</text>
+            <text x="886" y="120" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-05</text>
+            <text x="774" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">72h · 30m · 14d</text>
+
+            <!-- STAGE 7 SURFACES -->
+            <rect x="914" y="30" width="152" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="924" y="49" font-size="11" font-weight="650" fill="var(--ink)">Analyst desk</text>
+            <text x="924" y="64" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">rank · decide · close</text>
+
+            <rect x="914" y="86" width="152" height="44" rx="4" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1"></rect>
+            <text x="924" y="105" font-size="11" font-weight="650" fill="var(--ink)">Audit chain</text>
+            <text x="924" y="120" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">hash-chained</text>
+
+            <rect x="914" y="142" width="152" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="924" y="161" font-size="11" font-weight="650" fill="var(--ink)">Ratio + VDR</text>
+            <text x="1056" y="176" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-09</text>
+            <text x="924" y="176" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">what banks measure</text>
+
+            <rect x="914" y="198" width="152" height="44" rx="4" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="924" y="217" font-size="11" font-weight="650" fill="var(--ink)">Counterparty notify</text>
+            <text x="1056" y="232" font-size="8.5" text-anchor="end" fill="var(--accent)" font-family="IBM Plex Mono, monospace">WP-05</text>
+            <text x="924" y="232" font-size="8.5" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">30 minutes, proven</text>
+          </g>
+
+          <!-- legend -->
+          <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--ink-3)">
+            <rect x="14" y="288" width="16" height="12" rx="2" fill="var(--surface)" stroke="var(--line-2)"></rect>
+            <text x="38" y="298">BUILT AND TESTED TODAY</text>
+            <rect x="220" y="288" width="16" height="12" rx="2" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"></rect>
+            <text x="244" y="298">NEW WORK, WITH ITS PACKAGE NUMBER</text>
+          </g>
+        </svg>
+        <figcaption>Six of the nine packages sit inside the two stages the base PRD scored us lowest on — profile and decide. None of them require a bank. All of them are testable against the simulator.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>The nine work packages</h2>
+    <p class="narrow">Each is named for what it does, not for the component it adds. Dependencies run downward: nothing below needs anything above it that has not shipped.</p>
+
+    <!-- progress:start -->
+    <h3>Progress</h3>
+    <p class="narrow">9 of 9 built. Listed in build order; updated as each package lands, with the decision that records it.</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Package</th><th>What it does</th><th>Status</th><th>Updated</th><th>Record</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="v">WP-09</td><td>Report the ratio, not the raw count</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D70 · /v1/metrics/budget-menu</td></tr>
+          <tr><td class="v">WP-05</td><td>Clocks the regulator sets</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D71 · migration 0007 · run_clocks.py</td></tr>
+          <tr><td class="v">WP-01</td><td>One event, not one transaction</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D72 · migration 0008 · /v1/events</td></tr>
+          <tr><td class="v">WP-06</td><td>The twenty-four hour flag</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D73 · migration 0009 · BVN level in WP-06b</td></tr>
+          <tr><td class="v">WP-07</td><td>A decision a bank can act on</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D74 · migration 0010 · SHADOW v1</td></tr>
+          <tr><td class="v">WP-06b</td><td>BVN identity and the industry watch-list</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D75 · migration 0011 · Finacle and NIBSS adapters wait for connection</td></tr>
+          <tr><td class="v">WP-02</td><td>Signals before the money moves</td><td><span class="chip ok">Built</span></td><td class="v">14 Sep 2026</td><td>D77 · unseen takeover 0.726 to 0.986 at 75/day</td></tr>
+          <tr><td class="v">WP-03</td><td>Watch the money coming in</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D78 · credits scored by rules · 73% of mule rings at 7.3/day</td></tr>
+          <tr><td class="v">WP-04</td><td>The second leg</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D79 · mule value flagged 63.5% to 84.9% at 75/day</td></tr>
+          <tr><td class="v">WP-08</td><td>Spend the budget by tier</td><td><span class="chip ok">Built</span></td><td class="v">15 Sep 2026</td><td>D80 · analyst reviews 75 to 51/day, detection unchanged</td></tr>
+          <tr><td class="v">WP-10</td><td>Measure the system on data we did not make</td><td><span class="chip ok">Built</span></td><td class="v">17 Sep 2026</td><td>D81 · PaySim retrained 101.6x random · Nigerian files unusable · IEEE-CIS mapped</td></tr>
+          <tr><td class="v">WP-11</td><td>Four Nigerian fraud types</td><td><span class="chip ok">Built</span></td><td class="v">17 Sep 2026</td><td>D82 · seven types held out, mean 0.822 at 75/day · first three did not fall</td></tr>
+          <tr><td class="v">WP-12</td><td>Follow a case to resolution, and who it is linked to</td><td><span class="chip ok">Built</span></td><td class="v">17 Sep 2026</td><td>D83, D84 · migration 0015 · live desk, case tracker, connections</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- progress:end -->
+
+    <div class="wps">
+
+      <div class="wp">
+        <div class="id">WP-01</div>
+        <div>
+          <h4>One event, not one transaction</h4>
+          <p class="does">Generalise the canonical transaction event into an envelope carrying an <code>event_type</code>, with the payment fields becoming one payload among several. Ingestion, validation and the feature package all key off the type. Nothing about payment scoring changes.</p>
+          <p class="why"><b>Why now:</b> every other detection package is blocked behind it, and the cost of changing the event shape doubles with every feature written against the old one. This is the same argument §6.1 already makes for <code>auth_result</code> — and it was right then.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-102 foundation</div>
+          <div class="row"><b>Touches</b> PRD §6.1, ingest, features, migrations</div>
+          <div class="row"><b>Size</b> Medium</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-02</div>
+        <div>
+          <h4>Signals before the money moves</h4>
+          <p class="does">Consume the six events that precede a fraudulent transfer — login, failed-login burst, device binding, credential or MFA change, new payee enrolment, SIM change — and hold per-session state so a sequence can be scored, not just a payment.</p>
+          <p class="why"><b>Why now:</b> our own evidence says the model catches account takeover and the rules barely touch it — and the strongest takeover signals are not transactions at all. Published takeover playbooks are built on precisely these pre-authorisation and in-session signals. The simulator can emit them; no bank required.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-102, FR-206</div>
+          <div class="row"><b>Needs</b> WP-01</div>
+          <div class="row"><b>Size</b> Large</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-03</div>
+        <div>
+          <h4>Watch the money coming in</h4>
+          <p class="does">Build beneficiary-side profiles and score inbound credits: how old the receiving account was when the money landed, how many credits it has taken lately, and how fast the balance leaves again.</p>
+          <p class="why"><b>Why now:</b> this stopped being optional in two regimes inside a year. Nacha made receiving-side monitoring mandatory in phases through 2026, and CBN's framework lets the regulator withhold settlement from second-level beneficiary institutions — meaning a Nigerian bank can now lose money on fraud it merely <em>received</em>.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-209, REG-NG-08</div>
+          <div class="row"><b>Needs</b> WP-01</div>
+          <div class="row"><b>Size</b> Medium</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-04</div>
+        <div>
+          <h4>The second leg</h4>
+          <p class="does">Link an inbound credit to the receiving account's next outbound debit inside a watch window, and score the pair as one thing rather than two unrelated events.</p>
+          <p class="why"><b>Why now:</b> the receive-side playbook's central finding is that the recoverable moment is the <em>onward</em> payment, not the credit — a short hold applied with conviction on the second leg recovers more than an instant decision on the first. Our mule fan-out typology is exactly this pattern seen from the wrong side.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-204 precursor</div>
+          <div class="row"><b>Needs</b> WP-03</div>
+          <div class="row"><b>Size</b> Medium</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-05</div>
+        <div>
+          <h4>Clocks the regulator sets</h4>
+          <p class="does">A clock service: deadlines as versioned configuration rather than code, Nigerian working-day arithmetic, a <code>first_reported_at</code> on every case because that is what starts the refund clock, a counterparty institution field, and escalation when a clock is breached rather than a passive "past due" state.</p>
+          <p class="why"><b>Why now:</b> all seven CBN obligations are clocks, and four of them are measured in working days — which is a calendar problem, not a timer problem. This is the largest regulatory gap we have, and it is entirely buildable without a bank because the clock engine is pure logic and pure tests.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> REG-NG-05, -06; FR-407</div>
+          <div class="row"><b>Needs</b> nothing</div>
+          <div class="row"><b>Size</b> Large</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-06</div>
+        <div>
+          <h4>The twenty-four hour flag</h4>
+          <p class="does">A subject-level watch-list entry that expires on its own after 24 hours, prompts the analyst to contact the customer, and records the restriction and its lifting in the sealed audit chain.</p>
+          <p class="why"><b>Why now:</b> CBN's BVN addendum took effect on 1 May 2026. This is not a roadmap item — it is current law, it is small, and it is the single cheapest way to show a Nigerian examiner that the build tracks live regulation rather than a textbook.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> REG-NG-04</div>
+          <div class="row"><b>Needs</b> WP-05 clock</div>
+          <div class="row"><b>Size</b> Small</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-07</div>
+        <div>
+          <h4>A decision a bank can act on</h4>
+          <p class="does">Turn the advisory band into a contract: an idempotent directive with a time-to-live, a written fail-open policy, a shadow-mode switch, and a record of the moment the bank was told. Risk Radar still never enforces anything.</p>
+          <p class="why"><b>Why now:</b> the APP framework places the loss on institutions whose systems fail to flag or freeze in time. We are not going to enforce — D7 stands — but the output has to be something a bank can wire in and prove it received. That turns "advisory by choice" into a deployable position instead of a limitation.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-301 seam, FR-305</div>
+          <div class="row"><b>Needs</b> nothing</div>
+          <div class="row"><b>Size</b> Medium</div>
+          <div class="row"><span class="chip acc">Contract now, wiring with a bank</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-08</div>
+        <div>
+          <h4>Spend the budget by tier</h4>
+          <p class="does">The policy layer returns a disposition — close automatically, take the machine action, or send to a human — and capacity is allocated per tier instead of spending all 120 alerts on analyst review.</p>
+          <p class="why"><b>Why now:</b> the regulation itself names an action no analyst is needed for (flag the subject, contact the customer). Routing by confidence is the one lever IBM identifies for scaling fraud operations without hiring, and our alert budget already has the calibrated probabilities that make tiering possible.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-303, O5</div>
+          <div class="row"><b>Needs</b> WP-06 for the action tier</div>
+          <div class="row"><b>Size</b> Medium</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+      <div class="wp">
+        <div class="id">WP-09</div>
+        <div>
+          <h4>Report the ratio, not the raw count</h4>
+          <p class="does">Add false-alerts-per-confirmed-fraud and value detection rate to the analytics screen, and put the budget menu — 120, 75, 60 a day — on screen with the recall each one buys.</p>
+          <p class="why"><b>Why now:</b> these are the two numbers banks actually benchmark on, and we already have both. Reported as raw counts, our figures read as a failure; reported as a ratio, the same system sits in the band vendors advertise. It is a day of work that changes the entire reading of the build.</p>
+        </div>
+        <div class="side">
+          <div class="row status"><span class="chip ok">Built</span></div>
+          <div class="row"><b>Serves</b> FR-603, O2</div>
+          <div class="row"><b>Needs</b> nothing</div>
+          <div class="row"><b>Size</b> Small</div>
+          <div class="row"><span class="chip acc">No bank needed</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <h3>If only three get built</h3>
+    <p class="narrow">WP-09, then WP-05, then WP-01. The first changes how every number we already have is read. The second closes the largest regulatory gap on the board and is pure testable logic. The third unblocks everything else and only gets more expensive from here.</p>
+  </section>
+
+  <section>
+    <h2>What we are deliberately not building</h2>
+    <p class="narrow">A plan is only credible if it says no to something. These stay out, and the reason is not time.</p>
+    <div class="notbuilding">
+      <div class="nb">
+        <h4>Blocking and enforcement</h4>
+        <p>D7 stands. We build the seam and the proof of delivery; the bank enforces. Taking on automatic enforcement without a sponsor and a signed fail-open policy is a different project with a different liability.</p>
+      </div>
+      <div class="nb">
+        <h4>One blended risk score</h4>
+        <p>D11 stands. Blending an ordinal rule severity with a calibrated probability destroys the calibration the entire alert budget depends on — and the budget is our strongest architectural claim.</p>
+      </div>
+      <div class="nb">
+        <h4>Graph and ring analysis</h4>
+        <p>Real, and on the roadmap, but WP-04's linked second leg delivers most of the mule-ring value for a fraction of the work. Do the cheap version first and measure it.</p>
+      </div>
+      <div class="nb">
+        <h4>Behavioural biometrics, identity bureaus</h4>
+        <p>Both require data no simulator can honestly invent and no team can obtain without a bank. Claiming them on synthetic data would undo the one thing this project has been strict about.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="src">
+    <strong>Sources.</strong> Benchmarks: <a href="https://www.feedzai.com/blog/fraud-benchmarking/">Feedzai, How Top Banks Benchmark Fraud Performance</a> (value detection rate tiers; false-positive ratios of 12:1–14:1 best-in-class, strong banks beyond 30:1) · <a href="https://www.ibm.com/think/insights/fraud-detection-no-longer-limited-models-limited-by-operations">IBM, Why operational capacity is becoming the binding constraint in fraud detection</a>.
+    Regulation: <a href="https://techcabal.com/2025/12/02/nigerian-banks-16-days-fraud-refund-cbn/">CBN Exposure Draft, Guidelines for Handling Authorised Push Payment Fraud, 26 Nov 2025</a> · <a href="https://nairametrics.com/2026/03/13/cbn-tightens-bvn-rules-introduces-fraud-watchlist-for-banking-customers/">CBN Addendum to the Revised BVN Framework, 12 Mar 2026, effective 1 May 2026</a> · <a href="https://www.outseer.com/blog/2026-nacha-rule-change-proactive-fraud-monitoring-requirement">Nacha 2026 fraud-monitoring rule, receiving-side monitoring phased Mar–Jun 2026</a>.
+    Practice: <a href="https://www.trustsphere.ai/post/mule-detection-at-the-receive-side-receiving-bank-real-time-defence-playbook">Mule detection at the receive side</a> · <a href="https://www.adaptivesecurity.com/blog/account-takeover-detection">Account takeover detection signals and controls</a>.
+    Internal: <span class="mono">decisions.md</span> D7, D11, D61b, D66c–e, D67a–d, D69a–k, D70–D84 · <span class="mono">PRD.md</span> §6.1, §6.2, §9, §9.1 · <span class="mono">base-prd-alignment.md</span>.
+    <br><br>
+    The APP guidelines are an exposure draft — clock values are as published in the draft and in reporting on it, and should be re-checked against the final circular before any of WP-05 is treated as settled. The BVN addendum is in force.
+  </footer>
+
+</div>

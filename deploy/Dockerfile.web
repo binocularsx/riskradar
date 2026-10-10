@@ -1,0 +1,16 @@
+# The public edge (D101b): build the dashboard, then serve it and proxy the API
+# from one origin with Caddy. Two stages so the Node toolchain never ships.
+
+FROM node:20-alpine AS build
+WORKDIR /app/frontend
+# Install against the lockfile first, for a cached layer that survives source edits.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+# Relative API paths (D101b), so the build needs no API URL — it calls its own origin.
+RUN npm run build
+
+FROM caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/frontend/dist /srv
+# Caddy serves 80/443; the compose overlay publishes them and mounts the cert store.

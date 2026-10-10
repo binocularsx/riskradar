@@ -1,0 +1,72 @@
+{
+  "trained_on": "all typologies (production model)",
+  "held_out_typology": null,
+  "evidence_note": "Trained on everything, so it cannot be tested on an unseen typology. The figures below are the held-out evaluation of this same recipe.",
+  "system_mean_incident_recall": {
+    "rules only": 0.8813,
+    "one feature (txn_count_1h_account)": 0.4942,
+    "logistic regression": 0.5136,
+    "gradient boosting (ours)": 0.1494,
+    "rules + logistic regression": 0.9011,
+    "rules + gradient boosting (ours)": 0.8988
+  },
+  "calibration_on_fair_test": {
+    "confidence_ratio": 0.919,
+    "ece_alerting_region": 0.0319
+  },
+  "corpus": {
+    "rows": 2438497,
+    "fraud": 7438,
+    "incidents": 600,
+    "span_days": 119.79
+  },
+  "feature_names": [
+    "amount_log10",
+    "amount_ratio_to_account_p95_30d",
+    "txn_count_1h_account",
+    "approved_value_ratio_24h_vs_daily_mean_30d",
+    "failed_attempts_1h_account",
+    "decline_rate_24h_account",
+    "distinct_beneficiaries_1h_account",
+    "beneficiary_is_new_to_account",
+    "beneficiary_first_seen_days",
+    "device_is_new_to_subject",
+    "account_age_days",
+    "days_since_account_activity",
+    "failed_logins_1h_subject",
+    "device_bound_hours",
+    "credential_changed_hours",
+    "sim_changed_hours",
+    "payee_added_minutes",
+    "credits_24h_account",
+    "distinct_remitters_24h_account",
+    "inbound_count_ratio_24h_vs_daily_mean_30d",
+    "minutes_since_last_credit",
+    "pass_through_ratio_24h"
+  ],
+  "feature_baseline": [
+    4.356903,
+    0.022936,
+    0.0,
+    0.874261,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    2.037836,
+    0.0,
+    707.760221,
+    0.080602,
+    0.0,
+    72.0,
+    72.0,
+    72.0,
+    4320.0,
+    0.0,
+    0.0,
+    0.0,
+    1440.0,
+    0.0
+  ],
+  "alert_budget_per_day": 75
+}

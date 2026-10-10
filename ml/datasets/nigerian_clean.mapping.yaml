@@ -1,0 +1,82 @@
+# Risk Radar dataset mapping (D81). Reviewed 17 Sep 2026 by hand from the
+# ElectricSheep mapping: the clean file is that dataset plus 86,000 synthetic
+# rows and state, LGA and risk-flag columns. Region is the state (37 values)
+# rather than the city. Risk flags and every *_score/*_risk column are ignored
+# (D10f). Native features are only those computable from the row and its past.
+dataset: Nigerian transactions (clean, 5.09M rows)
+reviewed: true
+fields:
+  label:
+    column: is_fraud
+    positive:
+    - true
+  fraud_type:
+    column: fraud_type
+  incident:
+    derive:
+      by: customer
+      gap_hours: 24
+  timestamp:
+    column: timestamp
+    timezone: Africa/Lagos
+  amount:
+    column: amount_ngn
+    scale: 100
+  account:
+    column: sender_account
+  beneficiary:
+    column: receiver_account
+  device:
+    column: device_hash
+  channel:
+    column: payment_channel
+    values:
+      USSD: USSD
+      Bank Transfer: API
+      Mobile App: MOBILE_APP
+      Card: POS
+    default: API
+  auth_result:
+    constant: APPROVED
+  instrument:
+    column: transaction_type
+    values:
+      deposit: ACCOUNT_TRANSFER
+      payment: ACCOUNT_TRANSFER
+      withdrawal: CASH
+      transfer: ACCOUNT_TRANSFER
+    default: ACCOUNT_TRANSFER
+  direction:
+    column: transaction_type
+    values:
+      deposit: INBOUND
+      payment: OUTBOUND
+      withdrawal: OUTBOUND
+      transfer: OUTBOUND
+    default: OUTBOUND
+  region:
+    column: state
+  merchant_category:
+    column: merchant_category
+native_features:
+- txn_hour
+- is_weekend
+- is_salary_week
+- is_night_txn
+- txn_count_last_1h
+- txn_count_last_24h
+- total_amount_last_1h
+- time_since_last
+ignore:
+  spending_deviation_score: 'somebody else''s score or flag (D10f): never an input'
+  velocity_score: 'somebody else''s score or flag (D10f): never an input'
+  geo_anomaly_score: 'somebody else''s score or flag (D10f): never an input'
+  geospatial_velocity_anomaly: 'somebody else''s score or flag (D10f): never an input'
+  merchant_fraud_rate: 'somebody else''s score or flag (D10f): never an input'
+  channel_risk_score: 'somebody else''s score or flag (D10f): never an input'
+  persona_fraud_risk: 'somebody else''s score or flag (D10f): never an input'
+  location_fraud_risk: 'somebody else''s score or flag (D10f): never an input'
+  is_high_risk_state: 'somebody else''s risk flag (D10f): never an input'
+  is_high_risk_lga: 'somebody else''s risk flag (D10f): never an input'
+  is_ato_risk: 'somebody else''s risk flag (D10f): never an input'
+  source: provenance (real or synthetic), not a transaction fact

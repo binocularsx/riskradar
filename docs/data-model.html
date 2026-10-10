@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Risk Radar Data Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root { --ink: #141a22; --ink-2: #4a5566; --ink-3: #7a8697; --line: #d0d8e2; --line-2: #a9b6c6;
+        --surface-2: #eef2f7; --accent: #25548f; --accent-bg: #e6eef8; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: var(--ink); font-family: "Libre Franklin", system-ui, sans-serif;
+       font-size: 7.3pt; line-height: 1.3; }
+.page { width: 184mm; margin: 0 auto; padding: 8px 0; }
+.mono { font-family: "IBM Plex Mono", monospace; font-size: .95em; }
+header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--ink);
+         padding-bottom: 5px; margin-bottom: 7px; }
+h1 { font-size: 16pt; margin: 0; letter-spacing: -.02em; line-height: 1; }
+header .meta { font-family: "IBM Plex Mono", monospace; font-size: 6.6pt; color: var(--ink-3); text-align: right; letter-spacing: .04em; }
+h2 { font-size: 7.8pt; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin: 0 0 3px;
+     border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+section { margin-bottom: 7px; break-inside: avoid; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 6pt; letter-spacing: .08em;
+     text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding: 1px 4px; border-bottom: 1px solid var(--line-2); }
+td { padding: 1.6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.k { font-family: "IBM Plex Mono", monospace; font-size: 6.8pt; white-space: nowrap; font-weight: 500; }
+.enum { color: var(--ink-2); }
+.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; align-items: center; gap: 4px; margin: 3px 0 4px; }
+.node { border: 1px solid var(--line-2); border-radius: 3px; padding: 3px 5px; background: var(--surface-2); text-align: center; }
+.node b { display: block; font-size: 7.5pt; }
+.node span { font-size: 6.2pt; color: var(--ink-2); }
+.node.key { background: var(--accent-bg); border-color: var(--accent); }
+.arrow { color: var(--ink-3); font-size: 6.2pt; text-align: center; line-height: 1.05; white-space: nowrap; }
+.arrow::after { content: "→"; display: block; font-size: 9pt; color: var(--ink-2); }
+p { margin: 0 0 3px; }
+.states { font-family: "IBM Plex Mono", monospace; font-size: 6.5pt; background: var(--surface-2); padding: 4px 6px;
+          border-radius: 3px; margin: 2px 0 3px; line-height: 1.5; }
+.dec td.k { color: var(--accent); }
+.dec td.t { font-weight: 600; white-space: nowrap; }
+.feat { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.feat > div { display: grid; gap: 10px; }
+footer { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 3px; font-size: 6.2pt; color: var(--ink-3); }
+@media print {
+  @page { size: A4; margin: 10mm 13mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { padding: 0; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Risk Radar Data Model</h1>
+    <div class="meta">DEFINITIONS AND DECISIONS<br>FEATURE SPEC 1.4.1 · 17 SEPTEMBER 2026</div>
+  </header>
+
+  <section>
+    <h2>The four records, and which can change</h2>
+    <div class="flow">
+      <div class="node"><b>Transaction</b><span>one payment attempt · immutable</span></div>
+      <div class="arrow">scored</div>
+      <div class="node key"><b>Decision</b><span>one per transaction · immutable</span></div>
+      <div class="arrow">if actionable</div>
+      <div class="node key"><b>Alert</b><span>an observation · immutable</span></div>
+      <div class="arrow">correlated</div>
+      <div class="node"><b>Case</b><span>the investigation · the only mutable record</span></div>
+    </div>
+    <p><b>Decision</b> stores the probability, risk level, the rules' signals, the full feature snapshot and the versions of model, ruleset, thresholds and feature spec, so any decision can be reproduced months later. <b>Case</b> holds many alerts: a new alert joins an <b>open</b> case with the same <span class="mono">subject_token</span> (the customer, not the account) within <b>24 hours</b>; otherwise it opens a new case. Since spec 1.2.0 a payment is one type of <b>event</b> (D72): logins, device binding, credential and SIM changes, payee additions and credits share one envelope, are tokenised at the same boundary, and are read by measurements; only payments and credits are decided.</p>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Transaction event — fields</h2>
+      <table>
+        <thead><tr><th>Field</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td class="k">transaction_ref</td><td>Sender's reference; the idempotency key. A repeat is a duplicate</td></tr>
+          <tr><td class="k">occurred_at</td><td>When it happened. <b>Every behavioural measurement uses this</b></td></tr>
+          <tr><td class="k">ingested_at</td><td>When we received it. Never used for measurements</td></tr>
+          <tr><td class="k">amount_minor</td><td>Amount in <b>kobo, as an integer</b>; never floating point</td></tr>
+          <tr><td class="k">currency</td><td>ISO 4217 code (NGN)</td></tr>
+          <tr><td class="k">channel</td><td class="enum">MOBILE_APP · WEB · USSD · POS · ATM · AGENT · BRANCH · API</td></tr>
+          <tr><td class="k">instrument</td><td class="enum">CARD · ACCOUNT_TRANSFER · CASH · WALLET</td></tr>
+          <tr><td class="k">rail</td><td class="enum">NIP · NEFT · RTGS · CARD_SCHEME · INTRABANK · ATM_NETWORK</td></tr>
+          <tr><td class="k">auth_result</td><td class="enum">APPROVED · DECLINED · FAILED · REVERSED — <b>an attempt</b></td></tr>
+          <tr><td class="k">decline_reason</td><td>Coarse category, e.g. INSUFFICIENT_FUNDS; else empty</td></tr>
+          <tr><td class="k">subject_token</td><td>One-way hash of the <b>customer</b>: what a case is about</td></tr>
+          <tr><td class="k">account_token</td><td>One-way hash of <b>our customer's account</b>: what a baseline is about</td></tr>
+          <tr><td class="k">direction</td><td class="enum">OUTBOUND (a payment) · INBOUND (a credit, D78)</td></tr>
+          <tr><td class="k">remitter_token</td><td>Credits only: hashed sending account, with its bank code</td></tr>
+          <tr><td class="k">bvn_token</td><td>Hashed BVN, stamped at intake from the core system (D75); keys the industry watch-list</td></tr>
+          <tr><td class="k">beneficiary_token</td><td>One-way hash of the receiving account; empty for card, cash</td></tr>
+          <tr><td class="k">device_token</td><td>Hashed device fingerprint</td></tr>
+          <tr><td class="k">ip_region</td><td>Coarse region, never a raw IP address</td></tr>
+          <tr><td class="k">merchant_category</td><td>Card and POS only</td></tr>
+          <tr><td class="k">display_name</td><td>Obviously invented name, analyst screen only</td></tr>
+          <tr><td class="k">account_opened_at</td><td>Account fact <b>stamped at intake</b>, never changed afterwards</td></tr>
+          <tr><td class="k">last_activity_at</td><td>Stamped fact; dormancy is worked out from it</td></tr>
+          <tr><td class="k">product_type</td><td class="enum">SAVINGS · CURRENT · DOMICILIARY · WALLET</td></tr>
+          <tr><td class="k">origin_sol_id</td><td>Branch that owns the account; coarse geography</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div>
+      <section>
+        <h2>Case states</h2>
+        <div class="states">OPEN → UNDER_REVIEW → CONFIRMED_FRAUD | FALSE_POSITIVE | INCONCLUSIVE → CLOSED<br>UNDER_REVIEW → ESCALATED → INFOSEC | FRAUD_OPS → back to review, or CLOSED</div>
+        <p><b>Inconclusive is mandatory</b>: a forced yes/no under time pressure poisons the labels. Outcomes are the only real training labels this system will ever produce.</p>
+      </section>
+
+      <section>
+        <h2>Decisions that shape the data</h2>
+        <table class="dec">
+          <tbody>
+            <tr><td class="k">D9b</td><td class="t">Two timestamps</td><td>Late batches scored on arrival time fake a burst; keeping one timestamp loses the truth for good.</td></tr>
+            <tr><td class="k">—</td><td class="t">Integer kobo</td><td>Floating-point money is finance software's commonest defect; every total inherits it.</td></tr>
+            <tr><td class="k">D19</td><td class="t">Two identity levels</td><td>Cases follow the customer, so one takeover across three accounts is one case; baselines follow the account.</td></tr>
+            <tr><td class="k">D9c–d</td><td class="t">One-way tokens</td><td>Hashed with a secret pepper at intake; no reversal table. The token travels; the receiving bank looks it up.</td></tr>
+            <tr><td class="k">D21</td><td class="t">Attempts, not successes</td><td>Without refusals, card testing is invisible and reversals count money twice.</td></tr>
+            <tr><td class="k">D22</td><td class="t">Stamp, never join</td><td>Joining today's account table would leak the future into training and change old decisions.</td></tr>
+            <tr><td class="k">D15</td><td class="t">One measurement package</td><td>Training and live call the same functions; a test proves identical numbers.</td></tr>
+            <tr><td class="k">D25, D77–78</td><td class="t">Twelve, then twenty-six</td><td>Twelve cut from fifteen to pay for the identity work; five event and five credit measurements once their data existed; four for the Nigerian fraud types (D82).</td></tr>
+            <tr><td class="k">D78b</td><td class="t">The model reads twenty-one</td><td>The five receiving-side measurements made unseen takeover worse (0.991 to 0.857); rules read them, every decision stores all.</td></tr>
+            <tr><td class="k">D64</td><td class="t">−1 and the cap</td><td>The old marker 999 read as a trusted old payee and helped hide card-testing fraud.</td></tr>
+            <tr><td class="k">D10f</td><td class="t">No borrowed scores</td><td>Never train on another party's "risk", "score", "rate" or "fraud" column unless its code can be read.</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <section>
+    <h2>The twenty-six measurements taken on every payment and credit (feature spec 1.4.1)</h2>
+    <div class="feat">
+      <table>
+        <thead><tr><th colspan="2">The payment and the account · D25, D64</th></tr></thead>
+        <tbody>
+          <tr><td class="k">amount_log10</td><td>Size of the payment, log scale</td></tr>
+          <tr><td class="k">amount_ratio_to_account_p95_30d</td><td>÷ the account's largest usual payment</td></tr>
+          <tr><td class="k">txn_count_1h_account</td><td>Attempts on the account, last hour</td></tr>
+          <tr><td class="k">approved_value_ratio_24h_vs_daily_mean_30d</td><td>Money out today ÷ a normal day</td></tr>
+          <tr><td class="k">failed_attempts_1h_account</td><td>Refused or failed, last hour</td></tr>
+          <tr><td class="k">decline_rate_24h_account</td><td>Share of today's attempts refused</td></tr>
+          <tr><td class="k">distinct_beneficiaries_1h_account</td><td>Destinations paid, last hour</td></tr>
+          <tr><td class="k">beneficiary_is_new_to_account</td><td>1 if never paid by this account</td></tr>
+          <tr><td class="k">beneficiary_first_seen_days</td><td>Days since the bank first saw it (0 = new)</td></tr>
+          <tr><td class="k">device_is_new_to_subject</td><td>1 if the customer never used it</td></tr>
+          <tr><td class="k">account_age_days</td><td>Days since opening, from occurred_at</td></tr>
+          <tr><td class="k">days_since_account_activity</td><td>Days the account had been quiet</td></tr>
+        </tbody>
+      </table>
+      <div>
+      <table>
+        <thead><tr><th colspan="2">Before the money moved · events · D77</th></tr></thead>
+        <tbody>
+          <tr><td class="k">failed_logins_1h_subject</td><td>Failed logins for the customer, last hour</td></tr>
+          <tr><td class="k">device_bound_hours</td><td>Hours since this device was bound; capped at 72</td></tr>
+          <tr><td class="k">credential_changed_hours</td><td>Hours since a PIN or password change; capped at 72</td></tr>
+          <tr><td class="k">sim_changed_hours</td><td>Hours since a SIM swap; capped at 72</td></tr>
+          <tr><td class="k">payee_added_minutes</td><td>Minutes since this destination was enrolled</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th colspan="2">Money coming in · credits · D78, rules only</th></tr></thead>
+        <tbody>
+          <tr><td class="k">credits_24h_account</td><td>Credits into the account, last day</td></tr>
+          <tr><td class="k">distinct_remitters_24h_account</td><td>Different senders, last day</td></tr>
+          <tr><td class="k">inbound_count_ratio_24h_vs_daily_mean_30d</td><td>Credits today ÷ a normal day</td></tr>
+          <tr><td class="k">minutes_since_last_credit</td><td>Since money last arrived; capped at a day</td></tr>
+          <tr><td class="k">pass_through_ratio_24h</td><td>Money out ÷ money in, last day</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <table>
+        <thead><tr><th colspan="2">Where, how and when · D82</th></tr></thead>
+        <tbody>
+          <tr><td class="k">region_is_new_to_subject</td><td>1 if the customer had not used this region this month, before today</td></tr>
+          <tr><td class="k">card_present_count_1h_account</td><td>Card uses at POS, ATM or agent in the hour</td></tr>
+          <tr><td class="k">beneficiary_distinct_senders_24h</td><td>Other customers who paid this destination today</td></tr>
+          <tr><td class="k">hour_of_day_local</td><td>Hour in Nigeria, 0 to 23</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:3px"><b>−1 means "does not apply"</b> (no destination, no date) and sits outside every real range. <b>Ratios are capped at 100.</b> History looked at: account 30 days, customer 30 days, destinations 90 days, events 72 hours, credits 30 days. Outgoing history reads OUTBOUND only, so no older measurement changed meaning when credits arrived. The spec version is stored on every decision.</p>
+  </section>
+
+  <footer>Sources: PRD §6 and §10, <span class="mono">backend/riskradar/features/spec.py</span>, <span class="mono">docs/decisions.md</span>. Synthetic data only; before any real data, an NDPA 2023 lawful-basis assessment and retention schedule are required.</footer>
+</div>
+</body>
+</html>

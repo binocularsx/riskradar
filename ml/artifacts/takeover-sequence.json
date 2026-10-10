@@ -1,0 +1,153 @@
+{
+  "days": 120.5,
+  "incidents": {
+    "ACCOUNT_TAKEOVER": 212,
+    "MULE_FANOUT": 186,
+    "CARD_TESTING": 207
+  },
+  "variants": [
+    {
+      "variant": "any precursor < 6h, failed >= 3",
+      "alerts_per_day": 23.58,
+      "false_alerts_per_day": 13.7,
+      "precision": 0.419,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.972,
+        "MULE_FANOUT": 0.0,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 6h, failed >= 5",
+      "alerts_per_day": 20.33,
+      "false_alerts_per_day": 10.48,
+      "precision": 0.485,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.967,
+        "MULE_FANOUT": 0.0,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 12h, failed >= 3",
+      "alerts_per_day": 28.81,
+      "false_alerts_per_day": 18.76,
+      "precision": 0.349,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.972,
+        "MULE_FANOUT": 0.005,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 12h, failed >= 5",
+      "alerts_per_day": 25.58,
+      "false_alerts_per_day": 15.55,
+      "precision": 0.392,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.967,
+        "MULE_FANOUT": 0.005,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 24h, failed >= 3",
+      "alerts_per_day": 43.77,
+      "false_alerts_per_day": 33.66,
+      "precision": 0.231,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.972,
+        "MULE_FANOUT": 0.011,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 24h, failed >= 5",
+      "alerts_per_day": 40.55,
+      "false_alerts_per_day": 30.46,
+      "precision": 0.249,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.967,
+        "MULE_FANOUT": 0.011,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 48h, failed >= 3",
+      "alerts_per_day": 73.95,
+      "false_alerts_per_day": 63.79,
+      "precision": 0.137,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.972,
+        "MULE_FANOUT": 0.016,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "any precursor < 48h, failed >= 5",
+      "alerts_per_day": 70.73,
+      "false_alerts_per_day": 60.59,
+      "precision": 0.143,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.967,
+        "MULE_FANOUT": 0.016,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "device bound < 24h only",
+      "alerts_per_day": 19.44,
+      "false_alerts_per_day": 10.93,
+      "precision": 0.437,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.769,
+        "MULE_FANOUT": 0.005,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "SIM changed < 24h only",
+      "alerts_per_day": 8.2,
+      "false_alerts_per_day": 4.63,
+      "precision": 0.435,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.321,
+        "MULE_FANOUT": 0.0,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "credential changed < 24h only",
+      "alerts_per_day": 20.02,
+      "false_alerts_per_day": 15.04,
+      "precision": 0.249,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.448,
+        "MULE_FANOUT": 0.005,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "failed logins >= 3 only",
+      "alerts_per_day": 5.31,
+      "false_alerts_per_day": 3.35,
+      "precision": 0.369,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.5,
+        "MULE_FANOUT": 0.0,
+        "CARD_TESTING": 0.0
+      }
+    },
+    {
+      "variant": "two precursors < 24h",
+      "alerts_per_day": 7.07,
+      "false_alerts_per_day": 0.29,
+      "precision": 0.959,
+      "incident_recall": {
+        "ACCOUNT_TAKEOVER": 0.769,
+        "MULE_FANOUT": 0.0,
+        "CARD_TESTING": 0.0
+      }
+    }
+  ]
+}
