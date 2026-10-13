@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .audit import chain
+from . import notifications as nt
 from .model import registry
 from .security.passwords import new_totp_secret, totp_uri
 from .security.rbac import Permission
@@ -577,6 +578,16 @@ def propose(
         to_state=summary,
         payload={"change_type": change_type, "target": target, "rationale": rationale.strip()},
     )
+    # D114: maker-checker (D96) stalls unless a second administrator knows.
+    nt.resolve(conn, kind=(nt.CHANGE_WAITING, nt.CHANGE_DECIDED), ref=f"{change_type}:{target}", note="Replaced by a newer proposal")
+    # Most changes are an administrator's and are decided in System settings;
+    # lifting a restriction is a lead's (D103) and is decided on the case.
+    on_case = (payload or {}).get("case_id")
+    maker = actor.get("display_name") or "A colleague"
+    nt.notify(conn, nt.holders_of(conn, PERMISSION_FOR[change_type]), kind=nt.CHANGE_WAITING, urgent=True,
+              ref=f"{change_type}:{target}", case_id=on_case, link=f"/cases/{on_case}" if on_case else "/admin",
+              actor_id=actor["id"], title=f"{maker} proposed a change: {summary}",
+              body=f"Needs someone other than {maker} to approve it. {rationale.strip()[:200]}")
     return {"status": "pending", "request": request}
 
 
@@ -686,4 +697,14 @@ def decide(
             "reason": reason,
         },
     )
+    who = actor.get("display_name") or "An administrator"
+    verb = {"APPROVED": "approved", "REJECTED": "rejected", "RETURNED": "sent back"}[new_state]
+    nt.resolve(conn, kind=nt.CHANGE_WAITING, ref=f"{request['change_type']}:{request['target']}",
+               note=f"{verb.capitalize()} by {who}")
+    # Only a change sent back asks for more work; approved or rejected is just the answer.
+    nt.notify(conn, [request["proposed_by"]], kind=nt.CHANGE_DECIDED, urgent=new_state == "RETURNED",
+              ref=f"{request['change_type']}:{request['target']}", actor_id=actor["id"],
+              link="/admin" if str(PERMISSION_FOR[request["change_type"]]).startswith("admin:") else None,
+              title=f"{who} {verb} your change: {request['summary']}",
+              body=reason or None)
     return {"status": new_state.lower(), "applied_version": applied_version, **extra}

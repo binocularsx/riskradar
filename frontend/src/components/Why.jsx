@@ -370,7 +370,7 @@ export function VersusNormal({ alerts, features, amountMinor }) {
               <tr key={r.label}>
                 <td style={{ color: 'var(--text-2)', width: '38%' }}>{r.label}</td>
                 <td style={{ fontWeight: r.off ? 650 : 400,
-                             color: r.off ? 'var(--high)' : 'var(--text)' }}>
+                             color: r.off ? 'var(--high-text)' : 'var(--text)' }}>
                   {r.now}
                 </td>
                 <td className="dim" style={{ fontSize: 12 }}>{r.normal}</td>

@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 
 import { api, nairaShort } from '../lib/api'
+import { CHART, axis, grid, legend, tooltip } from '../lib/chart'
 import { Banner, RiskBadge } from '../components/ui'
 import { CHANNEL, RULE, say } from '../lib/words'
 
@@ -18,8 +19,6 @@ import { CHANNEL, RULE, say } from '../lib/words'
  */
 
 const WINDOWS = [30, 60, 180]
-const axis = { stroke: '#61748a', fontSize: 11 }
-const tip = { background: '#141c28', border: '1px solid #2c3d50', borderRadius: 8, fontSize: 12 }
 const LEVEL_COLOR = { LOW: 'var(--low)', MEDIUM: 'var(--medium)', HIGH: 'var(--high)', CRITICAL: 'var(--critical)' }
 const TIER = { HUMAN_REVIEW: 'Sent to an analyst', MACHINE_ACTION: 'Machine action', AUTO_CLOSE: 'Auto-closed', NONE: 'No action needed' }
 
@@ -75,7 +74,7 @@ export default function Intake() {
   const w = data.window
   const last = data.series.slice(-5)
   const perMinute = Math.round(last.reduce((s, r) => s + r.received, 0) / Math.max(last.length, 1))
-  const levels = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((k) => ({ key: k, label: k.toLowerCase(), n: data.by_risk_level[k] || 0 }))
+  const levels = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((k) => ({ key: k, label: k.charAt(0) + k.slice(1).toLowerCase(), n: data.by_risk_level[k] || 0 }))
   const scoredTotal = levels.reduce((s, r) => s + r.n, 0)
   const q = data.queue
   const b = data.budget
@@ -97,6 +96,16 @@ export default function Intake() {
           ))}
         </div>
       </div>
+
+      {Number(w.received) === 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <Banner kind="warn">
+            Nothing has arrived in the last {minutes >= 60 ? `${minutes / 60} hour${minutes > 60 ? 's' : ''}` : `${minutes} minutes`},
+            so the charts on this page are empty. This page only covers the last few hours; for earlier
+            activity see <Link to="/locations">Location analysis</Link> or the performance reports.
+          </Banner>
+        </div>
+      )}
 
       <div className="kpis">
         <Kpi label={`Received · last ${minutes}m`} value={Number(w.received).toLocaleString()}
@@ -121,15 +130,15 @@ export default function Intake() {
         <div style={{ height: 260, marginTop: 10 }}>
           <ResponsiveContainer>
             <ComposedChart data={data.series} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#1f2a38" vertical={false} />
+              <CartesianGrid {...grid} />
               <XAxis dataKey="minute" tickFormatter={hhmm} {...axis} minTickGap={40} />
               <YAxis yAxisId="left" {...axis} allowDecimals={false} />
               <YAxis yAxisId="right" orientation="right" {...axis} allowDecimals={false} />
-              <Tooltip contentStyle={tip} labelFormatter={hhmm} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area yAxisId="left" type="monotone" dataKey="received" name="received" stroke="#4da3ff" fill="#4da3ff" fillOpacity={0.18} />
-              <Area yAxisId="left" type="monotone" dataKey="scored" name="scored" stroke="#7cc0ff" fill="transparent" strokeDasharray="4 3" />
-              <Bar yAxisId="right" dataKey="alerts" name="alerts" fill="#e2692c" barSize={6} />
+              <Tooltip {...tooltip} labelFormatter={hhmm} />
+              <Legend {...legend} />
+              <Area yAxisId="left" type="monotone" dataKey="received" name="Received" stroke={CHART.blue} fill={CHART.blueFill} fillOpacity={0.8} />
+              <Area yAxisId="left" type="monotone" dataKey="scored" name="Risk-checked" stroke={CHART.teal} fill="transparent" strokeDasharray="4 3" />
+              <Bar yAxisId="right" dataKey="alerts" name="Alerts (right scale)" fill={CHART.orange} barSize={6} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -161,7 +170,7 @@ export default function Intake() {
 
       <div className="card" style={{ marginTop: 14 }}>
         <div className="between"><h2 style={{ margin: 0 }}>Where the cases are</h2>
-          <Link to="/tracker" className="dim" style={{ fontSize: 12 }}>open the progress board →</Link></div>
+          <Link to="/tracker" style={{ fontSize: 12 }}>Open the progress board →</Link></div>
         <div className="pipeline-strip">
           {data.pipeline.map((s) => (
             <Link to={`/tracker#${s.key}`} key={s.key} className="pipe-stage">

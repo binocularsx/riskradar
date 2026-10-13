@@ -5,23 +5,31 @@ import {
 } from 'recharts'
 
 import GeoMap from '../components/GeoMap'
-import { api, naira } from '../lib/api'
+import { ago, api, when } from '../lib/api'
+import { CHART, axis, grid, legend, tooltip } from '../lib/chart'
 import { Banner, Empty, RiskBadge, Stat } from '../components/ui'
-import { OUTCOME, RULE, RULE_EFFECT, STAGE } from '../lib/words'
+import { DECISION, OUTCOME, RULE, RULE_EFFECT, STAGE, say } from '../lib/words'
 
+// The console's risk ramp (styles.css --low … --critical), as literals because
+// Recharts writes them into SVG attributes.
 const LEVEL_COLOUR = {
-  LOW: '#3f9f6a', MEDIUM: '#ddc24e', HIGH: '#e2692c', CRITICAL: '#b93b6a',
+  LOW: '#059669', MEDIUM: '#d97706', HIGH: '#ea580c', CRITICAL: '#dc2626',
 }
+const LEVEL_NAME = { MEDIUM: 'Medium', HIGH: 'High', CRITICAL: 'Critical' }
 
-const axis = { stroke: '#5f6b7a', fontSize: 11 }
-const tooltip = {
-  contentStyle: {
-    background: '#151b23', border: '1px solid #232d3a', borderRadius: 8, fontSize: 12,
-  },
-}
+const WINDOWS = [
+  { hours: 6, label: 'Last 6 hours' },
+  { hours: 24, label: 'Last 24 hours' },
+  { hours: 168, label: 'Last 7 days' },
+  { hours: 720, label: 'Last 30 days' },
+]
 
-function hour(value) {
-  return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+// Buckets are hourly. Over more than a day the same "14:00" repeats on every
+// date, so the label carries the day too.
+function bucketLabel(value, hours) {
+  const d = new Date(value)
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return hours > 24 ? `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} ${time}` : time
 }
 
 const DRIVER_NAME = { ...RULE, MODEL: 'The risk model on its own' }
@@ -251,6 +259,7 @@ export default function Metrics({ user }) {
   const [detection, setDetection] = useState(null)
   const [menu, setMenu] = useState(null)
   const [error, setError] = useState(null)
+  const [widened, setWidened] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -261,15 +270,26 @@ export default function Metrics({ user }) {
     if (tunes) api.budgetMenu().then((d) => !cancelled && setMenu(d)).catch(() => {})
     const timer = setInterval(() => {
       api.overview(hours).then((d) => !cancelled && setData(d)).catch(() => {})
-    }, 15000)  // a fixed refresh interval, not a socket (D14b)
+    }, hours > 24 ? 60000 : 15000)  // a fixed refresh interval, not a socket (D14b); long windows are cached for a minute server-side
     return () => { cancelled = true; clearInterval(timer) }
   }, [hours, tunes])
+
+  // Opening on an empty day shows nothing but "no data" boxes. Once, on first
+  // load, widen to the last 30 days instead and say so; after that the window
+  // is whatever the person picks.
+  useEffect(() => {
+    if (!data || widened !== null) return
+    // Fewer than three hourly points is not a trend: a lone dot reads as broken.
+    if (hours === 24 && data.transaction_volume.length < 3 && data.last_activity_at) {
+      setWidened(true); setData(null); setHours(720)
+    } else setWidened(false)
+  }, [data, hours, widened])
 
   if (error) return <Banner kind="error">{error}</Banner>
   if (!data) return <p className="muted">Loading…</p>
 
   const volume = data.transaction_volume.map((v) => ({
-    bucket: hour(v.bucket),
+    bucket: bucketLabel(v.bucket, hours),
     transactions: Number(v.transactions),
     approved: Number(v.approved),
     declined: Number(v.declined),
@@ -277,7 +297,7 @@ export default function Metrics({ user }) {
 
   const alertsByHour = {}
   for (const row of data.alert_volume) {
-    const key = hour(row.bucket)
+    const key = bucketLabel(row.bucket, hours)
     alertsByHour[key] = alertsByHour[key] || { bucket: key, LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 }
     alertsByHour[key][row.risk_level] = Number(row.alerts)
   }
@@ -292,15 +312,32 @@ export default function Metrics({ user }) {
       <div className="between" style={{ marginBottom: 14 }}>
         <div className="row">
           <label style={{ margin: 0 }} htmlFor="window">Window</label>
-          <select id="window" style={{ width: 140 }} value={hours}
+          <select id="window" style={{ width: 160 }} value={hours}
                   onChange={(e) => setHours(Number(e.target.value))}>
-            <option value={6}>Last 6 hours</option>
-            <option value={24}>Last 24 hours</option>
-            <option value={168}>Last 7 days</option>
+            {WINDOWS.map((w) => <option key={w.hours} value={w.hours}>{w.label}</option>)}
           </select>
         </div>
-        <span className="dim" style={{ fontSize: 12 }}>refreshes every 15s</span>
+        <span className="dim" style={{ fontSize: 12 }}>refreshes every {hours > 24 ? 'minute' : '15 seconds'}</span>
       </div>
+
+      {widened && hours === 720 && volume.length > 0 && (
+        <Banner kind="info">
+          Showing the last 30 days, because almost nothing arrived in the last 24 hours. The most recent
+          payment was {ago(data.last_activity_at)} ({when(data.last_activity_at)}). Pick another window above to change it.
+        </Banner>
+      )}
+      {!volume.length && (
+        <Banner kind="warn">
+          No payments arrived in the {WINDOWS.find((w) => w.hours === hours)?.label.toLowerCase()}, so the charts
+          below are empty.{' '}
+          {data.last_activity_at
+            ? <>The most recent payment the system received was {ago(data.last_activity_at)} ({when(data.last_activity_at)}).{' '}</>
+            : <>The system has not received a payment yet.{' '}</>}
+          {hours < 720 && data.last_activity_at && (
+            <button type="button" className="linkish" onClick={() => setHours(720)}>Show the last 30 days</button>
+          )}
+        </Banner>
+      )}
 
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
         <Stat
@@ -311,7 +348,7 @@ export default function Metrics({ user }) {
         <Stat
           label="Decision time"
           value={data.latency.p95_ms != null ? `${data.latency.p95_ms} ms` : '—'}
-          note={`NFR-001 target < 2000 ms · ${scored} scored`}
+          note={`95% of checks · target under 2 seconds · ${scored.toLocaleString()} checked`}
         />
         <Stat
           label="Items waiting"
@@ -355,16 +392,16 @@ export default function Metrics({ user }) {
           <h2>Transaction volume</h2>
           {volume.length ? (
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={volume}>
-                <CartesianGrid stroke="#232d3a" vertical={false} />
-                <XAxis dataKey="bucket" {...axis} />
-                <YAxis {...axis} />
+              <AreaChart data={volume} margin={{ top: 6, right: 8, left: -6, bottom: 0 }}>
+                <CartesianGrid {...grid} />
+                <XAxis dataKey="bucket" {...axis} minTickGap={28} />
+                <YAxis {...axis} width={52} />
                 <Tooltip {...tooltip} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend {...legend} />
                 <Area type="monotone" dataKey="approved" stackId="1"
-                      stroke="#3b82f6" fill="#1e3a5f" name="Approved" />
+                      stroke={CHART.blue} fill={CHART.blueFill} fillOpacity={0.9} name="Approved" />
                 <Area type="monotone" dataKey="declined" stackId="1"
-                      stroke="#d97036" fill="#3a2318" name="Declined / failed" />
+                      stroke={CHART.orange} fill={CHART.orangeFill} fillOpacity={0.95} name="Declined or failed" />
               </AreaChart>
             </ResponsiveContainer>
           ) : <Empty>No transactions in this window.</Empty>}
@@ -374,14 +411,14 @@ export default function Metrics({ user }) {
           <h2>Alerts by risk level</h2>
           {alerts.length ? (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={alerts}>
-                <CartesianGrid stroke="#232d3a" vertical={false} />
-                <XAxis dataKey="bucket" {...axis} />
-                <YAxis {...axis} allowDecimals={false} />
+              <BarChart data={alerts} margin={{ top: 6, right: 8, left: -6, bottom: 0 }}>
+                <CartesianGrid {...grid} />
+                <XAxis dataKey="bucket" {...axis} minTickGap={28} />
+                <YAxis {...axis} allowDecimals={false} width={40} />
                 <Tooltip {...tooltip} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend {...legend} />
                 {['MEDIUM', 'HIGH', 'CRITICAL'].map((level) => (
-                  <Bar key={level} dataKey={level} stackId="a" fill={LEVEL_COLOUR[level]} />
+                  <Bar key={level} dataKey={level} name={LEVEL_NAME[level]} stackId="a" fill={LEVEL_COLOUR[level]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -396,7 +433,7 @@ export default function Metrics({ user }) {
               <tbody>
                 {data.signal_frequency.map((s) => (
                   <tr key={s.code}>
-                    <td>{DRIVER_NAME[s.code] || s.code.replace(/_/g, ' ').toLowerCase()}</td>
+                    <td>{say(DRIVER_NAME, s.code)}</td>
                     <td><span className={`pill ${String(s.power).toLowerCase()}`}>{EFFECT_NAME[s.power] || s.power}</span></td>
                     <td className="num">{s.n}</td>
                   </tr>
@@ -414,8 +451,8 @@ export default function Metrics({ user }) {
               <tbody>
                 {data.case_outcomes.map((o, i) => (
                   <tr key={i}>
-                    <td>{RESULT_NAME[o.outcome] || o.outcome.replace(/_/g, ' ').toLowerCase()}</td>
-                    <td className="muted">{STATE_NAME[o.state] || o.state.replace(/_/g, ' ').toLowerCase()}</td>
+                    <td>{o.outcome === 'PENDING' ? 'Not decided yet' : say(RESULT_NAME, o.outcome)}</td>
+                    <td className="muted">{say(STATE_NAME, o.state)}</td>
                     <td className="num">{o.n}</td>
                   </tr>
                 ))}
@@ -428,7 +465,7 @@ export default function Metrics({ user }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 16 }}><GeoMap /></div>
+      <div style={{ marginTop: 16 }}><GeoMap showLink={!!user?.permissions?.includes('analysis:geography')} /></div>
 
       {detection && <FalseAlarmsByDriver detection={detection} />}
 
@@ -441,7 +478,7 @@ export default function Metrics({ user }) {
               {data.risk_mix.map((r, i) => (
                 <tr key={i}>
                   <td><RiskBadge level={r.risk_level} /></td>
-                  <td className="mono">{r.decision}</td>
+                  <td>{say(DECISION, r.decision)}</td>
                   <td className="num">{r.n}</td>
                 </tr>
               ))}

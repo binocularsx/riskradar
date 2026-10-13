@@ -150,6 +150,12 @@ export const api = {
   recordAction: (id, data) => post(`/v1/cases/${id}/actions`, data),
   returnCase: (id, findings) => post(`/v1/cases/${id}/return`, { findings }),
   caseLinks: (id, days = 30) => get(`/v1/cases/${id}/links?days=${days}`),
+  // D113: one case on the map, and what ties it to other customers and cases.
+  caseGeo: (id, days = 30) => get(`/v1/cases/${id}/geo?days=${days}`),
+  // D114: the bell.
+  notifications: (limit = 40) => get(`/v1/notifications?limit=${limit}`),
+  readNotification: (id) => post(`/v1/notifications/${id}/read`),
+  readAllNotifications: () => post('/v1/notifications/read-all'),
   // D97: restrictions a lead approved on a case, and how their delivery is going.
   caseRestrictions: (id) => get(`/v1/cases/${id}/restrictions`),
   restrictionStatus: () => get('/v1/metrics/restrictions'),
@@ -182,6 +188,10 @@ export const api = {
   detection: (days = 30) => get(`/v1/metrics/detection?days=${days}`),
   // D109: activity by session region, for the map on Analytics.
   geography: (hours = 168) => get(`/v1/metrics/geography?hours=${hours}`),
+  // Location analysis, for the analyst desk.
+  locations: (hours, channel) => get(`/v1/locations/overview?${new URLSearchParams({ hours, channel: channel || '' })}`),
+  locationMoves: (hours, channel) => get(`/v1/locations/moves?${new URLSearchParams({ hours, channel: channel || '' })}`),
+  location: (region, hours, channel) => get(`/v1/locations/${encodeURIComponent(region)}?${new URLSearchParams({ hours, channel: channel || '' })}`),
   budgetMenu: () => get('/v1/metrics/budget-menu'),
   searchTransactions: (params) => get(`/v1/transactions/search?${new URLSearchParams(params)}`),
   paymentCheck: (ref) => get(`/v1/transactions/${encodeURIComponent(ref)}/check`),

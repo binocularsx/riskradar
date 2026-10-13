@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { api, clock, naira, nairaShort, when } from '../lib/api'
 import { Attributions, Banner, PolicyTrace, RiskBadge, SignalPill } from './ui'
@@ -242,6 +243,17 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
         </div>
       </div>
 
+
+          {/* D113: the analyst opts in to the wider picture; it is its own screen
+              because a map of Nigeria needs the width the evidence column does not have. */}
+          <section className="card geo-entry" aria-labelledby="geo-entry-title">
+            <div>
+              <h3 id="geo-entry-title" style={{ margin: 0 }}>Geo survey</h3>
+              <p>See this case on a map of Nigeria: where the flagged activity happened against where this customer
+                 usually is, other customers paying the same accounts and where they are, and similar cases nearby.</p>
+            </div>
+            <Link className="ops-action" to={`/cases/${summary.id}/geo`}>Open geo survey <CaseIcon name="arrow" /></Link>
+          </section>
 
           <details className="investigation-connections">
             <summary><span><CaseIcon name="transfer" /> Connections &amp; related activity</span><span className="investigation-expand-hint">Explore network</span></summary>

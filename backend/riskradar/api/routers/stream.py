@@ -95,6 +95,10 @@ CASE_EVENTS = {"alert", "case_reported", "clock_breached", "fraud_submitted", "f
 
 def _visible(conn: psycopg.Connection, user: dict[str, Any], rows: list[dict]) -> list[dict]:
     """Drop the events this subscriber may not see, before they are framed."""
+    # D114: a notification's doorbell rings only for the people it names — even
+    # for a lead, who otherwise sees everything.
+    rows = [r for r in rows if r["event_type"] != "notification"
+            or user["id"] in ((r["payload"] or {}).get("recipient_ids") or [])]
     if visibility.sees_everything(user):
         return rows
     wanted = {int(r["payload"]["case_id"]) for r in rows

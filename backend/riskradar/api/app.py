@@ -30,7 +30,9 @@ from .routers import (
     identity,
     ingest,
     links,
+    locations,
     metrics,
+    notifications,
     reports,
     restrictions,
     stream,
@@ -125,6 +127,8 @@ app.include_router(triage.router)
 app.include_router(workflow.router)
 app.include_router(links.router)
 app.include_router(metrics.router)
+app.include_router(locations.router)
+app.include_router(notifications.router)
 app.include_router(stream.router)
 app.include_router(admin.router)
 app.include_router(budget.router)

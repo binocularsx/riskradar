@@ -155,6 +155,14 @@ def sweep(conn: Any, *, system_user_id: int, now: datetime | None = None) -> lis
 
             publish(conn, "clock_breached", {"case_id": row["id"], "clock": s["code"],
                                              "obligation": s["obligation"], "escalated": escalate})
+            # D114: a missed regulatory deadline is a breach; the analyst and the leads are told.
+            from .. import notifications as nt
+
+            about = nt.case_people(conn, row["id"])
+            nt.notify(conn, [about["assignee_id"], *nt.leads(conn)], kind=nt.CLOCK_BREACHED, urgent=True,
+                      case_id=row["id"], ref=f"{row['id']}:{s['code']}", actor_id=system_user_id,
+                      title=f"A regulatory deadline passed on {nt.case_label(about)}",
+                      body=f"{s['obligation']}." + (" The case was escalated to the leads." if escalate else ""))
     return actions
 
 

@@ -30,6 +30,7 @@ from typing import Any
 
 from .audit import chain
 from .events import publish
+from . import notifications as nt
 from .identity import adapters
 
 log = logging.getLogger("riskradar.restrictions")
@@ -301,6 +302,21 @@ def acknowledge(conn: Any, *, restriction_ref: str, outcome: str, reason: str | 
         _stamp_counterparty_notified(conn, order, at=taken)
     publish(conn, "restriction_acknowledged",
             {"case_id": order["case_id"], "outcome": outcome})
+    # D114: the bank's answer goes to the lead who asked for it and the case's
+    # analyst. Done is good to know; not done needs somebody to decide what next.
+    from .words import ACTION
+
+    asked = _rows(conn, "SELECT submitted_by, decided_by FROM fraud_submissions WHERE id = %s",
+                  (order["submission_id"],))
+    about = nt.case_people(conn, order["case_id"])
+    what = ACTION.get(order["action"], order["action"].replace("_", " ").lower())
+    done = outcome == "APPLIED"
+    said = {"APPLIED": "done", "NOT_APPLIED": "not done", "REJECTED": "refused"}[outcome]
+    nt.notify(conn, [about["assignee_id"], *(asked[0].values() if asked else [])],
+              kind=nt.BANK_ACTION_DONE if done else nt.BANK_ACTION_FAILED, urgent=not done,
+              case_id=order["case_id"], ref=restriction_ref, actor_id=_system_user(conn),
+              title=f"Support: \"{what}\" {said} on {nt.case_label(about)}",
+              body=reason or None)
     return {"status": "acknowledged", "restriction_ref": restriction_ref, "outcome": outcome}
 
 

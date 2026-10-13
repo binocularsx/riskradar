@@ -49,6 +49,9 @@ class Permission(StrEnum):
     ADMIN_THRESHOLDS = "admin:thresholds"
     ADMIN_MODELS = "admin:models"
     ADMIN_LISTS = "admin:lists"
+    # D113: the bank-wide location analysis. Aggregates by state only, never a
+    # case, so it sits with the administrator, who holds no case permission (D12b).
+    ANALYSIS_GEOGRAPHY = "analysis:geography"
 
 
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
@@ -82,6 +85,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             Permission.ADMIN_THRESHOLDS,
             Permission.ADMIN_MODELS,
             Permission.ADMIN_LISTS,
+            Permission.ANALYSIS_GEOGRAPHY,
         }
     ),
     # Never logs in. Present so the audit actor can always be a real user row.
