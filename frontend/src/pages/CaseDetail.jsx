@@ -65,7 +65,7 @@ export default function CaseDetail({ user }) {
           </div>
           <div className="ops-head-actions">
             <Link className="ops-action" to="/triage">Back to queue</Link>
-            <Link className="ops-action" to={`/cases/${caseId}/geo`}>Geo survey</Link>
+            <Link className="ops-action" to={`/cases/${caseId}/network`}>Case network</Link>
             {summary && <a className="ops-action primary" href="#investigation-resolution">
               {summary.state === 'CLOSED' || summary.outcome ? 'View workflow' : 'Review outcome'}<CaseIcon name="arrow" />
             </a>}

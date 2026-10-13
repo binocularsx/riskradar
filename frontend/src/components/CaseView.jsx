@@ -9,7 +9,6 @@ import Timeline from './Timeline'
 import Why, { VersusNormal } from './Why'
 import { CONSEQUENCES, OwnershipBanner, RoleCapability } from './Actions'
 import CaseFlow from './CaseFlow'
-import LinkGraph from './LinkGraph'
 import { CaseIcon } from './CaseWorkspace'
 import BankActions from './BankActions'
 import SupportPanel from './SupportPanel'
@@ -244,25 +243,17 @@ export default function CaseView({ summary, user, onDisposed, onSkip }) {
       </div>
 
 
-          {/* D113: the analyst opts in to the wider picture; it is its own screen
-              because a map of Nigeria needs the width the evidence column does not have. */}
-          <section className="card geo-entry" aria-labelledby="geo-entry-title">
+          {/* D115: one tool for connections and geography, opened when the analyst
+              wants more than the alert. Its own screen, because a network and a
+              map of Nigeria need the width the evidence column does not have. */}
+          <section className="card geo-entry case-network-entry" aria-labelledby="network-entry-title">
             <div>
-              <h3 id="geo-entry-title" style={{ margin: 0 }}>Geo survey</h3>
-              <p>See this case on a map of Nigeria: where the flagged activity happened against where this customer
-                 usually is, other customers paying the same accounts and where they are, and similar cases nearby.</p>
+              <h3 id="network-entry-title" style={{ margin: 0 }}>Case network</h3>
+              <p>Everyone and everything this case is tied to — accounts paid, devices used, other customers on the
+                 same accounts, similar cases nearby — as a network or on a map of Nigeria, played through time.</p>
             </div>
-            <Link className="ops-action" to={`/cases/${summary.id}/geo`}>Open geo survey <CaseIcon name="arrow" /></Link>
+            <Link className="ops-action primary" to={`/cases/${summary.id}/network`}>Open case network <CaseIcon name="arrow" /></Link>
           </section>
-
-          <details className="investigation-connections">
-            <summary><span><CaseIcon name="transfer" /> Connections &amp; related activity</span><span className="investigation-expand-hint">Explore network</span></summary>
-      <div style={{ marginBottom: 14 }}>
-        <LinkGraph caseId={summary.id} />
-      </div>
-
-
-          </details>
         </div>
         <aside className="investigation-sidebar" aria-label="Case management and safeguards">
           <section className="card investigation-management">

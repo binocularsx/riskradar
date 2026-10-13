@@ -366,7 +366,7 @@ def case_geo(
     events = _rows(conn, f"""
         SELECT t.id, t.transaction_ref, t.occurred_at, t.amount_minor, t.channel::text AS channel,
                t.ip_region, t.direction, t.auth_result::text AS auth_result, t.remitter_bank_code,
-               t.beneficiary_token, a.risk_level::text AS risk_level, coalesce({NEW_REGION}, false) AS new_region,
+               t.beneficiary_token, t.device_token, a.risk_level::text AS risk_level, coalesce({NEW_REGION}, false) AS new_region,
                coalesce((SELECT array_agg(s->>'code') FROM jsonb_array_elements(d.signals) s), '{{}}') AS codes
           FROM alerts a
           JOIN transactions t ON t.id = a.transaction_id
@@ -459,11 +459,17 @@ def case_geo(
         d["payers_by_state"] = sorted(by_token.get(d["token"], []), key=lambda r: -r["customers"])
 
     # 6. The linked customers: others who paid the same accounts or used the same devices.
-    devices = [r["device_token"] for r in _rows(conn, f"""
-        SELECT t.device_token FROM transactions t
+    device_rows = _ints(_rows(conn, f"""
+        SELECT t.device_token AS token, count(*) AS uses, min(t.occurred_at) AS first_used,
+               max(t.occurred_at) AS last_used,
+               (SELECT count(DISTINCT o.subject_token) FROM transactions o
+                 WHERE o.device_token = t.device_token AND o.subject_token <> %(subject)s
+                   AND o.occurred_at >= %(start)s AND o.occurred_at <= %(end)s) AS other_customers
+          FROM transactions t
          WHERE t.subject_token = %(subject)s AND t.device_token IS NOT NULL AND {window}
          GROUP BY 1 ORDER BY count(*) DESC LIMIT 10
-    """, p)]
+    """, p), "uses", "other_customers")
+    devices = [r["token"] for r in device_rows]
     linked = _rows(conn, f"""
         WITH shared AS (
             SELECT t.subject_token, 'destination' AS via, t.beneficiary_token AS token, t.ip_region, t.amount_minor
@@ -554,10 +560,16 @@ def case_geo(
         e["destination"] = label_of.get(e.pop("beneficiary_token") or "", None)
     # The screen names accounts A, B, C and shows the last four characters of
     # the token; the token itself has no use on screen.
+    graph = _network(conn, p, window, case=case, name=name, events=events, usual=usual,
+                     destinations=destinations, device_rows=device_rows, linked=linked,
+                     linked_out=linked_out, nearby=nearby)
+    for e in events:
+        e.pop("device_token", None)  # the raw token never leaves the server
     for d in destinations:
         d.pop("token")
 
     return {
+        "graph": graph,
         "case": {k: case[k] for k in ("id", "opened_at", "state", "outcome", "risk_level")},
         "customer_name": name,
         "window": {"days": days, "start": start, "end": end},
@@ -573,4 +585,186 @@ def case_geo(
         "note": NOTE,
         "limits": ("Destinations are accounts at other banks. Where money goes after it reaches them "
                    "is not visible to this bank, so the survey stops at the receiving account."),
+    }
+
+
+# How much a node deserves a look, for ordering the list beside the graph. A
+# ranking aid built from what is recorded — never a model score — and every
+# point it gives is said in words beside it.
+_CASE_WEIGHT = {"CRITICAL": 35, "HIGH": 28, "MEDIUM": 20, "LOW": 10}
+_OUTCOME_WORDS = {"CONFIRMED_FRAUD": "Fraud confirmed", "FALSE_POSITIVE": "No fraud found",
+                  "INCONCLUSIVE": "More review needed"}
+
+
+def _attention(points: list[tuple[int, str]]) -> tuple[int, list[str], list[dict[str, Any]]]:
+    """The total (capped at 100), the reasons in order, and each reason with its points."""
+    kept = sorted([(n, why) for n, why in points if n > 0], key=lambda x: -x[0])
+    return (min(100, sum(n for n, _ in kept)), [why for _, why in kept],
+            [{"why": why, "points": n} for n, why in kept])
+
+
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def _network(conn: Any, p: dict[str, Any], window: str, *, case: dict[str, Any], name: str | None,
+             events: list[dict[str, Any]], usual: list[dict[str, Any]], destinations: list[dict[str, Any]],
+             device_rows: list[dict[str, Any]], linked: list[dict[str, Any]], linked_out: list[dict[str, Any]],
+             nearby: list[dict[str, Any]]) -> dict[str, Any]:
+    """One case's people, accounts, devices and similar cases as nodes and timed links.
+
+    Every link carries the moment it first happened in the window, so the
+    console can play the network forward in time. Nodes carry a state where one
+    is known, so the same graph can be laid over the map. Identifiers stay
+    inside: accounts are A, B, C; devices 1, 2, 3; other customers P1, P2.
+    """
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    alert_states = sorted({e["ip_region"] for e in events if e["ip_region"]})
+    first_event = min((e["occurred_at"] for e in events), default=None)
+    nodes.append({
+        "id": "me", "kind": "customer", "label": name or "This customer",
+        "state": (alert_states or [None])[0], "home": usual[0]["ip_region"] if usual else None,
+        "alert_states": alert_states, "time": first_event, "risk_level": case["risk_level"],
+        "detail": f"{_plural(len(events), 'flagged payment')} on this case",
+        "attention": 100, "reasons": ["The customer on this case"],
+    })
+
+    acc_id: dict[str, str] = {}
+    for d in destinations:
+        nid = f"acc:{d['label'][-1]}"
+        acc_id[d["token"]] = nid
+        score, reasons, breakdown = _attention([
+            (40 if d["confirmed_fraud_cases"] else 0,
+             f"Tied to {_plural(d['confirmed_fraud_cases'], 'confirmed fraud case')}"),
+            (35 if "KNOWN_MULE" in (d["lists"] or []) else 0, "On the known mule list"),
+            (35 if "SANCTIONED" in (d["lists"] or []) else 0, "On the sanctions list"),
+            (min(55, d["other_customers"] * 5), f"Also paid by {_plural(d['other_customers'], 'other customer')}"),
+            (10 if d["alerts"] else 0, f"{_plural(d['alerts'], 'payment')} to it from this customer alerted"),
+        ])
+        nodes.append({
+            "id": nid, "kind": "account", "label": d["label"], "ending": d["ending"], "state": None,
+            "payer_states": [x["ip_region"] for x in d["payers_by_state"]], "time": d["first_paid"],
+            "detail": f"Account at another bank, ending {d['ending']}",
+            "payments": d["payments"], "value_minor": d["value_minor"], "others": d["other_customers"],
+            "lists": d["lists"], "confirmed_fraud_cases": d["confirmed_fraud_cases"],
+            "attention": score, "reasons": reasons, "breakdown": breakdown,
+        })
+        edges.append({"from": "me", "to": nid, "kind": "paid", "time": d["first_paid"],
+                      "count": d["payments"], "value_minor": d["value_minor"]})
+
+    dev_id: dict[str, str] = {}
+    # When this customer first ever used each device, not only in the window: a
+    # phone used for a year is not new because the window starts last week.
+    first_ever = {r["device_token"]: r["first_at"] for r in _rows(conn, """
+        SELECT device_token, min(occurred_at) AS first_at FROM transactions
+         WHERE subject_token = %(subject)s AND device_token = ANY(%(devices)s) GROUP BY 1
+    """, {**p, "devices": [d["token"] for d in device_rows]})} if device_rows else {}
+    flagged_from: dict[str, int] = {}
+    for e in events:
+        if e.get("device_token"):
+            flagged_from[e["device_token"]] = flagged_from.get(e["device_token"], 0) + 1
+    for i, d in enumerate(device_rows, start=1):
+        nid = f"dev:{i}"
+        dev_id[d["token"]] = nid
+        began = first_ever.get(d["token"], d["first_used"])
+        flagged = flagged_from.get(d["token"], 0)
+        # New: first used within a week before this customer's first flagged
+        # payment, or after it. The detector's own test (device_is_new_to_subject)
+        # is stricter — one earlier payment the same day makes a device "known" —
+        # which is exactly how an account takeover's handset slips past it.
+        days_before = (first_event - began).total_seconds() / 86400 if first_event and began else None
+        new = days_before is not None and days_before <= 7
+        if new:
+            when_words = ("after the first flagged payment" if days_before < 0
+                          else "on the day of the flagged payments" if days_before < 1
+                          else f"{_plural(round(days_before), 'day')} before the flagged payments")
+        score, reasons, breakdown = _attention([
+            (min(60, d["other_customers"] * 20), f"Shared with {_plural(d['other_customers'], 'other customer')}"),
+            (45 if new else 0, f"New to this customer: first used {when_words}" if new else ""),
+            (min(25, flagged * 10), f"{_plural(flagged, 'flagged payment')} came from it"),
+        ])
+        nodes.append({"id": nid, "kind": "device", "label": f"Device {i}", "ending": d["token"][-4:],
+                      "state": None, "time": d["first_used"], "first_ever": began,
+                      "new_device": new, "flagged": flagged, "others": d["other_customers"],
+                      "routine": not new and not d["other_customers"],
+                      "detail": f"Used {_plural(d['uses'], 'time')} by this customer in the period",
+                      "attention": score, "reasons": reasons or ["One of this customer's usual devices"],
+                      "breakdown": breakdown})
+        edges.append({"from": "me", "to": nid, "kind": "used", "time": d["first_used"], "count": d["uses"],
+                      "flagged": flagged})
+
+    # Who else touched which account or device, and when they first did.
+    subjects = [r["subject_token"] for r in linked]
+    pairs = _rows(conn, f"""
+        SELECT t.subject_token, 'paid' AS kind, t.beneficiary_token AS token, min(t.occurred_at) AS first_at,
+               count(*) AS n, coalesce(sum(t.amount_minor), 0) AS value_minor
+          FROM transactions t
+         WHERE t.subject_token = ANY(%(subjects)s) AND t.beneficiary_token = ANY(%(tokens)s) AND {window}
+         GROUP BY 1, 3
+        UNION ALL
+        SELECT t.subject_token, 'used', t.device_token, min(t.occurred_at), count(*), 0
+          FROM transactions t
+         WHERE t.subject_token = ANY(%(subjects)s) AND t.device_token = ANY(%(devices)s) AND {window}
+         GROUP BY 1, 3
+    """, {**p, "subjects": subjects, "tokens": list(acc_id), "devices": list(dev_id)}) if subjects else []
+    person_id = {s: f"p:{i}" for i, s in enumerate(subjects, start=1)}
+    first_seen: dict[str, Any] = {}
+    for r in pairs:
+        target = acc_id.get(r["token"]) if r["kind"] == "paid" else dev_id.get(r["token"])
+        if not target:
+            continue
+        who = person_id[r["subject_token"]]
+        first_seen[who] = min(first_seen.get(who, r["first_at"]), r["first_at"])
+        edges.append({"from": who, "to": target, "kind": r["kind"], "time": r["first_at"],
+                      "count": int(r["n"]), "value_minor": int(r["value_minor"])})
+    for r, out in zip(linked, linked_out):
+        nid = person_id[r["subject_token"]]
+        links = sum(1 for e in edges if e["from"] == nid)
+        if out["case_outcome"] == "CONFIRMED_FRAUD":
+            first = (70, f"Fraud confirmed on CASE-{out['case_id']}")
+        elif out["case_id"] and out["case_state"] != "CLOSED":
+            first = (40, f"Has an open case, CASE-{out['case_id']}")
+        elif out["case_id"]:
+            first = (10, f"Earlier case closed: {_OUTCOME_WORDS.get(out['case_outcome'], 'closed').lower()}")
+        else:
+            first = (0, "")
+        score, reasons, breakdown = _attention([
+            first,
+            (min(30, links * 12), f"Shares {_plural(links, 'account or device', 'accounts or devices')} with this customer"),
+            (15 if "device" in out["via"] else 0, "Shares a device with this customer"),
+        ])
+        nodes.append({
+            "id": nid, "kind": "person", "label": out["name"], "state": out["home_region"],
+            "states": out["states"], "time": first_seen.get(nid),
+            "detail": "Mostly pays from an unrecorded state" if not out["home_region"] else None,
+            "case_id": out["case_id"], "case_state": out["case_state"], "case_outcome": out["case_outcome"],
+            "case_visible": out["case_visible"], "payments": out["payments"], "value_minor": out["value_minor"],
+            "attention": score, "reasons": reasons, "breakdown": breakdown,
+        })
+
+    for n in nearby:
+        nid = f"case:{n['case_id']}"
+        if any(x["id"] == nid for x in nodes):
+            continue
+        score, reasons, breakdown = _attention([
+            (_CASE_WEIGHT.get(n["risk_level"], 10), f"{(n['risk_level'] or '').title()} risk case"),
+            (min(10, n["alerts"] * 2), f"{_plural(n['alerts'], 'alert')} in the same state within two days"),
+            (5 if n["shared"] else 0, "Shares a warning sign with this case"),
+            (25 if n["outcome"] == "CONFIRMED_FRAUD" else 0, "Fraud confirmed"),
+        ])
+        nodes.append({
+            "id": nid, "kind": "case", "label": f"CASE-{n['case_id']}", "state": n["ip_region"],
+            "time": n["last_alert_at"], "detail": "Alerted in the same state with the same signs",
+            "case_id": n["case_id"], "case_state": n["state"], "case_outcome": n["outcome"],
+            "case_visible": n["case_visible"], "risk_level": n["risk_level"], "shared": n["shared"],
+            "attention": score, "reasons": reasons, "breakdown": breakdown,
+        })
+        edges.append({"from": "me", "to": nid, "kind": "similar", "time": n["last_alert_at"],
+                      "count": n["alerts"]})
+
+    times = [x["time"] for x in nodes + edges if x.get("time")]
+    return {
+        "nodes": nodes, "edges": edges,
+        "span": {"start": min(times) if times else None, "end": max(times) if times else None},
     }

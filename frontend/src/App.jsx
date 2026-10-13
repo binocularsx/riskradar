@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useParams } from 'react-router-dom'
 
 import { api } from './lib/api'
 import Login from './pages/Login'
@@ -15,7 +15,7 @@ import Approvals from './pages/Approvals'
 import CompletedCases from './pages/CompletedCases'
 import Tracker from './pages/Tracker'
 import Locations from './pages/Locations'
-import GeoSurvey from './pages/GeoSurvey'
+import CaseNetwork from './pages/CaseNetwork'
 import NotificationBell from './components/NotificationBell'
 import { ROLE, say } from './lib/words'
 
@@ -67,6 +67,12 @@ function nav(permissions) {
     can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
     { to: '/roles', label: 'Access and roles', section: 'Settings', hint: 'See what each team member can do' },
   ].filter(Boolean)
+}
+
+// D115: the geo survey became part of the case network; old links still land.
+function GeoRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/cases/${id}/network`} replace />
 }
 
 function initials(name) {
@@ -181,7 +187,8 @@ export default function App() {
             <Route path="/operations" element={guard('metrics:read', <Operations user={user} />)} />
             <Route path="/transactions" element={guard('cases:read', <Transactions />)} />
             <Route path="/locations" element={guard('analysis:geography', <Locations />)} />
-            <Route path="/cases/:id/geo" element={guard('cases:read', <GeoSurvey />)} />
+            <Route path="/cases/:id/network" element={guard('cases:read', <CaseNetwork />)} />
+            <Route path="/cases/:id/geo" element={<GeoRedirect />} />
             <Route path="/analytics" element={guard('metrics:read', <Metrics user={user} />)} />
             <Route path="/admin" element={guard('admin:rules', <Admin user={user} />)} />
             <Route path="/roles" element={<Roles user={user} />} />
