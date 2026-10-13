@@ -18,6 +18,7 @@ const ROLES = [
     sees: [
       'Cases to review — the work assigned to them',
       'Payment lookup — find a payment on their cases and see how it was checked',
+      'Geo survey on each of their cases — where the activity happened and how it ties to other customers',
     ],
     can: [
       'Take a case from the shared pool',
@@ -41,6 +42,7 @@ const ROLES = [
     sees: [
       'Everything an analyst sees',
       'Dashboard — waiting cases, time waiting, team workload and results',
+      'Geo survey on any case',
     ],
     can: [
       'Everything an analyst can do',
@@ -60,6 +62,7 @@ const ROLES = [
     sees: [
       'System settings — detection rules, limits, system versions and activity records',
       'Dashboard',
+      'Location analysis — what is happening across the bank, by state and over time',
       'No access to customer cases',
     ],
     can: [

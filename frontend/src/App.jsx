@@ -14,6 +14,9 @@ import Intake from './pages/Intake'
 import Approvals from './pages/Approvals'
 import CompletedCases from './pages/CompletedCases'
 import Tracker from './pages/Tracker'
+import Locations from './pages/Locations'
+import GeoSurvey from './pages/GeoSurvey'
+import NotificationBell from './components/NotificationBell'
 import { ROLE, say } from './lib/words'
 
 /* Line icons for the nav, inline so they inherit currentColor and need no
@@ -35,6 +38,7 @@ const ICONS = {
   '/operations': ['M12 3a9 9 0 1 0 9 9', 'M12 12l5-3'],
   '/transactions': ['M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z', 'M20 20l-4-4'],
   '/analytics': ['M4 20V10', 'M10 20V4', 'M16 20v-7', 'M22 20H2'],
+  '/locations': ['M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z', 'M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
   '/admin': ['M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3',
              'M1 14h6', 'M9 8h6', 'M17 16h6'],
   '/roles': ['M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M3 20a6 6 0 0 1 12 0', 'M17 11l2 2 4-4'],
@@ -57,6 +61,9 @@ function nav(permissions) {
     can('cases:close') && { to: '/completed', label: 'Completed cases', section: 'Cases', hint: 'Every closed case and how it was decided' },
     can('metrics:read') && { to: '/operations', label: 'Operations', section: 'Reports', hint: 'See service readiness, urgent work and team workload' },
     can('metrics:read') && { to: '/analytics', label: 'Performance reports', section: 'Reports', hint: 'See transaction and detection trends' },
+    // D113: the bank-wide view is the administrator's. Analysts and leads get the
+    // same picture for one case at a time, as the Geo survey inside case review.
+    can('analysis:geography') && { to: '/locations', label: 'Location analysis', section: 'Analysis', hint: 'What is happening across the bank, by state and over time' },
     can('admin:rules') && { to: '/admin', label: 'System settings', section: 'Settings', hint: 'Manage detection rules and limits' },
     { to: '/roles', label: 'Access and roles', section: 'Settings', hint: 'See what each team member can do' },
   ].filter(Boolean)
@@ -150,6 +157,7 @@ export default function App() {
           </Link> : <span className="muted">Technology operations</span>}
           <div className="topbar-right">
             {user.permissions.includes('cases:approve_fraud') && <Link to="/approvals">Pending decisions</Link>}
+            <NotificationBell />
             <div className="topbar-profile">
               <span className="avatar">{initials(user.display_name)}</span>
               <span className="topbar-profile-copy">
@@ -172,6 +180,8 @@ export default function App() {
             <Route path="/cases/:id" element={guard('cases:read', <CaseDetail user={user} />)} />
             <Route path="/operations" element={guard('metrics:read', <Operations user={user} />)} />
             <Route path="/transactions" element={guard('cases:read', <Transactions />)} />
+            <Route path="/locations" element={guard('analysis:geography', <Locations />)} />
+            <Route path="/cases/:id/geo" element={guard('cases:read', <GeoSurvey />)} />
             <Route path="/analytics" element={guard('metrics:read', <Metrics user={user} />)} />
             <Route path="/admin" element={guard('admin:rules', <Admin user={user} />)} />
             <Route path="/roles" element={<Roles user={user} />} />

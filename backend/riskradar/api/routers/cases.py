@@ -28,6 +28,7 @@ from ...audit import chain
 from ...clocks import sweep as clock_sweep
 from ...clocks import watchlist
 from ...events import publish
+from ... import notifications as nt
 from ...security import visibility
 from ...security.rbac import Permission
 from ..deps import get_conn, requires
@@ -405,6 +406,11 @@ def add_note(
         object_id=case_id,
         payload={"note_id": note_id, "length": len(body.body)},
     )
+    # D114: a note from somebody else on your case is news; your own is not.
+    about = nt.case_people(conn, case_id)
+    nt.notify(conn, [case["assignee_id"]], kind=nt.NOTE_ADDED, case_id=case_id, actor_id=user["id"],
+              title=f"{user.get('display_name') or 'A colleague'} added a note to {nt.case_label(about)}",
+              body=body.body[:240])
     return {"id": note_id}
 
 
@@ -460,6 +466,13 @@ def escalate(
             "INSERT INTO case_notes (case_id, author_id, body) VALUES (%s, %s, %s)",
             (case_id, user["id"], f"Escalated to {body.target}: {body.note}"),
         )
+    # D114: the receiving team is the leads; it waits, unassigned, until one takes it.
+    about = nt.case_people(conn, case_id)
+    nt.notify(conn, nt.leads(conn), kind=nt.ESCALATION_WAITING, urgent=True, case_id=case_id, ref=str(case_id),
+              actor_id=user["id"], title=f"{user.get('display_name') or 'An analyst'} escalated {nt.case_label(about)} to you",
+              body=body.note[:240])
+    nt.resolve(conn, kind=nt.CASE_ASSIGNED, case_id=case_id, recipients=[user["id"]],
+               note="You escalated it")
     # The case leaves the escalating analyst's queue and waits, unassigned, in
     # the receiving team's escalated queue.
     return _transition(
@@ -751,6 +764,19 @@ def assign(
     if body.assignee_id:
         publish(conn, "case_assigned", {"case_id": case_id, "assignee_id": body.assignee_id,
                                         "reason": "reassigned by a lead"})
+    # D114: the new holder has work; the old one should know it left them.
+    about = nt.case_people(conn, case_id)
+    lead = user.get("display_name") or "A lead"
+    if body.assignee_id != case["assignee_id"]:
+        new_name = nt.name_of(conn, body.assignee_id) if body.assignee_id else "nobody"
+        nt.resolve(conn, kind=(nt.CASE_ASSIGNED, nt.ESCALATION_WAITING), case_id=case_id,
+                   note=f"Reassigned to {new_name} by {lead}")
+        if body.assignee_id:
+            nt.notify(conn, [body.assignee_id], kind=nt.CASE_ASSIGNED, urgent=True, case_id=case_id,
+                      ref=str(case_id), actor_id=user["id"],
+                      title=f"{lead} assigned {nt.case_label(about)} to you", body=f"Reason: {body.reason}")
+        nt.notify(conn, [case["assignee_id"]], kind=nt.CASE_REASSIGNED_AWAY, case_id=case_id, actor_id=user["id"],
+                  title=f"{nt.case_label(about)} was reassigned to {new_name}", body=f"By {lead}: {body.reason}")
     return _fetch_case(conn, case_id, user)
 
 
@@ -808,4 +834,15 @@ def close_case(
         params={"uid": user["id"]},
         payload={"outcome": case["outcome"], "known_mule_tokens_added": promoted},
     )
+    # D114: everyone who worked it hears it is finished, and nothing about it
+    # is left asking anyone for action.
+    about = nt.case_people(conn, case_id)
+    worked = [r["submitted_by"] for r in _rows(
+        conn, "SELECT DISTINCT submitted_by FROM fraud_submissions WHERE case_id = %s", (case_id,))]
+    outcome = {"CONFIRMED_FRAUD": "fraud confirmed", "FALSE_POSITIVE": "no fraud found",
+               "INCONCLUSIVE": "not enough evidence either way"}.get(case["outcome"], "closed")
+    lead = user.get("display_name") or "A lead"
+    nt.resolve(conn, kind=nt.OPEN_CASE_WORK, case_id=case_id, note=f"Case closed by {lead}")
+    nt.notify(conn, [case["assignee_id"], case.get("escalated_by"), *worked], kind=nt.CASE_CLOSED, case_id=case_id,
+              actor_id=user["id"], title=f"{nt.case_label(about)} is closed: {outcome}", body=f"Closed by {lead}.")
     return updated

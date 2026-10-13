@@ -38,9 +38,14 @@ from .. import reporting as support_reporting
 from .. import restrictions as restriction_delivery
 from ..audit import chain
 from ..events import publish
+from .. import notifications as nt
 
 PENDING, APPROVED, REJECTED, RETURNED, SUPERSEDED = "PENDING", "APPROVED", "REJECTED", "RETURNED", "SUPERSEDED"
 DECISIONS = {"APPROVE": APPROVED, "REJECT": REJECTED, "RETURN": RETURNED}
+
+# How a proposed outcome is said in a notification (D114).
+_OUTCOME_WORDS = {"CONFIRMED_FRAUD": "Fraud confirmed", "FALSE_POSITIVE": "No fraud found",
+                  "INCONCLUSIVE": "More review needed"}
 
 # What a submission may ask the bank to do. Free text is not an action (plan §5.1).
 RESTRICTION_ACTIONS = {
@@ -164,6 +169,18 @@ def submit(conn: Any, *, case_id: int, user: dict[str, Any], proposed_outcome: s
     publish(conn, "fraud_submitted", {"case_id": case_id, "submission_id": submission["id"],
                                       "proposed_outcome": proposed_outcome, "submitted_by": user["id"],
                                       "restrictions": len(wanted)})
+    # D114: a lead who did not write it must decide it (D93), so every such lead
+    # is told; a superseded proposal no longer asks anybody for anything.
+    about = nt.case_people(conn, case_id)
+    for old in superseded:
+        nt.resolve(conn, kind=nt.APPROVAL_WAITING, ref=str(old["id"]), note="Replaced by a newer proposal")
+    nt.resolve(conn, kind=(nt.CASE_ASSIGNED, nt.OUTCOME_SENT_BACK, nt.OUTCOME_REJECTED, nt.CASE_HANDED_BACK),
+               case_id=case_id, recipients=[user["id"]], note="You proposed an outcome")
+    nt.notify(conn, nt.leads(conn), kind=nt.APPROVAL_WAITING, urgent=True, case_id=case_id,
+              ref=str(submission["id"]), link="/approvals", actor_id=user["id"],
+              title=f"{user.get('display_name') or 'An analyst'} proposed \"{_OUTCOME_WORDS.get(proposed_outcome, proposed_outcome)}\" "
+                    f"on {nt.case_label(about)}",
+              body=f"Waiting for a lead who did not write it to approve. {rationale[:200]}")
     submission["case_version"] = version
     return submission
 
@@ -265,6 +282,22 @@ def decide(conn: Any, *, submission_id: int, user: dict[str, Any], decision: str
     )
     publish(conn, "fraud_decided", {"case_id": case["id"], "submission_id": submission_id, "decision": state,
                                     "decided_by": user["id"], "submitted_by": submission["submitted_by"]})
+    # D114: the other leads stop being asked; the analyst hears the answer.
+    lead = user.get("display_name") or "A lead"
+    about = nt.case_people(conn, case["id"])
+    proposed = _OUTCOME_WORDS.get(submission["proposed_outcome"], submission["proposed_outcome"])
+    verb = {APPROVED: "approved", REJECTED: "rejected", RETURNED: "sent back"}[state]
+    nt.resolve(conn, kind=nt.APPROVAL_WAITING, ref=str(submission_id), note=f"{verb.capitalize()} by {lead}")
+    if state == APPROVED:
+        nt.notify(conn, [submission["submitted_by"]], kind=nt.OUTCOME_APPROVED, case_id=case["id"],
+                  actor_id=user["id"], title=f"{lead} approved \"{proposed}\" on {nt.case_label(about)}",
+                  body=reason or None)
+    else:
+        nt.notify(conn, [submission["submitted_by"]],
+                  kind=nt.OUTCOME_SENT_BACK if state == RETURNED else nt.OUTCOME_REJECTED, urgent=True,
+                  case_id=case["id"], ref=str(submission_id), actor_id=user["id"],
+                  title=f"{lead} {verb} your finding on {nt.case_label(about)}",
+                  body=(reason or None) if state == REJECTED else f"More work needed: {reason}")
     return {"submission": submission, "known_mule_tokens_added": promoted, "case_version": version,
             "restrictions_issued": restrictions_issued}
 

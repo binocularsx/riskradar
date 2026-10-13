@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
+import { Link } from 'react-router-dom'
+
 import { api, nairaShort } from '../lib/api'
+import { STATES, projection } from '../lib/geo'
 
 /**
  * Where the activity came from (D109).
@@ -17,21 +20,6 @@ import { api, nairaShort } from '../lib/api'
  * about being state-level, and it draws with no map dependency at all.
  */
 
-// Approximate centroids, degrees. Only the states the simulator produces.
-const STATES = {
-  'NG-LA': { name: 'Lagos', lat: 6.52, lon: 3.38 },
-  'NG-OY': { name: 'Oyo', lat: 8.15, lon: 3.60 },
-  'NG-KD': { name: 'Kaduna', lat: 10.52, lon: 7.44 },
-  'NG-KN': { name: 'Kano', lat: 11.75, lon: 8.52 },
-  'NG-EN': { name: 'Enugu', lat: 6.45, lon: 7.50 },
-  'NG-AB': { name: 'Abia', lat: 5.45, lon: 7.52 },
-  'NG-RI': { name: 'Rivers', lat: 4.85, lon: 6.95 },
-  'NG-DE': { name: 'Delta', lat: 5.70, lon: 5.93 },
-  'NG-FC': { name: 'FCT Abuja', lat: 9.07, lon: 7.40 },
-}
-
-// Nigeria's bounding box, so the plot is a projection rather than a scatter.
-const BOUNDS = { west: 2.6, east: 14.7, south: 4.0, north: 13.9 }
 const W = 460
 const H = 380
 
@@ -39,8 +27,7 @@ const H = 380
 // degree of the western edge and its symbol is the largest on the map, so an
 // edge-to-edge projection clipped the most important state in half.
 const M = 46
-const px = (lon) => M + ((lon - BOUNDS.west) / (BOUNDS.east - BOUNDS.west)) * (W - 2 * M)
-const py = (lat) => (H - M) - ((lat - BOUNDS.south) / (BOUNDS.north - BOUNDS.south)) * (H - 2 * M)
+const { x: px, y: py } = projection(W, H, M)
 
 const HOURS = [
   { key: 24, label: '24 hours' },
@@ -48,7 +35,7 @@ const HOURS = [
   { key: 720, label: '30 days' },
 ]
 
-export default function GeoMap() {
+export default function GeoMap({ showLink = false }) {
   const [hours, setHours] = useState(168)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
@@ -159,7 +146,8 @@ export default function GeoMap() {
       <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
         {data.total.toLocaleString()} transactions placed
         {data.no_region ? ` · ${data.no_region.toLocaleString()} had no region and are not on the map` : ''}
-        {unplaceable.length ? ` · ${unplaceable.length} region code(s) not mapped: ${unplaceable.map((u) => u.ip_region).join(', ')}` : ''}
+        {unplaceable.length ? ` · ${unplaceable.length} location(s) could not be placed on the map` : ''}
+        {showLink && <>{' · '}<Link to="/locations">Open location analysis →</Link></>}
       </p>
     </div>
   )

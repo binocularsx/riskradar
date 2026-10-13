@@ -13,6 +13,7 @@ separate metrics page was one of the compensating cuts.
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -32,12 +33,29 @@ def _rows(conn: Any, sql: str, params: Any = None) -> list[dict[str, Any]]:
         return [dict(r) if not isinstance(r, dict) else r for r in cur.fetchall()]
 
 
+_overview_cache: dict[int, tuple[float, dict[str, Any]]] = {}
+
+
 @router.get("/metrics/overview")
 def overview(
     hours: int = Query(24, ge=1, le=720),
     user: dict = Depends(requires(Permission.METRICS_READ)),
     conn: Any = Depends(get_conn),
 ) -> dict[str, Any]:
+    # Over a week or a month every query here scans a million decisions — about
+    # eight seconds — and the page polls. Long windows barely move minute to
+    # minute, so they are reused for a minute; a day or less is always live.
+    if hours > 24:
+        hit = _overview_cache.get(hours)
+        if hit and time.monotonic() - hit[0] < 60:
+            return hit[1]
+        result = _overview(hours, conn)
+        _overview_cache[hours] = (time.monotonic(), result)
+        return result
+    return _overview(hours, conn)
+
+
+def _overview(hours: int, conn: Any) -> dict[str, Any]:
     window = f"{int(hours)} hours"
 
     volume = _rows(
@@ -156,6 +174,9 @@ def overview(
             "utilisation": round(today / budget, 3) if budget else None,
         },
         "active_model": model[0] if model else None,
+        # When nothing is arriving, every chart above is empty. Saying when the
+        # last payment came lets the screen explain that instead of looking broken.
+        "last_activity_at": _rows(conn, "SELECT max(occurred_at) AS at FROM transactions")[0]["at"],
     }
 
 

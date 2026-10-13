@@ -31,6 +31,7 @@ from typing import Any
 from ..audit import chain
 from ..clocks import sweep as clock_sweep
 from ..events import publish
+from .. import notifications as nt
 from ..policy import budget
 from . import assignment, correlation
 
@@ -87,6 +88,13 @@ def start_clocks(conn: Any, *, case_id: int, user: dict[str, Any], reported_at: 
         "case_id": case_id, "assignee_id": case["assignee_id"], "risk_level": case["risk_level"],
         "channel": channel, "missed_by_detector": len(customer_found or []),
     })
+    # D114: the regulator's clocks have started (D71). The case's analyst must
+    # act; with nobody on it yet, the leads must.
+    about = nt.case_people(conn, case_id)
+    nt.notify(conn, [case["assignee_id"]] if case["assignee_id"] else nt.leads(conn), kind=nt.CUSTOMER_REPORTED,
+              urgent=True, case_id=case_id, ref=str(case_id), actor_id=user["id"],
+              title=f"The customer reported fraud on {nt.case_label(about)}",
+              body="The regulator's deadlines have started. Acknowledge the report first.")
     return {"case_id": case_id}
 
 

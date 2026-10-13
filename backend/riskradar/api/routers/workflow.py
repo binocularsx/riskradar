@@ -27,6 +27,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...audit import chain
+from ... import notifications as nt
 from ...cases import submissions, workflow
 from ...security import visibility
 from ...security.rbac import Permission
@@ -245,6 +246,13 @@ def return_case(
     chain.append(conn, actor_user_id=user["id"], action="CASE_RETURNED", object_type="case", object_id=case_id,
                  from_state=case["state"], to_state="UNDER_REVIEW",
                  payload={"returned_to": case["escalated_by"], "reason": body.findings[:500]})
+    # D114: it is the escalating analyst's work again, with findings to act on.
+    about = nt.case_people(conn, case_id)
+    who = user.get("display_name") or "A lead"
+    nt.resolve(conn, kind=nt.ESCALATION_WAITING, case_id=case_id, note=f"Handed back by {who}")
+    nt.notify(conn, [case["escalated_by"]], kind=nt.CASE_HANDED_BACK, urgent=True, case_id=case_id,
+              ref=str(case_id), actor_id=user["id"],
+              title=f"{who} handed {nt.case_label(about)} back to you", body=f"Findings: {body.findings[:240]}")
     # D94: handing it back gives it away. The person returning it may no longer
     # see the case, so they get a confirmation rather than a 404 on their own
     # successful action.

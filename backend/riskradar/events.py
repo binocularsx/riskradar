@@ -12,6 +12,8 @@ Event types (the console listens by name):
 * ``case_reported`` — a customer reported fraud on a case (D90); tell the
   assignee and the leads, it has moved to the top of the queue.
 * ``clock_breached`` — a CBN clock ran out on a reported case (D71, D90).
+* ``notification`` — somebody's bell has news (D114). Delivered only to the
+  people in ``recipient_ids``; the notification itself is in ``notifications``.
 """
 
 from __future__ import annotations

@@ -34,6 +34,7 @@ from typing import Any
 
 from ..audit import chain
 from ..events import publish
+from .. import notifications as nt
 
 AUTOMATIC = "automatic: least open work"
 NOBODY = "nobody eligible: waiting in the unassigned queue"
@@ -104,6 +105,11 @@ def route(conn: Any, case_id: int, *, sys_uid: int, reason: str = AUTOMATIC) -> 
     )
     publish(conn, "case_assigned", {"case_id": case_id, "assignee_id": chosen["id"],
                                     "assignee": chosen["display_name"], "reason": reason})
+    # D114: it is now somebody's work, with a review deadline already running.
+    about = nt.case_people(conn, case_id)
+    nt.notify(conn, [chosen["id"]], kind=nt.CASE_ASSIGNED, urgent=True, case_id=case_id, ref=str(case_id),
+              actor_id=sys_uid, title=f"{nt.case_label(about)} was assigned to you",
+              body=f"{(about['risk_level'] or '').title()} risk. Its review deadline is already running.".strip())
     return {"assigned": True, "assignee_id": chosen["id"], "assignee": chosen["display_name"],
             "case_version": int(dict(updated)["version"])}
 
