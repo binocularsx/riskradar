@@ -148,3 +148,34 @@ def test_an_analyst_only_gets_links_to_cases_they_may_open():
                 own = c.execute("SELECT 1 FROM cases WHERE id = %s AND (assignee_id = %s OR escalated_by = %s)",
                                 (ref["case_id"], uid, uid)).fetchone()
                 assert own, "a case marked openable must be one the analyst holds"
+
+
+def test_the_case_network_is_well_formed_and_holds_no_raw_identifiers():
+    """D115: one graph for the network and the map, with a reason for every rank."""
+    case_id = _a_case_with_alerts()
+    if case_id is None:
+        pytest.skip("no located alert in this database")
+    body = as_user("lead@riskradar.local").get(f"/v1/cases/{case_id}/geo?days=30").json()
+    graph = body["graph"]
+    ids = {n["id"] for n in graph["nodes"]}
+    assert [n["kind"] for n in graph["nodes"]].count("customer") == 1
+    for e in graph["edges"]:
+        assert e["from"] in ids and e["to"] in ids, e
+        assert e["kind"] in ("paid", "used", "similar")
+    for n in graph["nodes"]:
+        assert 0 <= n["attention"] <= 100
+        assert n["attention"] == 0 or n["reasons"], "every point given is said in words"
+        if n["kind"] != "customer":
+            # The screen shows each reason with its points; they must add up to what it ranks by.
+            assert n["attention"] == min(100, sum(b["points"] for b in n["breakdown"]))
+            assert [b["why"] for b in n["breakdown"]] == n["reasons"][:len(n["breakdown"])]
+        assert "token" not in n and "subject_token" not in n
+        if n["kind"] == "account":
+            assert len(n["ending"]) == 4
+        if n["kind"] == "device":
+            # Usual means neither new to the customer nor shared; only usual ones may be hidden.
+            assert n["routine"] == (not n["new_device"] and not n["others"])
+            assert n["flagged"] <= len(body["events"])
+    assert all("device_token" not in e for e in body["events"]), "the raw device token stays on the server"
+    if graph["edges"]:
+        assert graph["span"]["start"] <= graph["span"]["end"]
