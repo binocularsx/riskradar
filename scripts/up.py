@@ -17,6 +17,8 @@ you genuinely want new history generated from scratch.
     python scripts/up.py              # everything, including the live feed
     python scripts/up.py --no-feed    # leave the transaction feed off
     python scripts/up.py --rate 8     # busier feed
+    python scripts/up.py --fresh      # a fresh desk: no carried-over cases, a full
+                                      # queue of new ones before the console opens
 """
 from __future__ import annotations
 
@@ -135,6 +137,10 @@ def main() -> None:
                     help="also publish it, so the demo can be reached from another machine")
     ap.add_argument("--vercel", action="store_true",
                     help="with --share, also repoint the shared Vercel site at this tunnel")
+    ap.add_argument("--fresh", action="store_true",
+                    help="restore the fresh-desk base, move it to now, and fill the queue with new cases")
+    ap.add_argument("--fresh-cases", type=int, default=40,
+                    help="with --fresh, how many new cases the warm-up opens")
     args = ap.parse_args()
 
     s = settings()
@@ -148,12 +154,24 @@ def main() -> None:
 
     start_postgres(s.db_port)
 
+    if args.fresh:
+        import down
+        import fresh_desk
+
+        # A fresh desk replaces the database, so nothing may hold it open.
+        # Spare this launcher: it runs from the same virtualenv.
+        down.stop_matching(exclude_like="up.py")
+        fresh_desk.clone_base()
+        fresh_desk.reset_sim_state()
+
     # Cheap and idempotent, and it catches the case where the code has moved on
     # from the database on disk — which otherwise surfaces as a confusing 500.
     migrated = subprocess.run([str(PYTHON), "scripts/migrate.py"], cwd=str(REPO_ROOT),
                               capture_output=True, text=True)
     applied = [ln for ln in migrated.stdout.splitlines() if "applying" in ln]
     say("migrations", f"{len(applied)} applied" if applied else "already current")
+    if args.fresh:
+        fresh_desk.rebase()
 
     if listening(8000):
         say("api", "already up on 8000")
@@ -170,6 +188,8 @@ def main() -> None:
     say("workers", f"{args.workers} scoring workers")
     pids["clocks"] = spawn("clocks", [str(PYTHON), "-u", "scripts/run_clocks.py", "60"], REPO_ROOT)
     say("clocks", "regulatory sweep every 60s")
+    if args.fresh:
+        fresh_desk.warm_up(args.fresh_cases)
 
     if not args.no_feed:
         env = dict(os.environ, PYTHONPATH=str(REPO_ROOT / "simulator"))
