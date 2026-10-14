@@ -97,10 +97,21 @@ def spawn(name: str, args: list[str], cwd: Path, env: dict | None = None) -> int
     flags = 0
     if os.name == "nt":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    proc = subprocess.Popen(
-        args, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-        creationflags=flags, close_fds=True, env=env,
-    )
+    # Detached is not enough on Windows: a launcher that runs us inside a job
+    # object (the Claude app, some terminals) closes the job when it restarts,
+    # and every service in it dies at once - Postgres included. Ask to break
+    # away from the job; if the job forbids that, fall back to plain detached.
+    breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+    for f in ((flags | breakaway, flags) if breakaway else (flags,)):
+        try:
+            proc = subprocess.Popen(
+                args, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                creationflags=f, close_fds=True, env=env,
+            )
+            break
+        except OSError:
+            if f == flags:
+                raise
     return proc.pid
 
 

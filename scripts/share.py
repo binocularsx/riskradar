@@ -139,8 +139,16 @@ def spawn(name: str, args: list[str], cwd: Path) -> int:
     LOGS.mkdir(exist_ok=True)
     log = open(LOGS / f"{name}.log", "wb")
     flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-    return subprocess.Popen(args, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
-                            stdin=subprocess.DEVNULL, creationflags=flags, close_fds=True).pid
+    # Break away from a launcher's job object so a restart of the launcher does
+    # not take the tunnel down with it; fall back if the job forbids it.
+    breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+    for f in ((flags | breakaway, flags) if breakaway else (flags,)):
+        try:
+            return subprocess.Popen(args, cwd=str(cwd), stdout=log, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL, creationflags=f, close_fds=True).pid
+        except OSError:
+            if f == flags:
+                raise
 
 
 def stop() -> None:
