@@ -441,8 +441,14 @@ def intake(
     today = _rows(
         conn,
         """
-        SELECT (SELECT count(*) FROM alerts WHERE raised_at >= date_trunc('day', now() AT TIME ZONE 'Africa/Lagos')
-                                                          AT TIME ZONE 'Africa/Lagos') AS alerts_today,
+        -- The day's ledger is what the limit is enforced against (D86), so the
+        -- tile reads it rather than recounting alerts: a fresh desk's warm-up
+        -- raised its cases outside the live day's budget. A day with no
+        -- ledger row yet falls back to the count.
+        SELECT COALESCE(
+                 (SELECT raised FROM alert_budget_days WHERE day = (now() AT TIME ZONE 'Africa/Lagos')::date),
+                 (SELECT count(*) FROM alerts WHERE raised_at >= date_trunc('day', now() AT TIME ZONE 'Africa/Lagos')
+                                                          AT TIME ZONE 'Africa/Lagos')) AS alerts_today,
                (SELECT value FROM app_config WHERE key = 'alert_budget_per_day') AS budget,
                EXTRACT(EPOCH FROM (now() - (date_trunc('day', now() AT TIME ZONE 'Africa/Lagos')
                                             AT TIME ZONE 'Africa/Lagos'))) / 3600.0 AS hours_elapsed
