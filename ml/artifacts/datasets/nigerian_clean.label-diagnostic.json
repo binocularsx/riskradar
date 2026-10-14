@@ -1,0 +1,267 @@
+{
+  "dataset": "nigerian_transactions_clean.csv",
+  "rows_sampled": 356020,
+  "fraud_share": 0.0362,
+  "split": "time-ordered, train older 70%, test newer 30%",
+  "model_behaviour_only": {
+    "roc_auc": 0.5878,
+    "pr_auc": 0.0434,
+    "pr_auc_lift_over_random": 1.19
+  },
+  "model_with_excluded_scores": {
+    "roc_auc": 0.5944,
+    "pr_auc": 0.0446,
+    "pr_auc_lift_over_random": 1.23
+  },
+  "model_with_scores_and_categories": {
+    "roc_auc": 0.5973,
+    "pr_auc": 0.0453,
+    "pr_auc_lift_over_random": 1.24
+  },
+  "per_column": [
+    {
+      "column": "is_ato_risk",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5929,
+      "fraud_share_in_top_1pct": 0.0396
+    },
+    {
+      "column": "new_device_transaction",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5929,
+      "fraud_share_in_top_1pct": 0.0396
+    },
+    {
+      "column": "user_txn_count_total",
+      "kind": "behaviour",
+      "roc_auc": 0.5291,
+      "fraud_share_in_top_1pct": 0.0407
+    },
+    {
+      "column": "txn_count_last_1h",
+      "kind": "behaviour",
+      "roc_auc": 0.5169,
+      "fraud_share_in_top_1pct": 0.0413
+    },
+    {
+      "column": "txn_count_last_24h",
+      "kind": "behaviour",
+      "roc_auc": 0.5169,
+      "fraud_share_in_top_1pct": 0.0413
+    },
+    {
+      "column": "user_txn_frequency_24h",
+      "kind": "behaviour",
+      "roc_auc": 0.5169,
+      "fraud_share_in_top_1pct": 0.0413
+    },
+    {
+      "column": "user_std_txn_amt",
+      "kind": "behaviour",
+      "roc_auc": 0.5074,
+      "fraud_share_in_top_1pct": 0.0362
+    },
+    {
+      "column": "total_amount_last_1h",
+      "kind": "behaviour",
+      "roc_auc": 0.5066,
+      "fraud_share_in_top_1pct": 0.0376
+    },
+    {
+      "column": "time_since_last",
+      "kind": "behaviour",
+      "roc_auc": 0.5043,
+      "fraud_share_in_top_1pct": 0.032
+    },
+    {
+      "column": "amount_ngn",
+      "kind": "behaviour",
+      "roc_auc": 0.5042,
+      "fraud_share_in_top_1pct": 0.0388
+    },
+    {
+      "column": "location_fraud_risk",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.504,
+      "fraud_share_in_top_1pct": 0.0345
+    },
+    {
+      "column": "avg_gap_between_txns",
+      "kind": "behaviour",
+      "roc_auc": 0.5037,
+      "fraud_share_in_top_1pct": 0.0298
+    },
+    {
+      "column": "velocity_score",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5037,
+      "fraud_share_in_top_1pct": 0.0396
+    },
+    {
+      "column": "txn_hour",
+      "kind": "behaviour",
+      "roc_auc": 0.5032,
+      "fraud_share_in_top_1pct": 0.0331
+    },
+    {
+      "column": "geo_anomaly_score",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5027,
+      "fraud_share_in_top_1pct": 0.0447
+    },
+    {
+      "column": "merchant_fraud_rate",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5022,
+      "fraud_share_in_top_1pct": 0.0393
+    },
+    {
+      "column": "is_weekend",
+      "kind": "behaviour",
+      "roc_auc": 0.5019,
+      "fraud_share_in_top_1pct": 0.0295
+    },
+    {
+      "column": "spending_deviation_score",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5016,
+      "fraud_share_in_top_1pct": 0.0359
+    },
+    {
+      "column": "ip_seen_count",
+      "kind": "behaviour",
+      "roc_auc": 0.5015,
+      "fraud_share_in_top_1pct": 0.0379
+    },
+    {
+      "column": "persona_fraud_risk",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5015,
+      "fraud_share_in_top_1pct": 0.0371
+    },
+    {
+      "column": "is_high_risk_state",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5011,
+      "fraud_share_in_top_1pct": 0.0427
+    },
+    {
+      "column": "device_seen_count",
+      "kind": "behaviour",
+      "roc_auc": 0.501,
+      "fraud_share_in_top_1pct": 0.0309
+    },
+    {
+      "column": "bvn_linked",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.501,
+      "fraud_share_in_top_1pct": 0.0329
+    },
+    {
+      "column": "time_since_last_transaction",
+      "kind": "behaviour",
+      "roc_auc": 0.5008,
+      "fraud_share_in_top_1pct": 0.0411
+    },
+    {
+      "column": "is_salary_week",
+      "kind": "behaviour",
+      "roc_auc": 0.5008,
+      "fraud_share_in_top_1pct": 0.0312
+    },
+    {
+      "column": "channel_risk_score",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5007,
+      "fraud_share_in_top_1pct": 0.0337
+    },
+    {
+      "column": "is_device_shared",
+      "kind": "behaviour",
+      "roc_auc": 0.5006,
+      "fraud_share_in_top_1pct": 0.0323
+    },
+    {
+      "column": "user_avg_txn_amt",
+      "kind": "behaviour",
+      "roc_auc": 0.5003,
+      "fraud_share_in_top_1pct": 0.034
+    },
+    {
+      "column": "is_high_risk_lga",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5003,
+      "fraud_share_in_top_1pct": 0.0365
+    },
+    {
+      "column": "is_ip_shared",
+      "kind": "behaviour",
+      "roc_auc": 0.5,
+      "fraud_share_in_top_1pct": 0.0331
+    },
+    {
+      "column": "geospatial_velocity_anomaly",
+      "kind": "score/risk (excluded)",
+      "roc_auc": 0.5,
+      "fraud_share_in_top_1pct": 0.0334
+    },
+    {
+      "column": "transaction_type",
+      "kind": "category",
+      "fraud_share_min": 0.0353,
+      "fraud_share_max": 0.0375,
+      "categories": 4
+    },
+    {
+      "column": "merchant_category",
+      "kind": "category",
+      "fraud_share_min": 0.0326,
+      "fraud_share_max": 0.0397,
+      "categories": 21
+    },
+    {
+      "column": "location",
+      "kind": "category",
+      "fraud_share_min": 0.0089,
+      "fraud_share_max": 0.0717,
+      "categories": 43
+    },
+    {
+      "column": "device_used",
+      "kind": "category",
+      "fraud_share_min": 0.0351,
+      "fraud_share_max": 0.0372,
+      "categories": 4
+    },
+    {
+      "column": "payment_channel",
+      "kind": "category",
+      "fraud_share_min": 0.0356,
+      "fraud_share_max": 0.0368,
+      "categories": 4
+    },
+    {
+      "column": "sender_persona",
+      "kind": "category",
+      "fraud_share_min": 0.0357,
+      "fraud_share_max": 0.037,
+      "categories": 3
+    },
+    {
+      "column": "state",
+      "kind": "category",
+      "fraud_share_min": 0.0089,
+      "fraud_share_max": 0.0717,
+      "categories": 37
+    },
+    {
+      "column": "source",
+      "kind": "category",
+      "fraud_share_min": 0.0361,
+      "fraud_share_max": 0.0422,
+      "categories": 2
+    }
+  ],
+  "verdict": "UNRELATED: no column, score, category or combination predicts the labels. They behave as if assigned independently of every recorded fact about the transaction.",
+  "note": "Diagnostic of the dataset only. The score columns stay excluded from every evaluation arm (D10f)."
+}

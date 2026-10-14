@@ -1,0 +1,462 @@
+"""The feature functions themselves.
+
+Plain English
+-------------
+This file answers one question, twenty-two times: *is this transaction unusual for
+this customer?*
+
+Each function takes the transaction being examined plus a list of that
+account's earlier transactions, and returns a single number. "How many
+transactions in the last hour?" "How big is this compared to their usual
+ceiling?" "Have they ever paid this person before?" Nothing here knows about
+fraud — these are just measurements. Deciding what the measurements mean is
+somebody else's job (``policy/engine.py``).
+
+The functions are deliberately dull and self-contained: no database, no
+network, no clock. That is what makes it possible to run exactly the same code
+during training and during live scoring, which is the single most important
+property in this system.
+
+Pure. No database handle, no dataframe, no clock. Everything they need arrives in
+``TxView`` and ``HistoryBundle``, which is what makes the equality test in
+``tests/test_train_serve_equality.py`` possible — and that test is the highest-
+value test in the suite (D15).
+
+Two rules hold throughout:
+
+* **Money is integer kobo until the last moment.** Aggregates are summed as
+  integers; only the final ratio becomes a float. Floating-point money is the
+  most common production defect in financial software and every aggregate
+  inherits the error (D9a).
+* **Only APPROVED transactions move value.** A declined probe and a reversed
+  transfer are events, not money (D21). Value features filter; count features
+  do not, because the attempts themselves are the signal.
+"""
+
+from __future__ import annotations
+
+import math
+from datetime import timedelta, timezone
+
+from .spec import (
+    CARD_PRESENT_CHANNELS,
+    CREDIT_RECENCY_CAP_MINUTES,
+    EVENT_LOOKBACK_HOURS,
+    FEATURE_NAMES,
+    LOCAL_UTC_OFFSET_HOURS,
+    NOT_APPLICABLE,
+    REGION_RECENT_HOURS,
+    RATIO_CAP,
+)
+from .types import HistoryBundle, PriorEvent, PriorTx, TxView
+
+
+def _within(priors: list[PriorTx], tx: TxView, hours: float) -> list[PriorTx]:
+    """Priors strictly before this transaction, inside the window.
+
+    ``occurred_at`` only (D9b). The strict ``<`` matters: a transaction must
+    never be part of its own history, or every count is off by one and the model
+    learns an offset instead of a behaviour.
+    """
+    cutoff = tx.occurred_at - timedelta(hours=hours)
+    return [p for p in priors if cutoff <= p.occurred_at < tx.occurred_at]
+
+
+def _approved(priors: list[PriorTx]) -> list[PriorTx]:
+    return [p for p in priors if p.auth_result == "APPROVED"]
+
+
+def _percentile(values: list[int], pct: float) -> float:
+    """Nearest-rank percentile.
+
+    Chosen over linear interpolation because both data-access paths must agree
+    exactly, and nearest-rank has no floating-point tie-breaking to diverge on.
+    """
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    rank = max(1, math.ceil(pct / 100.0 * len(ordered)))
+    return float(ordered[min(rank, len(ordered)) - 1])
+
+
+# ---------------------------------------------------------------------------
+# Individual features
+# ---------------------------------------------------------------------------
+
+
+def amount_log10(tx: TxView, _h: HistoryBundle) -> float:
+    """Log-scaled naira. Raw kobo spans six orders of magnitude; models hate that."""
+    naira = tx.amount_minor / 100.0
+    return round(math.log10(1.0 + naira), 6)
+
+
+def amount_ratio_to_account_p95_30d(tx: TxView, h: HistoryBundle) -> float:
+    """How far above this account's normal ceiling is this?
+
+    The 95th percentile rather than the mean: a single historical outlier should
+    not license every future one.
+    """
+    priors = _approved(_within(h.account, tx, 24 * 30))
+    p95 = _percentile([p.amount_minor for p in priors], 95.0)
+    if p95 <= 0:
+        # No approved history. Ratio is undefined, not infinite — a brand-new
+        # account is handled by account_age_days, not by a fabricated spike.
+        return 0.0
+    return round(min(tx.amount_minor / p95, RATIO_CAP), 6)
+
+
+def txn_count_1h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Burst velocity. Attempts, not just successes — the probing is the signal."""
+    return float(len(_within(h.account, tx, 1)))
+
+
+def approved_value_ratio_24h_vs_daily_mean_30d(tx: TxView, h: HistoryBundle) -> float:
+    """Is today's outflow unlike this account's normal day?
+
+    Includes the transaction under assessment, because the question is "would
+    today be abnormal if this went through".
+    """
+    day = _approved(_within(h.account, tx, 24))
+    month = _approved(_within(h.account, tx, 24 * 30))
+    if not month:
+        return 0.0
+    today_minor = sum(p.amount_minor for p in day) + tx.amount_minor
+    daily_mean_minor = sum(p.amount_minor for p in month) / 30.0
+    if daily_mean_minor <= 0:
+        return 0.0
+    return round(min(today_minor / daily_mean_minor, RATIO_CAP), 6)
+
+
+def failed_attempts_1h_account(tx: TxView, h: HistoryBundle) -> float:
+    """D21a. Insufficient funds and limit rejections cluster around an ATO drain."""
+    priors = _within(h.account, tx, 1)
+    return float(sum(1 for p in priors if p.auth_result in ("DECLINED", "FAILED")))
+
+
+def decline_rate_24h_account(tx: TxView, h: HistoryBundle) -> float:
+    """D21a. Card testing is a decline-heavy pattern by definition."""
+    priors = _within(h.account, tx, 24)
+    if not priors:
+        return 0.0
+    declined = sum(1 for p in priors if p.auth_result in ("DECLINED", "FAILED"))
+    return round(declined / len(priors), 6)
+
+
+def distinct_beneficiaries_1h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Mule fan-out: one account, many destinations, minutes apart."""
+    priors = _within(h.account, tx, 1)
+    seen = {p.beneficiary_token for p in priors if p.beneficiary_token}
+    if tx.beneficiary_token:
+        seen.add(tx.beneficiary_token)
+    return float(len(seen))
+
+
+def beneficiary_is_new_to_account(tx: TxView, h: HistoryBundle) -> float:
+    """Has this account ever paid this destination before?
+
+    D64: a payment with no beneficiary - every card and cash payment - used to
+    return 0.0, "paid before". That told the established-payee rule these were
+    familiar destinations, and it suppressed risk on 93.9% of card-testing fraud.
+    There is no destination to be new or familiar, so the answer is "not
+    applicable".
+    """
+    if not tx.beneficiary_token:
+        return NOT_APPLICABLE
+    priors = _within(h.account, tx, 24 * 90)
+    return 0.0 if any(p.beneficiary_token == tx.beneficiary_token for p in priors) else 1.0
+
+
+def beneficiary_first_seen_days(tx: TxView, h: HistoryBundle) -> float:
+    """How new is this destination to the bank's traffic as a whole?
+
+    Deliberately derived from our own history rather than from a stamped
+    beneficiary account age: for an outbound NIP transfer the beneficiary is at
+    another institution and we could never know its open date (§9.1). This is the
+    honest version of the same signal, and it works for both rails.
+    """
+    if not tx.beneficiary_token:
+        return NOT_APPLICABLE
+    if h.beneficiary_first_seen_at is None:
+        # Present, and never seen before: brand new. Version 1.0.0 returned 999
+        # here, which read as a long-standing payee - the opposite of the truth.
+        return 0.0
+    delta = tx.occurred_at - h.beneficiary_first_seen_at
+    return round(max(0.0, delta.total_seconds() / 86400.0), 6)
+
+
+def device_is_new_to_subject(tx: TxView, h: HistoryBundle) -> float:
+    """Device novelty at *customer* level, not account level (D19).
+
+    An attacker who compromises a customer reaches all of their accounts from the
+    same handset; scoping this per-account would call it new every time and
+    reward the attacker for spreading out.
+    """
+    if not tx.device_token:
+        return 0.0
+    priors = _within(h.subject, tx, 24 * 30)
+    return 0.0 if any(p.device_token == tx.device_token for p in priors) else 1.0
+
+
+def account_age_days(tx: TxView, _h: HistoryBundle) -> float:
+    """D20b, D22a. Derived here from a stamped timestamp, never joined.
+
+    Storing the timestamp and deriving the age is what makes this point-in-time
+    correct: an age column would change every night and silently rewrite history.
+    """
+    if tx.account_opened_at is None:
+        return NOT_APPLICABLE
+    delta = tx.occurred_at - tx.account_opened_at
+    return round(max(0.0, delta.total_seconds() / 86400.0), 6)
+
+
+def days_since_account_activity(tx: TxView, _h: HistoryBundle) -> float:
+    """D20b. Dormant-then-active is the account-takeover shape."""
+    if tx.last_activity_at is None:
+        return NOT_APPLICABLE
+    delta = tx.occurred_at - tx.last_activity_at
+    return round(max(0.0, delta.total_seconds() / 86400.0), 6)
+
+
+# ---------------------------------------------------------------------------
+# D77: before the money moves
+# ---------------------------------------------------------------------------
+#
+# Account takeover is decided before the first transfer: a password guessed, a
+# SIM swapped, a new phone bound, a PIN changed, a mule enrolled as a payee.
+# These read the customer's events in the lookback window. "Hours since" caps at
+# the window, so "not recently" is one value, not the age of the data.
+
+
+def _events_before(h: HistoryBundle, tx: TxView, event_type: str) -> list[PriorEvent]:
+    cutoff = tx.occurred_at - timedelta(hours=EVENT_LOOKBACK_HOURS)
+    return [e for e in h.events
+            if e.event_type == event_type and cutoff <= e.occurred_at < tx.occurred_at]
+
+
+def _hours_since_latest(events: list[PriorEvent], tx: TxView) -> float:
+    if not events:
+        return float(EVENT_LOOKBACK_HOURS)
+    latest = max(e.occurred_at for e in events)
+    return round((tx.occurred_at - latest).total_seconds() / 3600.0, 6)
+
+
+def failed_logins_1h_subject(tx: TxView, h: HistoryBundle) -> float:
+    """Failed logins for this customer in the hour before. Guessing looks like this."""
+    cutoff = tx.occurred_at - timedelta(hours=1)
+    return float(sum(1 for e in _events_before(h, tx, "LOGIN")
+                     if e.login_result == "FAILED" and e.occurred_at >= cutoff))
+
+
+def device_bound_hours(tx: TxView, h: HistoryBundle) -> float:
+    """How recently the device making this payment was bound to the customer.
+
+    Not applicable without a device. A device bound long ago, or never bound in
+    the window, is simply "not recently": the cap.
+    """
+    if not tx.device_token:
+        return NOT_APPLICABLE
+    bound = [e for e in _events_before(h, tx, "DEVICE_BOUND")
+             if e.device_token == tx.device_token and e.binding == "BOUND"]
+    return _hours_since_latest(bound, tx)
+
+
+def credential_changed_hours(tx: TxView, h: HistoryBundle) -> float:
+    """How recently a password, PIN, MFA method, email or phone was changed."""
+    return _hours_since_latest(_events_before(h, tx, "CREDENTIAL_CHANGED"), tx)
+
+
+def sim_changed_hours(tx: TxView, h: HistoryBundle) -> float:
+    """How recently the customer's SIM changed. A SIM swap takes over the OTPs."""
+    return _hours_since_latest(_events_before(h, tx, "SIM_CHANGED"), tx)
+
+
+def payee_added_minutes(tx: TxView, h: HistoryBundle) -> float:
+    """Minutes since this payment's destination was enrolled as a payee.
+
+    Enrolled a minute before being paid is the takeover shape; enrolled on
+    Tuesday and paid on Friday is ordinary. Not applicable without a destination.
+    """
+    if not tx.beneficiary_token:
+        return NOT_APPLICABLE
+    added = [e for e in _events_before(h, tx, "PAYEE_ADDED")
+             if e.beneficiary_token == tx.beneficiary_token]
+    return round(_hours_since_latest(added, tx) * 60.0, 6)
+
+
+# ---------------------------------------------------------------------------
+# D78: the receiving side
+# ---------------------------------------------------------------------------
+#
+# A mule account is first an account that receives: several people it has never
+# dealt with send it money, and the money leaves again within the hour. These
+# read the account's recent credits. They are computed for every transaction,
+# a credit or a payment, so the second leg (WP-04) can see what came in before
+# it went out.
+
+
+def _is_inbound(tx: TxView) -> bool:
+    return tx.direction == "INBOUND"
+
+
+def credits_24h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Credits into this account in the day before."""
+    return float(len(_within(h.credits, tx, 24)))
+
+
+def distinct_remitters_24h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Different senders in a day, counting this credit's sender. Fan-in."""
+    senders = {c.beneficiary_token for c in _within(h.credits, tx, 24) if c.beneficiary_token}
+    if _is_inbound(tx) and tx.remitter_token:
+        senders.add(tx.remitter_token)
+    return float(len(senders))
+
+
+def inbound_count_ratio_24h_vs_daily_mean_30d(tx: TxView, h: HistoryBundle) -> float:
+    """Is today's inflow unlike this account's normal day?
+
+    A trader takes forty payments a day, every day; a mule takes forty on the
+    day it is used. The month's mean is floored at one credit a month, so a
+    first-ever credit reads as unusual rather than dividing by zero.
+    """
+    day = len(_within(h.credits, tx, 24)) + (1 if _is_inbound(tx) else 0)
+    if day == 0:
+        return 0.0
+    month = len(_within(h.credits, tx, 24 * 30))
+    daily_mean = max(month / 30.0, 1.0 / 30.0)
+    return round(min(day / daily_mean, RATIO_CAP), 6)
+
+
+def minutes_since_last_credit(tx: TxView, h: HistoryBundle) -> float:
+    """How long ago money last arrived. Capped at a day."""
+    recent = _within(h.credits, tx, CREDIT_RECENCY_CAP_MINUTES / 60.0)
+    if not recent:
+        return float(CREDIT_RECENCY_CAP_MINUTES)
+    latest = max(c.occurred_at for c in recent)
+    return round((tx.occurred_at - latest).total_seconds() / 60.0, 6)
+
+
+def pass_through_ratio_24h(tx: TxView, h: HistoryBundle) -> float:
+    """Money out over money in, in the last day, counting this payment.
+
+    Near 1 or above, what arrived is leaving: the shape of an account used to
+    move someone else's money. Zero when nothing came in. Integer kobo until
+    the division (D9a); only approved money moves (D21).
+    """
+    inflow = sum(c.amount_minor for c in _approved(_within(h.credits, tx, 24)))
+    if inflow <= 0:
+        return 0.0
+    outflow = sum(p.amount_minor for p in _approved(_within(h.account, tx, 24)))
+    if not _is_inbound(tx) and tx.auth_result == "APPROVED":
+        outflow += tx.amount_minor
+    return round(min(outflow / inflow, RATIO_CAP), 6)
+
+
+# ---------------------------------------------------------------------------
+# D82: where, how and when
+# ---------------------------------------------------------------------------
+
+
+def region_is_new_to_subject(tx: TxView, h: HistoryBundle) -> float:
+    """Is this happening somewhere the customer had not been this month, before today?
+
+    1 if the region is new, 0 if the customer used it before the last day. Not
+    applicable without a region, for a credit, or for a customer with no located
+    history: a first transaction anywhere is not evidence of anything. The last
+    day is left out so a run of transactions in a new place stays new for the
+    whole run. People travel, so this is a hint that needs company (the
+    card-present count, the hour).
+    """
+    if not tx.ip_region or _is_inbound(tx):
+        return NOT_APPLICABLE
+    recent = tx.occurred_at - timedelta(hours=REGION_RECENT_HOURS)
+    seen = {p.ip_region for p in _within(h.subject, tx, 24 * 30) if p.ip_region and p.occurred_at < recent}
+    if not seen:
+        return NOT_APPLICABLE
+    return 0.0 if tx.ip_region in seen else 1.0
+
+
+def _card_present(channel: str | None, instrument: str | None) -> bool:
+    return instrument == "CARD" and channel in CARD_PRESENT_CHANNELS
+
+
+def card_present_count_1h_account(tx: TxView, h: HistoryBundle) -> float:
+    """Card-present attempts on the account in the hour, counting this one.
+
+    A skimmed card is cashed out at terminal after terminal before the owner
+    notices; a person buys lunch. Attempts, not approvals: the declined
+    withdrawal at the daily limit is part of the run.
+    """
+    prior = sum(1 for p in _within(h.account, tx, 1) if _card_present(p.channel, p.instrument))
+    return float(prior + (1 if _card_present(tx.channel, tx.instrument) else 0))
+
+
+def beneficiary_distinct_senders_24h(tx: TxView, h: HistoryBundle) -> float:
+    """How many other customers of ours paid this destination in the last day.
+
+    An impersonation or investment scam collects from many victims into one
+    account for a day or two. A school, a church levy or a popular vendor is
+    paid by many customers too, which is why the rule pairs this with how new
+    the destination is. Not applicable without a destination.
+    """
+    if not tx.beneficiary_token or _is_inbound(tx):
+        return NOT_APPLICABLE
+    return float(h.beneficiary_other_senders_24h)
+
+
+def hour_of_day_local(tx: TxView, _h: HistoryBundle) -> float:
+    """The hour in Nigeria (UTC+1, no daylight saving), 0 to 23.
+
+    Times are timezone-aware everywhere they are produced (D9b); a naive time
+    here is a bug upstream, and reading it as UTC is the least surprising answer.
+    """
+    when = tx.occurred_at if tx.occurred_at.tzinfo else tx.occurred_at.replace(tzinfo=timezone.utc)
+    return float(when.astimezone(timezone(timedelta(hours=LOCAL_UTC_OFFSET_HOURS))).hour)
+
+
+# ---------------------------------------------------------------------------
+# The vector
+# ---------------------------------------------------------------------------
+
+_FUNCTIONS = {
+    "amount_log10": amount_log10,
+    "amount_ratio_to_account_p95_30d": amount_ratio_to_account_p95_30d,
+    "txn_count_1h_account": txn_count_1h_account,
+    "approved_value_ratio_24h_vs_daily_mean_30d": approved_value_ratio_24h_vs_daily_mean_30d,
+    "failed_attempts_1h_account": failed_attempts_1h_account,
+    "decline_rate_24h_account": decline_rate_24h_account,
+    "distinct_beneficiaries_1h_account": distinct_beneficiaries_1h_account,
+    "beneficiary_is_new_to_account": beneficiary_is_new_to_account,
+    "beneficiary_first_seen_days": beneficiary_first_seen_days,
+    "device_is_new_to_subject": device_is_new_to_subject,
+    "account_age_days": account_age_days,
+    "days_since_account_activity": days_since_account_activity,
+    "failed_logins_1h_subject": failed_logins_1h_subject,
+    "device_bound_hours": device_bound_hours,
+    "credential_changed_hours": credential_changed_hours,
+    "sim_changed_hours": sim_changed_hours,
+    "payee_added_minutes": payee_added_minutes,
+    "credits_24h_account": credits_24h_account,
+    "distinct_remitters_24h_account": distinct_remitters_24h_account,
+    "inbound_count_ratio_24h_vs_daily_mean_30d": inbound_count_ratio_24h_vs_daily_mean_30d,
+    "minutes_since_last_credit": minutes_since_last_credit,
+    "pass_through_ratio_24h": pass_through_ratio_24h,
+    "region_is_new_to_subject": region_is_new_to_subject,
+    "card_present_count_1h_account": card_present_count_1h_account,
+    "beneficiary_distinct_senders_24h": beneficiary_distinct_senders_24h,
+    "hour_of_day_local": hour_of_day_local,
+}
+
+assert set(_FUNCTIONS) == set(FEATURE_NAMES), "feature registry disagrees with the spec"
+
+
+def compute_features(tx: TxView, history: HistoryBundle) -> dict[str, float]:
+    """The one entry point. Both paths call this; neither may bypass it."""
+    return {name: _FUNCTIONS[name](tx, history) for name in FEATURE_NAMES}
+
+
+def to_vector(features: dict[str, float], names: tuple[str, ...] = FEATURE_NAMES) -> list[float]:
+    """Deterministic ordering. Never rely on dict insertion order across a wire.
+
+    ``names`` is the full spec by default; the model is given MODEL_FEATURE_NAMES (D78).
+    """
+    return [float(features[name]) for name in names]

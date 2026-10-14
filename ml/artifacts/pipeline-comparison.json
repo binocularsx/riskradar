@@ -1,0 +1,507 @@
+{
+  "generated_at": "2026-09-10T13:15:09.864751+00:00",
+  "dataset": "electricsheepafrica/Nigerian-Financial-Transactions-and-Fraud-Detection (HuggingFace) \u2014 the source rejected by D10e",
+  "rows_used": 1000000,
+  "fraud_rate_pct": 3.6239,
+  "span_days": 393.0,
+  "model_config": {
+    "n_estimators": 100,
+    "max_depth": 20,
+    "min_samples_leaf": 5,
+    "class_weight": "balanced_subsample",
+    "random_state": 42
+  },
+  "arms": {
+    "A_ire_as_documented": {
+      "arm": "A",
+      "note": "IRE as documented \u2014 all 29 features, stratified random split",
+      "features": 29,
+      "split": "stratified random 80/20",
+      "test_rows": 200000,
+      "test_fraud_rate_pct": 3.624,
+      "pr_auc": 0.0441,
+      "roc_auc": 0.592,
+      "random_baseline_pr_auc": 0.0362,
+      "at_thresholds": [
+        {
+          "threshold": 0.1,
+          "flagged": 164076,
+          "precision": 0.0442,
+          "recall": 1.0
+        },
+        {
+          "threshold": 0.3,
+          "flagged": 159896,
+          "precision": 0.0442,
+          "recall": 0.975
+        },
+        {
+          "threshold": 0.5,
+          "flagged": 36091,
+          "precision": 0.0423,
+          "recall": 0.2107
+        },
+        {
+          "threshold": 0.6,
+          "flagged": 0,
+          "precision": 0.0,
+          "recall": 0.0
+        }
+      ],
+      "top_features": [
+        {
+          "name": "new_device_transaction",
+          "importance": 0.2982
+        },
+        {
+          "name": "time_since_last_transaction",
+          "importance": 0.115
+        },
+        {
+          "name": "merchant_fraud_rate",
+          "importance": 0.0463
+        },
+        {
+          "name": "location_fraud_risk",
+          "importance": 0.046
+        },
+        {
+          "name": "spending_deviation_score",
+          "importance": 0.0441
+        },
+        {
+          "name": "amount_ngn",
+          "importance": 0.0428
+        }
+      ]
+    },
+    "B_without_device_flag": {
+      "arm": "B",
+      "note": "the same, minus new_device_transaction \u2014 the leakage probe",
+      "features": 28,
+      "split": "stratified random 80/20",
+      "test_rows": 200000,
+      "test_fraud_rate_pct": 3.624,
+      "pr_auc": 0.0439,
+      "roc_auc": 0.5917,
+      "random_baseline_pr_auc": 0.0362,
+      "at_thresholds": [
+        {
+          "threshold": 0.1,
+          "flagged": 164036,
+          "precision": 0.0442,
+          "recall": 0.9996
+        },
+        {
+          "threshold": 0.3,
+          "flagged": 148003,
+          "precision": 0.0443,
+          "recall": 0.9052
+        },
+        {
+          "threshold": 0.5,
+          "flagged": 15746,
+          "precision": 0.0445,
+          "recall": 0.0967
+        },
+        {
+          "threshold": 0.6,
+          "flagged": 0,
+          "precision": 0.0,
+          "recall": 0.0
+        }
+      ],
+      "top_features": [
+        {
+          "name": "time_since_last_transaction",
+          "importance": 0.2904
+        },
+        {
+          "name": "merchant_fraud_rate",
+          "importance": 0.0553
+        },
+        {
+          "name": "location_fraud_risk",
+          "importance": 0.0551
+        },
+        {
+          "name": "spending_deviation_score",
+          "importance": 0.0527
+        },
+        {
+          "name": "amount_ngn",
+          "importance": 0.0522
+        },
+        {
+          "name": "total_amount_last_1h",
+          "importance": 0.0478
+        }
+      ]
+    },
+    "B2_without_device_or_lookahead": {
+      "arm": "B2",
+      "note": "minus the device flag AND the whole-file per-customer aggregates",
+      "features": 25,
+      "split": "stratified random 80/20",
+      "test_rows": 200000,
+      "test_fraud_rate_pct": 3.624,
+      "pr_auc": 0.0436,
+      "roc_auc": 0.589,
+      "random_baseline_pr_auc": 0.0362,
+      "at_thresholds": [
+        {
+          "threshold": 0.1,
+          "flagged": 164017,
+          "precision": 0.0442,
+          "recall": 0.9993
+        },
+        {
+          "threshold": 0.3,
+          "flagged": 147535,
+          "precision": 0.0441,
+          "recall": 0.8974
+        },
+        {
+          "threshold": 0.5,
+          "flagged": 17142,
+          "precision": 0.0437,
+          "recall": 0.1033
+        },
+        {
+          "threshold": 0.6,
+          "flagged": 0,
+          "precision": 0.0,
+          "recall": 0.0
+        }
+      ],
+      "top_features": [
+        {
+          "name": "time_since_last_transaction",
+          "importance": 0.3202
+        },
+        {
+          "name": "location_fraud_risk",
+          "importance": 0.0632
+        },
+        {
+          "name": "merchant_fraud_rate",
+          "importance": 0.0628
+        },
+        {
+          "name": "total_amount_last_1h",
+          "importance": 0.0614
+        },
+        {
+          "name": "spending_deviation_score",
+          "importance": 0.0611
+        },
+        {
+          "name": "amount_ngn",
+          "importance": 0.0605
+        }
+      ]
+    },
+    "C_temporal_split": {
+      "arm": "C",
+      "note": "all 29 features, but split by time instead of at random",
+      "features": 29,
+      "split": "temporal 80/20",
+      "test_rows": 200000,
+      "test_fraud_rate_pct": 3.607,
+      "pr_auc": 0.0441,
+      "roc_auc": 0.5942,
+      "random_baseline_pr_auc": 0.0361,
+      "at_thresholds": [
+        {
+          "threshold": 0.1,
+          "flagged": 164261,
+          "precision": 0.0439,
+          "recall": 1.0
+        },
+        {
+          "threshold": 0.3,
+          "flagged": 149047,
+          "precision": 0.0441,
+          "recall": 0.9121
+        },
+        {
+          "threshold": 0.5,
+          "flagged": 13128,
+          "precision": 0.0439,
+          "recall": 0.0798
+        },
+        {
+          "threshold": 0.6,
+          "flagged": 0,
+          "precision": 0.0,
+          "recall": 0.0
+        }
+      ],
+      "top_features": [
+        {
+          "name": "new_device_transaction",
+          "importance": 0.2954
+        },
+        {
+          "name": "time_since_last_transaction",
+          "importance": 0.1195
+        },
+        {
+          "name": "merchant_fraud_rate",
+          "importance": 0.0478
+        },
+        {
+          "name": "location_fraud_risk",
+          "importance": 0.0471
+        },
+        {
+          "name": "spending_deviation_score",
+          "importance": 0.0452
+        },
+        {
+          "name": "amount_ngn",
+          "importance": 0.0427
+        }
+      ]
+    },
+    "D_our_protocol_their_data": {
+      "arm": "D",
+      "alert_budget_per_day": 120,
+      "days_covered": 78.6,
+      "budget_threshold": 0.527739,
+      "at_budget": {
+        "threshold": 0.5277,
+        "flagged": 9432,
+        "precision": 0.0441,
+        "recall": 0.0574
+      },
+      "value_weighted": {
+        "threshold": 0.5277390124761709,
+        "fraud_value_minor": 528858367555,
+        "caught_value_minor": 17365263508,
+        "value_recall": 0.0328,
+        "count_recall": 0.0574
+      },
+      "reliability": [
+        {
+          "bin_low": 0.0,
+          "bin_high": 0.1,
+          "n": 35924,
+          "mean_predicted": 0.00093,
+          "observed_rate": 0.0
+        },
+        {
+          "bin_low": 0.1,
+          "bin_high": 0.2,
+          "n": 263,
+          "mean_predicted": 0.17392,
+          "observed_rate": 0.02281
+        },
+        {
+          "bin_low": 0.2,
+          "bin_high": 0.3,
+          "n": 3917,
+          "mean_predicted": 0.26846,
+          "observed_rate": 0.04468
+        },
+        {
+          "bin_low": 0.3,
+          "bin_high": 0.4,
+          "n": 28017,
+          "mean_predicted": 0.3633,
+          "observed_rate": 0.04312
+        },
+        {
+          "bin_low": 0.4,
+          "bin_high": 0.5,
+          "n": 95788,
+          "mean_predicted": 0.45648,
+          "observed_rate": 0.04522
+        },
+        {
+          "bin_low": 0.5,
+          "bin_high": 0.6,
+          "n": 36091,
+          "mean_predicted": 0.51938,
+          "observed_rate": 0.04231
+        }
+      ]
+    }
+  },
+  "single_column_audit": [
+    {
+      "column": "new_device_transaction",
+      "auc": 0.5932,
+      "free_exclusion": 0.1864,
+      "verdict": "GENERATOR SWITCH"
+    },
+    {
+      "column": "user_txn_count_total",
+      "auc": 0.5261,
+      "free_exclusion": 0.0041,
+      "verdict": "noise"
+    },
+    {
+      "column": "spending_deviation_score",
+      "auc": 0.499,
+      "free_exclusion": 0.0001,
+      "verdict": "noise"
+    },
+    {
+      "column": "amount_ngn",
+      "auc": 0.5001,
+      "free_exclusion": 0.0001,
+      "verdict": "noise"
+    },
+    {
+      "column": "time_since_last_transaction",
+      "auc": 0.5207,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "velocity_score",
+      "auc": 0.5007,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "geo_anomaly_score",
+      "auc": 0.501,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "bvn_linked",
+      "auc": 0.4991,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "geospatial_velocity_anomaly",
+      "auc": 0.5,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "txn_hour",
+      "auc": 0.4999,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "is_weekend",
+      "auc": 0.4983,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "is_salary_week",
+      "auc": 0.4993,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "is_night_txn",
+      "auc": null,
+      "free_exclusion": null,
+      "verdict": "constant"
+    },
+    {
+      "column": "device_seen_count",
+      "auc": 0.4983,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "is_device_shared",
+      "auc": 0.4992,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "ip_seen_count",
+      "auc": 0.4989,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "is_ip_shared",
+      "auc": 0.4997,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "user_avg_txn_amt",
+      "auc": 0.5033,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "user_std_txn_amt",
+      "auc": 0.5076,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "user_txn_frequency_24h",
+      "auc": 0.5146,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "txn_count_last_1h",
+      "auc": 0.5146,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "txn_count_last_24h",
+      "auc": 0.5146,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "total_amount_last_1h",
+      "auc": 0.5083,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "time_since_last",
+      "auc": 0.5009,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "avg_gap_between_txns",
+      "auc": 0.5003,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "merchant_fraud_rate",
+      "auc": 0.5,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "channel_risk_score",
+      "auc": 0.499,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "persona_fraud_risk",
+      "auc": 0.4978,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    },
+    {
+      "column": "location_fraud_risk",
+      "auc": 0.5,
+      "free_exclusion": 0.0,
+      "verdict": "noise"
+    }
+  ]
+}

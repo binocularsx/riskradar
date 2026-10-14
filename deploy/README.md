@@ -1,0 +1,183 @@
+# Running Risk Radar in production
+
+This is the runbook for the backend: the API, the scoring workers and the clock
+sweep, over one PostgreSQL 16 database. The same three processes run natively
+(`scripts/run_api.py`, `scripts/run_workers.py N`, `scripts/run_clocks.py`) or
+from one container image (`deploy/Dockerfile`, `deploy/docker-compose.yml`).
+Risk Radar is **advisory** (D7): it decides and explains, and the bank's switch
+enforces.
+
+## Before the first start
+
+1. Copy `.env.example` to `.env`. Set real values for the two database role
+   passwords, `RISKRADAR_HMAC_PEPPER` (long and random; changing it later
+   orphans every behavioural baseline), and `RISKRADAR_PG_SUPERUSER_PASSWORD`.
+2. Set `RISKRADAR_ENV=production` and `RISKRADAR_CORS_ORIGINS` to the console's
+   origin. Production turns on secure cookies, HSTS and JSON logs.
+3. `python scripts/migrate.py` creates the roles and database and applies the
+   numbered migrations. `migrate.py` bootstraps roles with development
+   passwords; in production, `ALTER ROLE riskradar_app PASSWORD ...` and the
+   same for `riskradar_migrate` to match `.env`.
+4. `python scripts/seed.py` creates the users, rules and a placeholder
+   threshold set. It also creates a **development API key that is public**.
+   Create the bank's key (`POST /v1/admin/api-keys?name=switch`), then revoke
+   the development one (`DELETE /v1/admin/api-keys/{id}`). In production,
+   readiness stays failed until you do.
+5. Register and promote a model (`ml/train.py --final --promote`, or
+   `POST /v1/admin/models/promote`), then derive thresholds from real traffic
+   (below).
+
+## Start order and probes
+
+| Process | Command | Probe |
+|---|---|---|
+| API | `python scripts/run_api.py` | `GET /health/live` (process up, no DB call) and `GET /health/ready` (503 with the failing checks) |
+| Scoring workers | `python scripts/run_worker.py`, any number of copies | Heartbeats in `worker_heartbeats`; readiness needs one seen within `RISKRADAR_WORKER_STALE_SECONDS` |
+| Clock sweep | `python scripts/run_clocks.py 60` | One copy is enough; breaches are recorded once however many run |
+
+Readiness requires the database, an active ruleset and threshold set, a live
+worker, and live queue lag under two minutes. A missing model is reported but
+not fatal: scoring runs on rules only and raises `MODEL_UNAVAILABLE` (FR-017).
+
+Sizing, measured on one 8-core machine with the whole stack on it (D87a): three
+API processes (`RISKRADAR_API_WORKERS=3`) and four scoring workers held 50
+payments a second at p95 210 ms end to end, and accepted a 231-a-second burst
+with nothing lost. Workers run one model thread each (`run_worker.py` sets it)
+and warm the model before taking work; add workers, not threads, for throughput.
+
+Put a TLS-terminating proxy in front of the API. It trusts `X-Forwarded-*`
+headers in production. Each response carries `X-Request-ID`; quote it when
+reporting a problem, because every log line for that request carries it too.
+
+## Going live in the cloud (D101)
+
+D26 kept hosting local-only; D101 adds a live cloud instance for a shareable
+demo, without deleting the local path. Two rules make the deployment safe:
+
+- **One origin (D101b).** The dashboard calls the API on relative paths and the
+  session is a `SameSite=Lax` first-party cookie (D12, D95). Serving the frontend
+  and the API from different domains would silently stop the cookie travelling
+  and break login. So the public edge is one Caddy container (`deploy/Caddyfile`,
+  `deploy/Dockerfile.web`) that serves the built dashboard and reverse-proxies
+  `/v1`, `/v1/stream` and `/health` to the API. `RISKRADAR_CORS_ORIGINS` stays
+  **empty** — same origin needs no CORS.
+- **Synthetic data only (D101a).** The public instance ingests only the
+  simulator's synthetic traffic. Ingesting real transactions needs the NDPA
+  assessment of D28, which this deployment does not have.
+
+On a plain VM (simplest — the whole stack in Docker Compose):
+
+1. Point a DNS `A` record at the VM and open only ports **80 and 443** to the
+   internet at the cloud firewall. 8000 stays closed; the proxy reaches the API
+   over the internal compose network as `api:8000`.
+2. `cp .env.example .env` and set, as real secrets, `RISKRADAR_HMAC_PEPPER`
+   (long, random, permanent — changing it orphans every baseline), the two
+   database-role passwords, `RISKRADAR_PG_SUPERUSER_PASSWORD`, and set
+   `RISKRADAR_ENV=production`, `RISKRADAR_SITE_ADDRESS=<your domain>` and
+   `RISKRADAR_ACME_EMAIL=<you>`. Leave `RISKRADAR_CORS_ORIGINS` empty.
+3. Bring it up with both compose files:
+
+   ```
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml \
+     --env-file .env up -d --build
+   ```
+
+   Postgres → migrate+seed → API, workers, clocks, and the Caddy edge. Caddy
+   requests a certificate for the domain on first start (needs 80/443 reachable).
+4. Match the database role passwords to `.env` (the bootstrap sets development
+   ones): `ALTER ROLE riskradar_app PASSWORD '…'` and the same for
+   `riskradar_migrate`, then restart `api`, `worker` and `clocks`.
+5. **Revoke the public development API key** and issue a real one, or readiness
+   stays failed (D87): `POST /v1/admin/api-keys?name=demo` then
+   `DELETE /v1/admin/api-keys/{id}` for the seeded one.
+6. Promote a model and derive thresholds (see below), then drive synthetic
+   traffic with `simulator/riskradar_sim` pointed at `https://<your domain>`.
+7. Confirm: `GET https://<domain>/health/ready` is 200, the dashboard loads,
+   and login works (the cookie is set on the same origin).
+
+A managed platform (Render, Railway) works too: run the same five services from
+`deploy/Dockerfile`, add the Caddy edge (or the platform's own router **only if**
+it keeps one origin), attach a managed Postgres, and set the same secrets. The
+single-origin rule (D101b) is the one that must not be broken, whatever the host.
+
+Credentials never pass through the person preparing this: account creation, the
+secret values and the deploy command are the operator's to run.
+
+## Protecting the service (D87)
+
+- **Rate limits.** Each API key has two token buckets: live traffic
+  (`RISKRADAR_INGEST_RATE`/`_BURST`) and replayed history (`RISKRADAR_REPLAY_*`).
+  A caller over its rate gets `429` with `Retry-After`. The buckets are per
+  process; behind several API processes, divide the rate or limit at the
+  gateway.
+- **Backpressure.** Every ingestion response carries `X-RiskRadar-Queue-Depth`.
+  Above `RISKRADAR_QUEUE_SOFT_LIMIT` live payments waiting, responses add
+  `X-RiskRadar-Backpressure: slow-down`. Above `RISKRADAR_QUEUE_HARD_LIMIT` new
+  live work is refused with `503` and `Retry-After`. Replayed history pauses at
+  `RISKRADAR_REPLAY_QUEUE_LIMIT`.
+- **Priority.** Live payments are scored before replayed history. A backfill
+  never delays today's decisions.
+- **Clock skew.** A payment dated more than `RISKRADAR_MAX_CLOCK_SKEW_SECONDS`
+  ahead of the server is refused (422 and a dead-letter row).
+- **Idempotency.** A repeated `transaction_ref` is a no-op returning the
+  original result, so retries after a timeout are always safe.
+
+`simulator/riskradar_sim/client.py` is the reference client: paced, it halves
+its speed on `slow-down`, waits out `429`/`503`, and counts every refusal.
+
+## The alert budget at run time (D86)
+
+Thresholds are derived backwards from the budget (`alert_budget_per_day`, 75).
+On top of that, every alert passes the budget guard:
+
+- It counts against the bank's local day (UTC+1), in `alert_budget_days`.
+- Once the day's budget is spent, or the hour has used
+  `ceil(budget × hourly_burst ÷ 24)`, a discretionary alert is **deferred**.
+  It waits in `alert_deferrals`, most serious first, and is raised as soon as
+  there is room. Workers check every 30 seconds.
+- The budget is split into two envelopes (D92): `alert_budget_rule_share` of
+  the day is reserved for rule alerts and the rest is the model's, so neither
+  layer can crowd the other out. Each releases its own waiting alerts. Setting
+  the share to 1.0 restores the old rules-first behaviour.
+- Veto rules (sanctions, known mule) and machine actions are never deferred;
+  they are counted. If they alone overrun the day, the alarm is
+  `ALERT_BUDGET_OVERRUN`: retune those rules.
+- A deferral still waiting after `alert_deferral_hours` (24) expires with
+  `ALERTS_EXPIRED_UNREVIEWED`. That number is the one to act on.
+
+Operating it:
+
+| Question | Endpoint |
+|---|---|
+| Where is today against the budget? | `GET /v1/budget` |
+| What is waiting? | `GET /v1/budget/deferred` |
+| Pull one in now (lead) | `POST /v1/budget/deferred/{id}/release` |
+| Do the thresholds still fit the traffic? | `GET /v1/budget/calibration` (verdict FITS / OVER / UNDER) |
+| Re-derive and publish thresholds (admin) | `POST /v1/admin/thresholds/derive` with `{"publish": true}` |
+| Change the budget or pacing (admin) | `PUT /v1/admin/budget` (audited, reason required) |
+
+After promoting a new model, always re-derive thresholds: a new model scores
+on a new scale.
+
+## Watching the model (D88, D89)
+
+- `GET /v1/metrics/drift`: PSI of the score and of each model input, recent
+  day against the week before, plus each rule's firing rate. Readings: under
+  0.10 stable, above 0.25 shifted. A rule that went `SILENT` or `SPIKE`d is
+  listed under `needs_attention`.
+- `python ml/retrain_from_outcomes.py` retrains on the desk's closed cases
+  using the stored feature snapshots, and compares challenger with champion on
+  the newest quarter. It refuses with fewer than 30 confirmed frauds.
+  `--register` records the challenger inactive; promotion is an audited admin
+  action.
+
+## Backups and upgrades
+
+- Back up PostgreSQL (for example `pg_dump -Fc`, or WAL archiving for
+  point-in-time recovery). It holds the queue, the decisions and the
+  hash-chained audit log. `GET /v1/admin/audit/verify` checks the chain after
+  a restore.
+- Upgrades: stop the workers, then `python scripts/migrate.py`, then restart
+  the API **and** the workers. Prepared statements cached before a
+  column-type migration fail with "cached plan must not change result type"
+  until the process restarts.

@@ -1,0 +1,61 @@
+# Risk Radar dataset mapping (D81). Written by `evaluate_dataset.py suggest`.
+# Read every field before running: a wrong sender or label column makes every
+# figure meaningless while looking plausible. Then set `reviewed: true`.
+# NOTE: no incident column: fraud rows of one customer (and type) within 24 hours count as one incident
+# NOTE: `step` is numeric; read as hours. Check the unit: every per-hour measurement depends on it
+# NOTE: amounts are multiplied by 100 into minor units (kobo, cents); set `scale: 1` if already minor
+# NOTE: no approval/decline column: every row is treated as approved, so decline-based measurements and the card-testing rule cannot fire
+# NOTE: `type` values read as credits: ['CASH_IN']
+# NOTE: 4 other numeric columns are offered as `native_features` for the comparison arm only; delete any that are derived from the label or from the future
+dataset: PaySim mobile money (Lopez-Rojas)
+reviewed: true
+fields:
+  label:
+    column: isFraud
+    positive:
+    - 1
+  incident:
+    derive:
+      by: customer
+      gap_hours: 24
+  timestamp:
+    column: step
+    unit: hours
+    origin: '2026-01-01T00:00:00+00:00'
+  amount:
+    column: amount
+    scale: 100
+  account:
+    column: nameOrig
+  beneficiary:
+    column: nameDest
+  auth_result:
+    constant: APPROVED
+  instrument:
+    column: type
+    values:
+      PAYMENT: ACCOUNT_TRANSFER
+      TRANSFER: ACCOUNT_TRANSFER
+      CASH_OUT: CASH
+      DEBIT: CARD
+      CASH_IN: CASH
+    default: ACCOUNT_TRANSFER
+  direction:
+    column: type
+    values:
+      PAYMENT: OUTBOUND
+      TRANSFER: OUTBOUND
+      CASH_OUT: OUTBOUND
+      DEBIT: OUTBOUND
+      CASH_IN: INBOUND
+    default: OUTBOUND
+native_features:
+# Reviewed 17 Sep 2026: balances before and after are ledger facts at posting time.
+# Known to separate PaySim fraud strongly (the fraud empties the balance), so this
+# arm is a ceiling, not a claim.
+- oldbalanceOrg
+- newbalanceOrig
+- oldbalanceDest
+- newbalanceDest
+ignore:
+  isFlaggedFraud: 'somebody else''s score or flag (D10f): never an input'

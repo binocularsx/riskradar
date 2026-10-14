@@ -1,0 +1,21 @@
+-- D92: the rules' share of the day, set by measurement (ml/allocation_sweep.py,
+-- ml/artifacts/allocation-sweep.json).
+--
+-- Twenty-one shares of the budget, each measured twice on the 150-day corpus:
+-- on fraud the model was trained on (time-ordered test, newest 37 days) and on
+-- fraud it has never seen (seven runs, each holding one type out entirely).
+-- Criterion stated before the numbers were read: the highest average of the
+-- two incident recalls, tie broken by precision at the operating budget.
+--
+--   share  rules/day  seen recall  precision  unseen mean  worst type
+--   0.50      33.9       0.926       0.744       0.707        0.216
+--   0.60      40.6       0.904       0.729       0.731        0.259   <- chosen
+--   0.75      45.0       0.890       0.706       0.745        0.340
+--   1.00      45.0       0.890       0.706       0.675        0.145   <- rules-first
+--
+-- Against rules-first at 75 a day: seen incident recall 0.890 to 0.904,
+-- precision 0.706 to 0.729, false alerts 19.9 to 18.3 a day, unseen-type mean
+-- 0.675 to 0.731, worst type 0.145 to 0.259. At 60 a day, where rules-first
+-- collapsed to 0.690 recall, a share holds it at 0.877.
+
+UPDATE app_config SET value = '0.6', updated_at = now() WHERE key = 'alert_budget_rule_share';

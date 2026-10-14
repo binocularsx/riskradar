@@ -1,0 +1,341 @@
+{
+  "best": "D  unweighted + isotonic on a later slice",
+  "variants": {
+    "A  current: balanced + isotonic, 3-fold CV": {
+      "threshold": 0.04486,
+      "alerts": 3617,
+      "expected_frauds_in_alerts": 1157.2,
+      "actual_frauds_in_alerts": 1374,
+      "confidence_ratio": 0.842,
+      "ece_alerting_region": 0.0616,
+      "reliability_alerting_region": [
+        {
+          "n": 724,
+          "stated": 0.051,
+          "observed": 0.047,
+          "observed_ci95": [
+            0.034,
+            0.065
+          ]
+        },
+        {
+          "n": 724,
+          "stated": 0.076,
+          "observed": 0.0967,
+          "observed_ci95": [
+            0.077,
+            0.12
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.1265,
+          "observed": 0.1895,
+          "observed_ci95": [
+            0.163,
+            0.22
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.3936,
+          "observed": 0.5823,
+          "observed_ci95": [
+            0.546,
+            0.618
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.9533,
+          "observed": 0.9848,
+          "observed_ci95": [
+            0.973,
+            0.991
+          ]
+        }
+      ],
+      "fit_seconds": 155.5
+    },
+    "B  unweighted + isotonic, 3-fold CV": {
+      "threshold": 0.03609,
+      "alerts": 3617,
+      "expected_frauds_in_alerts": 1076.3,
+      "actual_frauds_in_alerts": 1391,
+      "confidence_ratio": 0.774,
+      "ece_alerting_region": 0.088,
+      "reliability_alerting_region": [
+        {
+          "n": 724,
+          "stated": 0.0399,
+          "observed": 0.0373,
+          "observed_ci95": [
+            0.026,
+            0.054
+          ]
+        },
+        {
+          "n": 724,
+          "stated": 0.0544,
+          "observed": 0.1022,
+          "observed_ci95": [
+            0.082,
+            0.126
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.094,
+          "observed": 0.1978,
+          "observed_ci95": [
+            0.17,
+            0.228
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.3592,
+          "observed": 0.5864,
+          "observed_ci95": [
+            0.55,
+            0.622
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.941,
+          "observed": 1.0,
+          "observed_ci95": [
+            0.995,
+            1.0
+          ]
+        }
+      ],
+      "fit_seconds": 202.2
+    },
+    "C  balanced + isotonic on a later slice": {
+      "threshold": 0.03034,
+      "alerts": 4159,
+      "expected_frauds_in_alerts": 1235.1,
+      "actual_frauds_in_alerts": 1378,
+      "confidence_ratio": 0.896,
+      "ece_alerting_region": 0.039,
+      "reliability_alerting_region": [
+        {
+          "n": 832,
+          "stated": 0.0303,
+          "observed": 0.0421,
+          "observed_ci95": [
+            0.03,
+            0.058
+          ]
+        },
+        {
+          "n": 832,
+          "stated": 0.0621,
+          "observed": 0.0505,
+          "observed_ci95": [
+            0.038,
+            0.068
+          ]
+        },
+        {
+          "n": 832,
+          "stated": 0.1033,
+          "observed": 0.125,
+          "observed_ci95": [
+            0.104,
+            0.149
+          ]
+        },
+        {
+          "n": 832,
+          "stated": 0.3235,
+          "observed": 0.4615,
+          "observed_ci95": [
+            0.428,
+            0.496
+          ]
+        },
+        {
+          "n": 831,
+          "stated": 0.9664,
+          "observed": 0.9783,
+          "observed_ci95": [
+            0.966,
+            0.986
+          ]
+        }
+      ],
+      "fit_seconds": 63.7
+    },
+    "D  unweighted + isotonic on a later slice": {
+      "threshold": 0.04462,
+      "alerts": 3645,
+      "expected_frauds_in_alerts": 1250.4,
+      "actual_frauds_in_alerts": 1360,
+      "confidence_ratio": 0.919,
+      "ece_alerting_region": 0.0301,
+      "reliability_alerting_region": [
+        {
+          "n": 729,
+          "stated": 0.0451,
+          "observed": 0.0453,
+          "observed_ci95": [
+            0.032,
+            0.063
+          ]
+        },
+        {
+          "n": 729,
+          "stated": 0.0541,
+          "observed": 0.0809,
+          "observed_ci95": [
+            0.063,
+            0.103
+          ]
+        },
+        {
+          "n": 729,
+          "stated": 0.1531,
+          "observed": 0.1701,
+          "observed_ci95": [
+            0.145,
+            0.199
+          ]
+        },
+        {
+          "n": 729,
+          "stated": 0.4664,
+          "observed": 0.572,
+          "observed_ci95": [
+            0.536,
+            0.607
+          ]
+        },
+        {
+          "n": 729,
+          "stated": 0.9965,
+          "observed": 0.9973,
+          "observed_ci95": [
+            0.99,
+            0.999
+          ]
+        }
+      ],
+      "fit_seconds": 57.2
+    },
+    "E  balanced + Platt on a later slice": {
+      "threshold": 0.0445,
+      "alerts": 3616,
+      "expected_frauds_in_alerts": 1164.9,
+      "actual_frauds_in_alerts": 1359,
+      "confidence_ratio": 0.857,
+      "ece_alerting_region": 0.056,
+      "reliability_alerting_region": [
+        {
+          "n": 724,
+          "stated": 0.05,
+          "observed": 0.0442,
+          "observed_ci95": [
+            0.031,
+            0.062
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.0671,
+          "observed": 0.0761,
+          "observed_ci95": [
+            0.059,
+            0.098
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.116,
+          "observed": 0.177,
+          "observed_ci95": [
+            0.151,
+            0.207
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.406,
+          "observed": 0.5947,
+          "observed_ci95": [
+            0.559,
+            0.63
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.972,
+          "observed": 0.9876,
+          "observed_ci95": [
+            0.977,
+            0.993
+          ]
+        }
+      ],
+      "fit_seconds": 60.7
+    },
+    "F  SHIPPED: TimeSplitCalibratedBooster": {
+      "threshold": 0.04462,
+      "alerts": 3616,
+      "expected_frauds_in_alerts": 1249.1,
+      "actual_frauds_in_alerts": 1359,
+      "confidence_ratio": 0.919,
+      "ece_alerting_region": 0.0319,
+      "reliability_alerting_region": [
+        {
+          "n": 724,
+          "stated": 0.0452,
+          "observed": 0.0414,
+          "observed_ci95": [
+            0.029,
+            0.059
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.0553,
+          "observed": 0.0858,
+          "observed_ci95": [
+            0.067,
+            0.108
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.1553,
+          "observed": 0.1757,
+          "observed_ci95": [
+            0.15,
+            0.205
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.4752,
+          "observed": 0.5781,
+          "observed_ci95": [
+            0.542,
+            0.614
+          ]
+        },
+        {
+          "n": 723,
+          "stated": 0.9967,
+          "observed": 0.9986,
+          "observed_ci95": [
+            0.992,
+            1.0
+          ]
+        }
+      ],
+      "fit_seconds": 59.3
+    }
+  }
+}

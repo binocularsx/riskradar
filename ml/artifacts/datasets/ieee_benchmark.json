@@ -1,0 +1,157 @@
+{
+  "dataset": "IEEE-CIS Fraud Detection (Vesta)",
+  "budget_per_day": 100,
+  "folds": [
+    {
+      "train_days": [
+        0,
+        60
+      ],
+      "test_days": [
+        60,
+        90
+      ],
+      "train_rows": 223738,
+      "test_rows": 92189,
+      "test_fraud_rows": 3724,
+      "test_incidents": 2274,
+      "risk_radar_21": {
+        "roc_auc": 0.7457,
+        "pr_auc_lift": 2.83,
+        "incident_recall_at_budget": 0.1425,
+        "precision_at_budget": 0.1637
+      },
+      "plus_vesta_c_d": {
+        "roc_auc": 0.8768,
+        "pr_auc_lift": 12.45,
+        "incident_recall_at_budget": 0.4859,
+        "precision_at_budget": 0.5463
+      }
+    },
+    {
+      "train_days": [
+        0,
+        90
+      ],
+      "test_days": [
+        90,
+        120
+      ],
+      "train_rows": 315927,
+      "test_rows": 98615,
+      "test_fraud_rows": 3898,
+      "test_incidents": 2451,
+      "risk_radar_21": {
+        "roc_auc": 0.7603,
+        "pr_auc_lift": 3.25,
+        "incident_recall_at_budget": 0.1738,
+        "precision_at_budget": 0.195
+      },
+      "plus_vesta_c_d": {
+        "roc_auc": 0.8762,
+        "pr_auc_lift": 12.39,
+        "incident_recall_at_budget": 0.4557,
+        "precision_at_budget": 0.5627
+      }
+    },
+    {
+      "train_days": [
+        0,
+        120
+      ],
+      "test_days": [
+        120,
+        150
+      ],
+      "train_rows": 414542,
+      "test_rows": 83571,
+      "test_fraud_rows": 2850,
+      "test_incidents": 1919,
+      "risk_radar_21": {
+        "roc_auc": 0.7537,
+        "pr_auc_lift": 3.34,
+        "incident_recall_at_budget": 0.1819,
+        "precision_at_budget": 0.153
+      },
+      "plus_vesta_c_d": {
+        "roc_auc": 0.8689,
+        "pr_auc_lift": 12.85,
+        "incident_recall_at_budget": 0.495,
+        "precision_at_budget": 0.427
+      }
+    },
+    {
+      "train_days": [
+        0,
+        150
+      ],
+      "test_days": [
+        150,
+        183
+      ],
+      "train_rows": 498113,
+      "test_rows": 92427,
+      "test_fraud_rows": 3213,
+      "test_incidents": 2064,
+      "risk_radar_21": {
+        "roc_auc": 0.7589,
+        "pr_auc_lift": 2.95,
+        "incident_recall_at_budget": 0.1759,
+        "precision_at_budget": 0.1616
+      },
+      "plus_vesta_c_d": {
+        "roc_auc": 0.8706,
+        "pr_auc_lift": 14.03,
+        "incident_recall_at_budget": 0.5141,
+        "precision_at_budget": 0.4756
+      }
+    }
+  ],
+  "summary": {
+    "risk_radar_21": {
+      "roc_auc": {
+        "mean": 0.7547,
+        "min": 0.7457,
+        "max": 0.7603
+      },
+      "pr_auc_lift": {
+        "mean": 3.0925,
+        "min": 2.83,
+        "max": 3.34
+      },
+      "incident_recall_at_budget": {
+        "mean": 0.1685,
+        "min": 0.1425,
+        "max": 0.1819
+      },
+      "precision_at_budget": {
+        "mean": 0.1683,
+        "min": 0.153,
+        "max": 0.195
+      }
+    },
+    "plus_vesta_c_d": {
+      "roc_auc": {
+        "mean": 0.8731,
+        "min": 0.8689,
+        "max": 0.8768
+      },
+      "pr_auc_lift": {
+        "mean": 12.93,
+        "min": 12.39,
+        "max": 14.03
+      },
+      "incident_recall_at_budget": {
+        "mean": 0.4877,
+        "min": 0.4557,
+        "max": 0.5141
+      },
+      "precision_at_budget": {
+        "mean": 0.5029,
+        "min": 0.427,
+        "max": 0.5627
+      }
+    }
+  },
+  "note": "walk-forward: each fold learns from every earlier day and is tested on the next month"
+}

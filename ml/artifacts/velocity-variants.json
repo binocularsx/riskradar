@@ -1,0 +1,119 @@
+[
+  {
+    "variant": "now: >=10",
+    "rule_day": 59.6,
+    "rule_fa_day": 46.1,
+    "rule_precision": 0.226,
+    "mule_by_rule_alone": 0.472,
+    "system_fa_day": 78.3,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 50,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=10 & new dest",
+    "rule_day": 13.1,
+    "rule_fa_day": 12.1,
+    "rule_precision": 0.081,
+    "mule_by_rule_alone": 0.321,
+    "system_fa_day": 75.7,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 53,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=10 & dest new to bank",
+    "rule_day": 3.6,
+    "rule_fa_day": 1.8,
+    "rule_precision": 0.486,
+    "mule_by_rule_alone": 0.415,
+    "system_fa_day": 75.3,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 53,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=10 & (new dest|new device|dormant)",
+    "rule_day": 14.8,
+    "rule_fa_day": 13.4,
+    "rule_precision": 0.098,
+    "mule_by_rule_alone": 0.321,
+    "system_fa_day": 75.8,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 53,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=5 & new dest",
+    "rule_day": 49.5,
+    "rule_fa_day": 44.4,
+    "rule_precision": 0.103,
+    "mule_by_rule_alone": 0.83,
+    "system_fa_day": 75.8,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 52,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=5 & (new dest|new device|dormant)",
+    "rule_day": 53.0,
+    "rule_fa_day": 47.2,
+    "rule_precision": 0.109,
+    "mule_by_rule_alone": 0.83,
+    "system_fa_day": 76.0,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 52,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=5 & dest new to bank",
+    "rule_day": 14.5,
+    "rule_fa_day": 8.5,
+    "rule_precision": 0.413,
+    "mule_by_rule_alone": 0.868,
+    "system_fa_day": 74.7,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 53,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=5 & >=3 payees & new dest",
+    "rule_day": 49.3,
+    "rule_fa_day": 44.2,
+    "rule_precision": 0.103,
+    "mule_by_rule_alone": 0.83,
+    "system_fa_day": 75.8,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 52,
+      "CARD_TESTING": 47
+    }
+  },
+  {
+    "variant": ">=7 & new dest",
+    "rule_day": 26.3,
+    "rule_fa_day": 23.5,
+    "rule_precision": 0.105,
+    "mule_by_rule_alone": 0.604,
+    "system_fa_day": 75.9,
+    "caught": {
+      "ACCOUNT_TAKEOVER": 50,
+      "MULE_FANOUT": 53,
+      "CARD_TESTING": 47
+    }
+  }
+]

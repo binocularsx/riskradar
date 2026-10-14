@@ -1,0 +1,99 @@
+# Risk Radar dataset mapping (D81). Reviewed 17 Sep 2026. The v2 table carries
+# engineered columns and no time or accounts, so it was joined to the clean file
+# by transaction_id (ml/datasets/join_v2_features.py; labels agree on every row).
+# Raw fields come from the clean file, mapped as there. The v2 columns are the
+# comparison arm's native features, except scores and risk flags (D10f). The v2
+# columns checked by eye are point-in-time (a customer's first row has counts of
+# 0 and gaps of -1), so they do not read the future.
+dataset: Nigerian transactions v2 (1M rows, engineered features)
+reviewed: true
+fields:
+  label:
+    column: is_fraud
+    positive:
+    - true
+  fraud_type:
+    column: fraud_type
+  incident:
+    derive:
+      by: customer
+      gap_hours: 24
+  timestamp:
+    column: timestamp
+    timezone: Africa/Lagos
+  amount:
+    column: amount_ngn
+    scale: 100
+  account:
+    column: sender_account
+  beneficiary:
+    column: receiver_account
+  device:
+    column: device_hash
+  channel:
+    column: payment_channel
+    values:
+      USSD: USSD
+      Bank Transfer: API
+      Mobile App: MOBILE_APP
+      Card: POS
+    default: API
+  auth_result:
+    constant: APPROVED
+  instrument:
+    column: transaction_type
+    values:
+      deposit: ACCOUNT_TRANSFER
+      payment: ACCOUNT_TRANSFER
+      withdrawal: CASH
+      transfer: ACCOUNT_TRANSFER
+    default: ACCOUNT_TRANSFER
+  direction:
+    column: transaction_type
+    values:
+      deposit: INBOUND
+      payment: OUTBOUND
+      withdrawal: OUTBOUND
+      transfer: OUTBOUND
+    default: OUTBOUND
+  region:
+    column: state
+  merchant_category:
+    column: merchant_category
+native_features:
+- v2_is_amount_unusual
+- v2_txn_count_last_1h
+- v2_txn_count_last_24h
+- v2_total_amount_last_1h
+- v2_time_since_last
+- v2_avg_gap_between_txns
+- v2_user_txn_count_total
+- v2_user_avg_txn_amt
+- v2_user_std_txn_amt
+- v2_user_txn_frequency_24h
+- v2_txn_hour
+- v2_is_weekend
+- v2_is_salary_week
+- v2_is_night_txn
+- v2_device_seen_count
+- v2_is_device_shared
+ignore:
+  spending_deviation_score: 'somebody else''s score or flag (D10f): never an input'
+  velocity_score: 'somebody else''s score or flag (D10f): never an input'
+  geo_anomaly_score: 'somebody else''s score or flag (D10f): never an input'
+  geospatial_velocity_anomaly: 'somebody else''s score or flag (D10f): never an input'
+  merchant_fraud_rate: 'somebody else''s score or flag (D10f): never an input'
+  channel_risk_score: 'somebody else''s score or flag (D10f): never an input'
+  persona_fraud_risk: 'somebody else''s score or flag (D10f): never an input'
+  location_fraud_risk: 'somebody else''s score or flag (D10f): never an input'
+  is_high_risk_state: 'somebody else''s risk flag (D10f): never an input'
+  is_high_risk_lga: 'somebody else''s risk flag (D10f): never an input'
+  is_ato_risk: 'somebody else''s risk flag (D10f): never an input'
+  source: provenance (real or synthetic), not a transaction fact
+  v2_spending_deviation_score: 'somebody else''s score or risk flag (D10f): never an input'
+  v2_velocity_score: 'somebody else''s score or risk flag (D10f): never an input'
+  v2_geo_anomaly_score: 'somebody else''s score or risk flag (D10f): never an input'
+  v2_geospatial_velocity_anomaly: 'somebody else''s score or risk flag (D10f): never an input'
+  v2_is_ato_risk: 'somebody else''s score or risk flag (D10f): never an input'
+  v2_is_high_risk_state: 'somebody else''s score or risk flag (D10f): never an input'
+  v2_is_high_risk_lga: 'somebody else''s score or risk flag (D10f): never an input'

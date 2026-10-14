@@ -1,0 +1,1026 @@
+{
+  "dataset": "Nigerian transactions v2 (1M rows, engineered features)",
+  "mapping_reviewed": true,
+  "source": {
+    "source_file": "nigerian_v2_joined.csv",
+    "rows_in_file": 1000002,
+    "rows_evaluated": 1000002
+  },
+  "feature_spec": "1.4.1",
+  "labelled": true,
+  "split": {
+    "rule": "by time",
+    "train_rows": 700001,
+    "test_rows": 300001,
+    "test_from": "2023-09-17T17:53:52.280854+00:00",
+    "test_to": "2024-01-28T22:39:08.169930+00:00",
+    "test_days": 133.2
+  },
+  "budget": {
+    "alerts_per_day": 12.1,
+    "alerts_in_test": 1609,
+    "share_of_traffic": 0.00536,
+    "basis": "the shipped operating point, 0.536% of traffic (75 a day, D76)"
+  },
+  "arms": [
+    {
+      "arm": "rules only",
+      "alerts": 24546,
+      "alerts_per_day": 184.3,
+      "rule_alerts": 24546,
+      "precision": 0.0391,
+      "transaction_recall": 0.0813,
+      "incidents": 11785,
+      "incidents_caught": 960,
+      "incident_recall": 0.0815,
+      "ci95": [
+        0.077,
+        0.087
+      ],
+      "false_alerts": 23586,
+      "false_alerts_per_incident_caught": 24.57,
+      "fraud_value_recall": 0.0632,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 902,
+          "recall": 0.0807,
+          "ci95": [
+            0.076,
+            0.086
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 58,
+          "recall": 0.0952,
+          "ci95": [
+            0.074,
+            0.121
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "shipped model + rules",
+      "alerts": 24546,
+      "alerts_per_day": 184.3,
+      "rule_alerts": 24546,
+      "budget_left_for_score": 0,
+      "pr_auc": 0.0395,
+      "pr_auc_lift_over_random": 1.0,
+      "precision": 0.0391,
+      "transaction_recall": 0.0813,
+      "incidents": 11785,
+      "incidents_caught": 960,
+      "incident_recall": 0.0815,
+      "ci95": [
+        0.077,
+        0.087
+      ],
+      "false_alerts": 23586,
+      "false_alerts_per_incident_caught": 24.57,
+      "fraud_value_recall": 0.0632,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 902,
+          "recall": 0.0807,
+          "ci95": [
+            0.076,
+            0.086
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 58,
+          "recall": 0.0952,
+          "ci95": [
+            0.074,
+            0.121
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "shipped model alone",
+      "alerts": 1609,
+      "alerts_per_day": 12.1,
+      "rule_alerts": 0,
+      "budget_left_for_score": 1609,
+      "pr_auc": 0.0395,
+      "pr_auc_lift_over_random": 1.0,
+      "precision": 0.0423,
+      "transaction_recall": 0.0058,
+      "incidents": 11785,
+      "incidents_caught": 68,
+      "incident_recall": 0.0058,
+      "ci95": [
+        0.005,
+        0.007
+      ],
+      "false_alerts": 1541,
+      "false_alerts_per_incident_caught": 22.66,
+      "fraud_value_recall": 0.0146,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 64,
+          "recall": 0.0057,
+          "ci95": [
+            0.004,
+            0.007
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 4,
+          "recall": 0.0066,
+          "ci95": [
+            0.003,
+            0.017
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "anomaly score (no labels) + rules",
+      "alerts": 24546,
+      "alerts_per_day": 184.3,
+      "rule_alerts": 24546,
+      "budget_left_for_score": 0,
+      "pr_auc": 0.0398,
+      "pr_auc_lift_over_random": 1.01,
+      "precision": 0.0391,
+      "transaction_recall": 0.0813,
+      "incidents": 11785,
+      "incidents_caught": 960,
+      "incident_recall": 0.0815,
+      "ci95": [
+        0.077,
+        0.087
+      ],
+      "false_alerts": 23586,
+      "false_alerts_per_incident_caught": 24.57,
+      "fraud_value_recall": 0.0632,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 902,
+          "recall": 0.0807,
+          "ci95": [
+            0.076,
+            0.086
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 58,
+          "recall": 0.0952,
+          "ci95": [
+            0.074,
+            0.121
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "amount alone",
+      "alerts": 1609,
+      "alerts_per_day": 12.1,
+      "rule_alerts": 0,
+      "budget_left_for_score": 1609,
+      "pr_auc": 0.0391,
+      "pr_auc_lift_over_random": 0.99,
+      "precision": 0.0392,
+      "transaction_recall": 0.0053,
+      "incidents": 11785,
+      "incidents_caught": 63,
+      "incident_recall": 0.0053,
+      "ci95": [
+        0.004,
+        0.007
+      ],
+      "false_alerts": 1546,
+      "false_alerts_per_incident_caught": 24.54,
+      "fraud_value_recall": 0.0277,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 61,
+          "recall": 0.0055,
+          "ci95": [
+            0.004,
+            0.007
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 2,
+          "recall": 0.0033,
+          "ci95": [
+            0.001,
+            0.012
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "retrained model + rules",
+      "alerts": 24546,
+      "alerts_per_day": 184.3,
+      "rule_alerts": 24546,
+      "budget_left_for_score": 0,
+      "pr_auc": 0.0399,
+      "pr_auc_lift_over_random": 1.02,
+      "precision": 0.0391,
+      "transaction_recall": 0.0813,
+      "incidents": 11785,
+      "incidents_caught": 960,
+      "incident_recall": 0.0815,
+      "ci95": [
+        0.077,
+        0.087
+      ],
+      "false_alerts": 23586,
+      "false_alerts_per_incident_caught": 24.57,
+      "fraud_value_recall": 0.0632,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 902,
+          "recall": 0.0807,
+          "ci95": [
+            0.076,
+            0.086
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 58,
+          "recall": 0.0952,
+          "ci95": [
+            0.074,
+            0.121
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "retrained model alone",
+      "alerts": 1609,
+      "alerts_per_day": 12.1,
+      "rule_alerts": 0,
+      "budget_left_for_score": 1609,
+      "pr_auc": 0.0399,
+      "pr_auc_lift_over_random": 1.02,
+      "precision": 0.0385,
+      "transaction_recall": 0.0053,
+      "incidents": 11785,
+      "incidents_caught": 62,
+      "incident_recall": 0.0053,
+      "ci95": [
+        0.004,
+        0.007
+      ],
+      "false_alerts": 1547,
+      "false_alerts_per_incident_caught": 24.95,
+      "fraud_value_recall": 0.0011,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 60,
+          "recall": 0.0054,
+          "ci95": [
+            0.004,
+            0.007
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 2,
+          "recall": 0.0033,
+          "ci95": [
+            0.001,
+            0.012
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    },
+    {
+      "arm": "retrained with the dataset's own columns + rules",
+      "alerts": 24546,
+      "alerts_per_day": 184.3,
+      "rule_alerts": 24546,
+      "budget_left_for_score": 0,
+      "pr_auc": 0.0394,
+      "pr_auc_lift_over_random": 1.0,
+      "precision": 0.0391,
+      "transaction_recall": 0.0813,
+      "incidents": 11785,
+      "incidents_caught": 960,
+      "incident_recall": 0.0815,
+      "ci95": [
+        0.077,
+        0.087
+      ],
+      "false_alerts": 23586,
+      "false_alerts_per_incident_caught": 24.57,
+      "fraud_value_recall": 0.0632,
+      "by_fraud_type": {
+        "Account Takeover": {
+          "incidents": 11173,
+          "caught": 902,
+          "recall": 0.0807,
+          "ci95": [
+            0.076,
+            0.086
+          ]
+        },
+        "Identity Fraud": {
+          "incidents": 609,
+          "caught": 58,
+          "recall": 0.0952,
+          "ci95": [
+            0.074,
+            0.121
+          ]
+        },
+        "Impossible Travel Fraud": {
+          "incidents": 3,
+          "caught": 0,
+          "recall": 0.0,
+          "ci95": [
+            0.0,
+            0.562
+          ]
+        }
+      }
+    }
+  ],
+  "skipped_arms": {},
+  "base_rate": {
+    "fraud_rows": 39021,
+    "fraud_row_share": 0.03902,
+    "incidents": 38979,
+    "incidents_in_test": 11785,
+    "fraud_rows_in_test_per_day": 88.6
+  },
+  "warnings": [
+    "there are 88.6 fraud rows a day against a budget of 12 alerts a day: row recall is capped well below 1 by the budget, not by detection. Incident recall is the fairer figure.",
+    "no score ranks fraud even twice as well as a random order (best PR-AUC lift 1.02), including models trained on this file with its own columns. The labels look unrelated to anything in the data, so no detector could be measured on them; treat every figure here as uninformative."
+  ],
+  "shipped_model": "riskradar-gbm-20260917.1110-final.joblib",
+  "native_columns": [
+    "v2_is_amount_unusual",
+    "v2_txn_count_last_1h",
+    "v2_txn_count_last_24h",
+    "v2_total_amount_last_1h",
+    "v2_time_since_last",
+    "v2_avg_gap_between_txns",
+    "v2_user_txn_count_total",
+    "v2_user_avg_txn_amt",
+    "v2_user_std_txn_amt",
+    "v2_user_txn_frequency_24h",
+    "v2_txn_hour",
+    "v2_is_weekend",
+    "v2_is_salary_week",
+    "v2_is_night_txn",
+    "v2_device_seen_count",
+    "v2_is_device_shared"
+  ],
+  "unseen_type_test": {
+    "types": {
+      "Impossible Travel Fraud": 3,
+      "Account Takeover": 36967,
+      "Identity Fraud": 2009
+    },
+    "tested": [
+      "Account Takeover",
+      "Identity Fraud"
+    ],
+    "results": {
+      "Account Takeover": {
+        "rules only": {
+          "incidents": 36967,
+          "incidents_caught": 2161,
+          "incident_recall": 0.0585,
+          "ci95": [
+            0.056,
+            0.061
+          ],
+          "false_alerts_per_incident_caught": 10.91,
+          "fraud_value_recall": 0.0466
+        },
+        "retrained model + rules": {
+          "incidents": 36967,
+          "incidents_caught": 2161,
+          "incident_recall": 0.0585,
+          "ci95": [
+            0.056,
+            0.061
+          ],
+          "false_alerts_per_incident_caught": 10.91,
+          "fraud_value_recall": 0.0466
+        },
+        "retrained model alone": {
+          "incidents": 36967,
+          "incidents_caught": 186,
+          "incident_recall": 0.005,
+          "ci95": [
+            0.004,
+            0.006
+          ],
+          "false_alerts_per_incident_caught": 7.65,
+          "fraud_value_recall": 0.001
+        },
+        "anomaly score (no labels) + rules": {
+          "incidents": 36967,
+          "incidents_caught": 2161,
+          "incident_recall": 0.0585,
+          "ci95": [
+            0.056,
+            0.061
+          ],
+          "false_alerts_per_incident_caught": 10.91,
+          "fraud_value_recall": 0.0466
+        }
+      },
+      "Identity Fraud": {
+        "rules only": {
+          "incidents": 2009,
+          "incidents_caught": 115,
+          "incident_recall": 0.0572,
+          "ci95": [
+            0.048,
+            0.068
+          ],
+          "false_alerts_per_incident_caught": 205.1,
+          "fraud_value_recall": 0.0528
+        },
+        "retrained model + rules": {
+          "incidents": 2009,
+          "incidents_caught": 115,
+          "incident_recall": 0.0572,
+          "ci95": [
+            0.048,
+            0.068
+          ],
+          "false_alerts_per_incident_caught": 205.1,
+          "fraud_value_recall": 0.0528
+        },
+        "retrained model alone": {
+          "incidents": 2009,
+          "incidents_caught": 9,
+          "incident_recall": 0.0045,
+          "ci95": [
+            0.002,
+            0.008
+          ],
+          "false_alerts_per_incident_caught": 177.78,
+          "fraud_value_recall": 0.0017
+        },
+        "anomaly score (no labels) + rules": {
+          "incidents": 2009,
+          "incidents_caught": 115,
+          "incident_recall": 0.0572,
+          "ci95": [
+            0.048,
+            0.068
+          ],
+          "false_alerts_per_incident_caught": 205.1,
+          "fraud_value_recall": 0.0528
+        }
+      }
+    },
+    "note": "hidden-type incidents are tested across the whole file; legitimate rows only from the test period. Span of the test rows 393.0 days."
+  },
+  "capability": {
+    "inputs": {
+      "amount": true,
+      "beneficiary": true,
+      "device": true,
+      "channel": true,
+      "instrument": true,
+      "region": true,
+      "account_opened_at": false,
+      "auth_result": false,
+      "history": true,
+      "credits": true,
+      "events": false,
+      "lists": false
+    },
+    "features": [
+      {
+        "feature": "amount_log10",
+        "needs": [
+          "amount"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "amount_ratio_to_account_p95_30d",
+        "needs": [
+          "amount",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "txn_count_1h_account",
+        "needs": [
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "approved_value_ratio_24h_vs_daily_mean_30d",
+        "needs": [
+          "amount",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "failed_attempts_1h_account",
+        "needs": [
+          "auth_result",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "auth_result"
+        ],
+        "why": [
+          "no `auth_result` column mapped"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "decline_rate_24h_account",
+        "needs": [
+          "auth_result",
+          "history"
+        ],
+        "available": false,
+        "missing": [
+          "auth_result"
+        ],
+        "why": [
+          "no `auth_result` column mapped"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "distinct_beneficiaries_1h_account",
+        "needs": [
+          "beneficiary",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "beneficiary_is_new_to_account",
+        "needs": [
+          "beneficiary",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.2492
+      },
+      {
+        "feature": "beneficiary_first_seen_days",
+        "needs": [
+          "beneficiary"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.2492
+      },
+      {
+        "feature": "device_is_new_to_subject",
+        "needs": [
+          "device",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "account_age_days",
+        "needs": [
+          "account_opened_at"
+        ],
+        "available": false,
+        "missing": [
+          "account_opened_at"
+        ],
+        "why": [
+          "no `account_opened_at` column mapped"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 1.0
+      },
+      {
+        "feature": "days_since_account_activity",
+        "needs": [
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.11
+      },
+      {
+        "feature": "failed_logins_1h_subject",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "device_bound_hours",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "credential_changed_hours",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "sim_changed_hours",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "payee_added_minutes",
+        "needs": [
+          "events"
+        ],
+        "available": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.2492
+      },
+      {
+        "feature": "credits_24h_account",
+        "needs": [
+          "credits"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "distinct_remitters_24h_account",
+        "needs": [
+          "credits"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "inbound_count_ratio_24h_vs_daily_mean_30d",
+        "needs": [
+          "credits"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "minutes_since_last_credit",
+        "needs": [
+          "credits"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "pass_through_ratio_24h",
+        "needs": [
+          "credits"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "region_is_new_to_subject",
+        "needs": [
+          "region",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.7184
+      },
+      {
+        "feature": "card_present_count_1h_account",
+        "needs": [
+          "channel",
+          "instrument",
+          "history"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": true,
+        "share_not_applicable": 0.0
+      },
+      {
+        "feature": "beneficiary_distinct_senders_24h",
+        "needs": [
+          "beneficiary"
+        ],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.2492
+      },
+      {
+        "feature": "hour_of_day_local",
+        "needs": [],
+        "available": true,
+        "missing": [],
+        "why": [],
+        "constant_on_this_data": false,
+        "share_not_applicable": 0.0
+      }
+    ],
+    "rules": [
+      {
+        "rule": "VELOCITY_BURST_1H",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 0
+      },
+      {
+        "rule": "ACCOUNT_TAKEOVER_SEQUENCE",
+        "can_fire": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "MULE_INBOUND_FANIN",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 1
+      },
+      {
+        "rule": "SECOND_LEG_ONWARD_PAYMENT",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 0
+      },
+      {
+        "rule": "CARD_TESTING_PROBES",
+        "can_fire": false,
+        "missing": [
+          "auth_result"
+        ],
+        "why": [
+          "no `auth_result` column mapped"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "SCAM_BENEFICIARY_FANIN",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 1
+      },
+      {
+        "rule": "SIM_SWAP_TRANSFER",
+        "can_fire": false,
+        "missing": [
+          "events"
+        ],
+        "why": [
+          "no sign-in, device or SIM event feed: a transaction file does not carry one"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "DORMANT_ACCOUNT_REACTIVATION",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 24544
+      },
+      {
+        "rule": "CARD_PRESENT_NEW_REGION_CASHOUT",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 0
+      },
+      {
+        "rule": "SANCTIONED_BENEFICIARY",
+        "can_fire": false,
+        "missing": [
+          "lists"
+        ],
+        "why": [
+          "sanctions, confirmed-mule and payee lists belong to the bank, not the dataset"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "KNOWN_MULE_BENEFICIARY",
+        "can_fire": false,
+        "missing": [
+          "lists"
+        ],
+        "why": [
+          "sanctions, confirmed-mule and payee lists belong to the bank, not the dataset"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "PRE_REGISTERED_BENEFICIARY",
+        "can_fire": false,
+        "missing": [
+          "lists"
+        ],
+        "why": [
+          "sanctions, confirmed-mule and payee lists belong to the bank, not the dataset"
+        ],
+        "fired": 0
+      },
+      {
+        "rule": "ESTABLISHED_PAYEE_NORMAL",
+        "can_fire": true,
+        "missing": [],
+        "why": [],
+        "fired": 0
+      }
+    ]
+  },
+  "mapping": "# Risk Radar dataset mapping (D81). Reviewed 17 Sep 2026. The v2 table carries\n# engineered columns and no time or accounts, so it was joined to the clean file\n# by transaction_id (ml/datasets/join_v2_features.py; labels agree on every row).\n# Raw fields come from the clean file, mapped as there. The v2 columns are the\n# comparison arm's native features, except scores and risk flags (D10f). The v2\n# columns checked by eye are point-in-time (a customer's first row has counts of\n# 0 and gaps of -1), so they do not read the future.\ndataset: Nigerian transactions v2 (1M rows, engineered features)\nreviewed: true\nfields:\n  label:\n    column: is_fraud\n    positive:\n    - true\n  fraud_type:\n    column: fraud_type\n  incident:\n    derive:\n      by: customer\n      gap_hours: 24\n  timestamp:\n    column: timestamp\n    timezone: Africa/Lagos\n  amount:\n    column: amount_ngn\n    scale: 100\n  account:\n    column: sender_account\n  beneficiary:\n    column: receiver_account\n  device:\n    column: device_hash\n  channel:\n    column: payment_channel\n    values:\n      USSD: USSD\n      Bank Transfer: API\n      Mobile App: MOBILE_APP\n      Card: POS\n    default: API\n  auth_result:\n    constant: APPROVED\n  instrument:\n    column: transaction_type\n    values:\n      deposit: ACCOUNT_TRANSFER\n      payment: ACCOUNT_TRANSFER\n      withdrawal: CASH\n      transfer: ACCOUNT_TRANSFER\n    default: ACCOUNT_TRANSFER\n  direction:\n    column: transaction_type\n    values:\n      deposit: INBOUND\n      payment: OUTBOUND\n      withdrawal: OUTBOUND\n      transfer: OUTBOUND\n    default: OUTBOUND\n  region:\n    column: state\n  merchant_category:\n    column: merchant_category\nnative_features:\n- v2_is_amount_unusual\n- v2_txn_count_last_1h\n- v2_txn_count_last_24h\n- v2_total_amount_last_1h\n- v2_time_since_last\n- v2_avg_gap_between_txns\n- v2_user_txn_count_total\n- v2_user_avg_txn_amt\n- v2_user_std_txn_amt\n- v2_user_txn_frequency_24h\n- v2_txn_hour\n- v2_is_weekend\n- v2_is_salary_week\n- v2_is_night_txn\n- v2_device_seen_count\n- v2_is_device_shared\nignore:\n  spending_deviation_score: 'somebody else''s score or flag (D10f): never an input'\n  velocity_score: 'somebody else''s score or flag (D10f): never an input'\n  geo_anomaly_score: 'somebody else''s score or flag (D10f): never an input'\n  geospatial_velocity_anomaly: 'somebody else''s score or flag (D10f): never an input'\n  merchant_fraud_rate: 'somebody else''s score or flag (D10f): never an input'\n  channel_risk_score: 'somebody else''s score or flag (D10f): never an input'\n  persona_fraud_risk: 'somebody else''s score or flag (D10f): never an input'\n  location_fraud_risk: 'somebody else''s score or flag (D10f): never an input'\n  is_high_risk_state: 'somebody else''s risk flag (D10f): never an input'\n  is_high_risk_lga: 'somebody else''s risk flag (D10f): never an input'\n  is_ato_risk: 'somebody else''s risk flag (D10f): never an input'\n  source: provenance (real or synthetic), not a transaction fact\n  v2_spending_deviation_score: 'somebody else''s score or risk flag (D10f): never an input'\n  v2_velocity_score: 'somebody else''s score or risk flag (D10f): never an input'\n  v2_geo_anomaly_score: 'somebody else''s score or risk flag (D10f): never an input'\n  v2_geospatial_velocity_anomaly: 'somebody else''s score or risk flag (D10f): never an input'\n  v2_is_ato_risk: 'somebody else''s score or risk flag (D10f): never an input'\n  v2_is_high_risk_state: 'somebody else''s score or risk flag (D10f): never an input'\n  v2_is_high_risk_lga: 'somebody else''s score or risk flag (D10f): never an input'\n",
+  "seconds": 579.4,
+  "alerts_arm": "shipped model + rules",
+  "alerts_file": "nigerian_v2.alerts.csv"
+}

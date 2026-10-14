@@ -1,0 +1,66 @@
+{
+  "criterion": "cap = ceil(measured alerts/day x 1.5); OVERRIDE rules are uncapped vetoes",
+  "operating_budget_per_day": 75,
+  "rule_envelope_per_day": 45,
+  "burst_margin": 1.5,
+  "rules": {
+    "ACCOUNT_TAKEOVER_SEQUENCE": {
+      "measured_per_day": 6.0,
+      "precision": 0.897,
+      "cap": 9
+    },
+    "CARD_PRESENT_NEW_REGION_CASHOUT": {
+      "measured_per_day": 2.8,
+      "precision": 0.686,
+      "cap": 5
+    },
+    "CARD_TESTING_PROBES": {
+      "measured_per_day": 11.2,
+      "precision": 1.0,
+      "cap": 17
+    },
+    "DORMANT_ACCOUNT_REACTIVATION": {
+      "measured_per_day": 3.2,
+      "precision": 0.283,
+      "cap": 5
+    },
+    "MULE_INBOUND_FANIN": {
+      "measured_per_day": 7.27,
+      "precision": 0.709,
+      "cap": 11
+    },
+    "SCAM_BENEFICIARY_FANIN": {
+      "measured_per_day": 1.1,
+      "precision": 0.3,
+      "cap": 2
+    },
+    "SECOND_LEG_ONWARD_PAYMENT": {
+      "measured_per_day": 5.0,
+      "precision": 0.818,
+      "cap": 8
+    },
+    "SIM_SWAP_TRANSFER": {
+      "measured_per_day": 7.6,
+      "precision": 0.401,
+      "cap": 12
+    },
+    "VELOCITY_BURST_1H": {
+      "measured_per_day": 21.1,
+      "precision": 0.607,
+      "cap": 32
+    }
+  },
+  "caps": {
+    "ACCOUNT_TAKEOVER_SEQUENCE": 9,
+    "CARD_PRESENT_NEW_REGION_CASHOUT": 5,
+    "CARD_TESTING_PROBES": 17,
+    "DORMANT_ACCOUNT_REACTIVATION": 5,
+    "SCAM_BENEFICIARY_FANIN": 2,
+    "SECOND_LEG_ONWARD_PAYMENT": 8,
+    "SIM_SWAP_TRANSFER": 12,
+    "VELOCITY_BURST_1H": 32,
+    "MULE_INBOUND_FANIN": 11
+  },
+  "cap_sum": 101,
+  "note": "caps sum to 101 against a 45/day rules envelope, so the envelope stays the binding total; the caps only stop one rule taking a disproportionate share on a spike"
+}
