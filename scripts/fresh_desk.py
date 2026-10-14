@@ -49,6 +49,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -368,7 +369,21 @@ def warm_up(target_cases: int, max_minutes: float = 8, base_url: str | None = No
         demo_reset.wait_for_drain("warm-up", timeout_s=600)
     finally:
         _set_hourly_burst(burst, "fresh desk: warm-up done; live pacing restored")
-    say("warm-up", f"{_open_cases()} new cases in {time.time() - started:.0f}s")
+    # The warm-up is setup, like loading history: it is far richer in fraud
+    # than any real day (hundreds of machine actions in minutes, against ~17 a
+    # day measured, D86), so its spend would put the live day over budget
+    # before it starts and hold back every alert after it. The live day starts
+    # its ledger from zero; what the warm-up held back is dropped.
+    with _superuser(settings().db_name) as conn:
+        conn.execute("SET session_replication_role = replica")
+        dropped = conn.execute("DELETE FROM alert_deferrals WHERE resolved_at IS NULL AND deferred_at >= %s",
+                               (datetime.fromtimestamp(started, timezone.utc),)).rowcount
+        conn.execute("DELETE FROM notifications WHERE case_id IS NULL AND created_at >= %s",
+                     (datetime.fromtimestamp(started, timezone.utc),))
+        conn.execute("DELETE FROM alert_budget_days WHERE day >= current_date")
+        conn.commit()
+    say("warm-up", f"{_open_cases()} new cases in {time.time() - started:.0f}s; "
+                   f"today's budget starts unspent ({dropped:,} warm-up alerts not carried)")
 
 
 if __name__ == "__main__":
