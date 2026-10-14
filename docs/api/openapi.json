@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Risk Radar",
-    "description": "Real-time transaction risk intelligence. **Advisory**: this service produces a decision (ALLOW / MONITOR / REVIEW / HOLD) with its reasons. It does not block, hold, reverse or freeze anything \u2014 enforcement is the caller's responsibility and is documented as such in the contract.",
+    "description": "Real-time transaction risk detection. **Advisory**: this service produces a decision (ALLOW / MONITOR / REVIEW / HOLD) with its reasons. It does not block, hold, reverse or freeze anything \u2014 enforcement is the caller's responsibility and is documented as such in the contract.",
     "version": "1.1.0"
   },
   "paths": {

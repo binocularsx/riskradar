@@ -242,13 +242,18 @@ def _at(event) -> datetime:
 
 
 def _retime(events: list, start: datetime, speed: float) -> list:
-    """Compress an incident's timeline around its start (``--incident-speed``)."""
+    """Compress an incident's timeline around its start (``--incident-speed``).
+
+    Both sides of the start: an incident's setup (a SIM swap, a dormant spell
+    ending) can sit hours before it, and left uncompressed those payments are
+    sent at once still dated hours ago — opening cases that look stale on
+    arrival. Order is preserved either way.
+    """
     if speed == 1.0:
         return events
     for e in events:
         at = _at(e)
-        if at > start:
-            e.payload["occurred_at"] = (start + (at - start) / speed).isoformat()
+        e.payload["occurred_at"] = (start + (at - start) / speed).isoformat()
     return events
 
 

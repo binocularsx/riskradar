@@ -1,6 +1,6 @@
 # Risk Radar — Product Requirements Document
 
-**Product:** Risk Intelligence — Real-Time Transaction Fraud Detection System
+**Product:** Risk Radar — Real-Time Transaction Fraud Detection System
 **Group:** RiskRadar
 **Version:** 1.3
 **Date:** 2026-09-13
