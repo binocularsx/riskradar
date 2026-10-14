@@ -115,7 +115,7 @@ export default function Login({ onSignedIn }) {
           </div>
           {!needsTotp ? (
             <form className="auth-form" onSubmit={signIn}>
-              <h1>Welcome to Risk Intelligence</h1>
+              <h1>Welcome to Risk Radar</h1>
               <p className="auth-intro">Sign into your account</p>
 
               {error && <div className="auth-error">{error}</div>}
@@ -190,12 +190,12 @@ export default function Login({ onSignedIn }) {
 
       </section>
 
-      <section className="auth-showcase" aria-label="Risk Intelligence platform overview">
+      <section className="auth-showcase" aria-label="Risk Radar platform overview">
         <div className="auth-engine-card">
           <div className="auth-engine-head">
             <span className="auth-engine-icon"><ShieldIcon /></span>
             <span className="auth-engine-name">
-              <strong>Risk Intelligence Engine</strong>
+              <strong>Risk Radar Engine</strong>
               <small>Real-time detection &amp; institutional oversight</small>
             </span>
             <span className="auth-active"><i /> Active</span>

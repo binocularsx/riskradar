@@ -62,7 +62,7 @@ app = FastAPI(
     title="Risk Radar",
     version=system.API_VERSION,
     description=(
-        "Real-time transaction risk intelligence. **Advisory**: this service "
+        "Real-time transaction risk detection. **Advisory**: this service "
         "produces a decision (ALLOW / MONITOR / REVIEW / HOLD) with its reasons. "
         "It does not block, hold, reverse or freeze anything — enforcement is the "
         "caller's responsibility and is documented as such in the contract."

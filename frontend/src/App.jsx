@@ -123,7 +123,7 @@ export default function App() {
         <div className="brand">
           <img className="brand-logo" src="/assets/risk-radar-logo.png" alt="" />
           <span className="brand-text">
-            <span className="brand-name">Risk Intelligence</span>
+            <span className="brand-name">Risk Radar</span>
             <span className="brand-tag">Institutional</span>
           </span>
         </div>

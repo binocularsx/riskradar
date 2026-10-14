@@ -29,7 +29,7 @@
 
 :root {
   color-scheme: light;
-  /* Ground: warm-neutral light (Risk Intelligence design), lifted in steps. */
+  /* Ground: warm-neutral light (Risk Radar design), lifted in steps. */
   --bg:          #f6f7f9;   /* page */
   --bg-2:        #fbfbfc;   /* sidebar, topbar, subtle insets */
   --surface:     #ffffff;   /* cards */
@@ -42,7 +42,7 @@
   --text-2:      #4b5563;   /* secondary */
   --text-3:      #6c7079;   /* muted */
 
-  --accent:      #DD4F05;   /* GTCO / Risk Intelligence orange */
+  --accent:      #DD4F05;   /* GTCO / Risk Radar orange */
   --accent-2:    #ef6a24;   /* lifted */
   --accent-dim:  #fcece3;   /* faint orange wash */
 
